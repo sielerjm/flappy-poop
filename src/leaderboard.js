@@ -372,12 +372,13 @@ export function createTournamentQueue(storage = browserStorage(), { key = LEADER
   };
 }
 
-/** A split-screen race's 🏆 post, or null: { id, playerId, name, score, level }. */
+/** A split-screen race's 🏆 post, or null: { id, playerId, name, score, level, runId? } (runId: the race half's run queued with it, plan 39, 2.8). */
 function normalizeRacePost(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id || raw.id.length > 64) return null;
   const r = normalizeRecord(raw);
   if (!r || !ID_RE.test(r.playerId)) return null;
-  return { id: raw.id, playerId: r.playerId, name: r.name, score: r.score, level: r.level };
+  const runId = typeof raw.runId === 'string' && ID_RE.test(raw.runId) ? raw.runId : null;
+  return { id: raw.id, playerId: r.playerId, name: r.name, score: r.score, level: r.level, ...(runId ? { runId } : {}) };
 }
 
 /**

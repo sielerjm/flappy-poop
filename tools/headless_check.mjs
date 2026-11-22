@@ -71,7 +71,7 @@ export const SECTIONS = [
   { name: 'versus-join', needs: [], about: 'two players: the 👥 toggle, the lobby, a race\'s join screen, claims, countdown, routed input, leaving' },
   { name: 'versus-match', needs: [], about: 'two players: shared pause, level sync and ready check, catch-up, respawn, result, the result panel\'s gate, the smoke\'s rematch' },
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
-  { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players' },
+  { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players; each race post backed by its half\'s run (2.8)' },
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats (with their day streaks, 34.14), the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
   { name: 'education-unlock', needs: [], about: "📚 for everyone (plan 28, 2.3; the section keeps its old name): the 📚 switch from the first boot and remembered across a restart, the old word refused as a name with its line, the off switch hiding 📚, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, each DOM window inside an iPhone's faked safe area (plan 28, 4.1), the 📚 popup's Show / Hide remembered (4.2)" },
@@ -82,7 +82,7 @@ export const SECTIONS = [
   { name: 'education-backup', needs: [], about: "💾 backup and restore of the 📚 cards (plan 28, 3.1b), the share sheet stubbed as on a phone: Back up reaches the sheet inside the tap with one JSON file (nothing that names the player), the same file restored again changes nothing, the cards deleted and restored from the file come back while the 📚 board would get none of their runs, the panel at 375 px (no sideways scroll, 44 px buttons), restore disabled over a paused run, Clear's note about the cards" },
   { name: 'blocked-storage', needs: [], about: "blocked site data (plan 28, 1.3): the page reloaded with every read of localStorage throwing still boots past the splash, holds a settings choice for the visit (the 📚 switch across a Play restart too) and plays a run to the game-over panel, with no page exception; the live board blocked at the browser for the rest of the run; then storage restored and the page reloaded" },
   { name: 'invite-link', needs: [], about: "the invite link (plan 28, 2.4): the page loaded with ?invite=<code> opens the 📚 Education data panel with the code filled in on the first ready screen; the address bar has lost the code; no storage keeps it; a load without it opens nothing (the live board blocked at the browser)" },
-  { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers" },
+  { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers; a split-screen race through Chrome's input keeps a race summary per half, each press in its own half's (plan 39, 2.8)" },
   { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them; the 🌞 card's and \"Your cards\"' \"🔥 Current streak = n\" lines (round 2); the days from other devices (34.13: a stubbed play_days, asked once, folded in)" },
   { name: 'education-superq', needs: [], about: "❓ the challenge question (plan 34): the bubble on its pair in a 📚 run, the pairs either side opening at the same height and holding still, its size and float; flown past it opens anyway; the run held under the offer (no banner, tray or \"?\"; P and a hidden page do nothing); taps and Space locked for a moment; Decline flies on with a grace and saves nothing; Try's card cannot be left until answered; right pays 8 + 2 × level and saves the card as reviewed; wrong takes 5 and saves it as missed, holding Fly on; neither counts in the run's tally; round 2: the offer its own square card (sentence above the buttons, no tally), the ring and a fresh Space on Try it, a held Space nothing (AUD-068); the bubble's pop and no book sound on the offer" },
   { name: 'phaser-fallback', needs: [], about: "Phaser's fallback (plan 35, 1.2): the page reloaded with the CDN blocked, then stalled, boots from assets/vendor/ (the stall after the 6 s wait); with both copies blocked the splash reads Couldn't load. Tap to retry, and the tap reloads; without src/splash.js too, the bare ↻; then back on the CDN" },
@@ -3363,7 +3363,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // Plan 39, 2.5 (item 42(c)): each race queued its linked racers' scores for 🏆 (Linked, Smoke), never the guest's.
         const rposts = await evaluate(`JSON.stringify(${P1}.racePostQueue.load())`).then(JSON.parse);
         ok(rposts.length > 0 && rposts.every((r) => (r.name === 'Linked' || r.name === 'Smoke') && /^[A-Za-z0-9_-]{22}$/.test(r.playerId) && r.score > 0 && r.level >= 1) && !rposts.some((r) => r.name === guest), `the races queued ${rposts.length} 🏆 posts, linked racers only (${[...new Set(rposts.map((r) => r.name))].join(', ')})`);
-        await evaluate(`(localStorage.removeItem('flappyPoop.racePosts'), localStorage.removeItem('flappyPoop.tournaments'), true)`);
+        // 2.8: each post names its racer's half run, queued under that racer's id at the post's score and level
+        // (mode race, off the toilet, over the final line); the guest's runs went nowhere.
+        const rruns = await evaluate(`JSON.stringify(${P1}.runQueue.load().filter((q) => q.row.mode === 'race'))`).then(JSON.parse);
+        const backed = rposts.every((r) => rruns.some((q) => q.row.run_id === r.runId && q.playerId === r.playerId && q.row.score === r.score && q.row.level === r.level && q.row.toilet === false && q.row.won === true));
+        ok(backed && rruns.length === rposts.length, `each 🏆 post is backed by its half's race run, queued under its racer's id (${rruns.length} runs for ${rposts.length} posts)`);
+        await evaluate(`(localStorage.removeItem('flappyPoop.racePosts'), localStorage.removeItem('flappyPoop.tournaments'), localStorage.removeItem('flappyPoop.runQueue'), true)`);
         // Two players: − to 2 (the guest and Linked) → one Final; Continue → a podium without 🥉, and (2.5) the tournament queued for 🏅: Linked is linked.
         await click('tour-minus');
         await click('tour-start');
@@ -6556,6 +6561,64 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await finish();
       const dc = (await lastRow())?.row?.data;
       ok(flewC && dc && dc.flaps_pressed >= 3 && dc.flaps_trusted === 0 && dc.flaps_fresh === 0 && dc.press_touch >= 3, `a forged pointer event counts as a press but never a real one (${dc ? flapsOf(dc) : 'no summary'})`);
+
+      // 4. A split-screen race through Chrome's input (plan 39, 2.8): each half keeps a race summary and
+      // every press counts in the half it belongs to (Space and W are player 1's, ↑ and Enter player 2's,
+      // a click the half it lands on); at the final line each slot carries its run, at the slot's score
+      // and level, off the toilet.
+      {
+        const VS = `__flappy.scene.getScene('Versus')`;
+        const P2 = `__flappy.scene.getScene('PlayB')`;
+        // No nativeVirtualKeyCode: on a Mac it is the Mac's key code (32 is U, 13 is W), which Chrome
+        // can take as a browser key and open a tab of its own over the game (the page goes hidden).
+        const key = async (k, code, vk) => {
+          for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: vk });
+          await sleep(220);
+        };
+        const want = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, last: c.TUNING.levels.lastLevel, end: l.levelEnd(c.TUNING.levels.lastLevel, l.withLevelPipes(c.TUNING, c.TUNING.tournament.levelPipes)) }))`).then(JSON.parse);
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1800, height: 1000, deviceScaleFactor: 1, mobile: false });
+        await fresh();
+        for (let i = 0; i < 60 && (await evaluate('__flappy.scale.width')) !== want.W; i += 1) await sleep(100);
+        await evaluate(`${P}.toggleVersus(), ${P}.launch(), true`);
+        const joined = await lobbyToRace();
+        await evaluate(`(document.activeElement?.blur?.(), true)`); // Space and Enter must reach the game, not a focused button
+        await key(' ', 'Space', 32); // the claims: Space for the left half, ↑ for the right
+        await key('ArrowUp', 'ArrowUp', 38);
+        let racing = false;
+        for (let i = 0; i < (4 * want.countdownMs + 3000) / 100 && !racing; i += 1) {
+          await sleep(100);
+          racing = await evaluate(`${VS}.match.status === 'playing' && ${P}.state === 'playing' && ${P2}.state === 'playing'`);
+        }
+        await evaluate(`[${P}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
+        const total = await evaluate('__flappy.scale.width');
+        await key(' ', 'Space', 32);
+        await key('w', 'KeyW', 87);
+        await key('ArrowUp', 'ArrowUp', 38);
+        await key('ArrowUp', 'ArrowUp', 38);
+        await key('Enter', 'Enter', 13);
+        await tapAt(total / 4, 640);
+        await tapAt((3 * total) / 4, 640);
+        await evaluate(`[${P}, ${P2}].forEach((p) => { p.poop.y = 640; p.poop.setVelocity(0, 0); }), true`);
+        const finishAt = (Q, score) => evaluate(`(() => { const p = ${Q}; p.score = ${score}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = ${want.last}; p.pipesSpawned = ${want.end}; p.pipesPassed = ${want.end}; p.finishSpawned = false; p.applyLevel(); p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
+        await finishAt(P, 40);
+        for (let i = 0; i < 40 && !(await evaluate(`${VS}.match.slots[0].ended`)); i += 1) await sleep(100);
+        await finishAt(P2, 30);
+        for (let i = 0; i < 40 && (await evaluate(`${VS}.match.status`)) !== 'over'; i += 1) await sleep(100);
+        const got = await evaluate(`JSON.stringify(${VS}.match.slots.map((s) => ({ score: s.score, level: s.level, run: s.run ? { mode: s.run.mode, score: s.run.score, level: s.run.level, toilet: s.run.toilet, won: s.run.won, d: s.run.data } : null })))`).then(JSON.parse);
+        const [h1, h2] = got;
+        const shaped = got.every((s) => s.run && s.run.mode === 'race' && s.run.score === s.score && s.run.level === s.level && s.level === want.last && s.run.toilet === false && s.run.won === true);
+        const how = joined && racing ? '' : `; joined ${joined}, racing ${racing}, ${await evaluate(`JSON.stringify({ status: ${VS}.match?.status, devices: ${VS}.match?.slots?.map((s) => s.device), page: document.visibilityState })`)}`;
+        ok(joined && racing && shaped, `a split-screen race keeps a race summary per half, each on its slot at the slot's score and level (${got.map((s) => `${s.run?.mode} ${s.run?.score}/${s.score} L${s.run?.level}`).join(', ')}${how})`);
+        const k1 = h1.run?.d;
+        const k2 = h2.run?.d;
+        const near = (v, n) => v >= n && v <= n + 1; // Phaser now and then hands one key event over twice
+        ok(k1 && k2 && near(k1.press_key, 2) && k1.press_mouse === 1 && k1.downs === k1.press_key + 1 && near(k1.ups, 3) && near(k2.press_key, 3) && k2.press_mouse === 1 && k2.downs === k2.press_key + 1 && near(k2.ups, 4) && k1.press_touch + k1.press_pad + k2.press_touch + k2.press_pad === 0,
+          `each press counts in its own half: player 1 ${k1?.press_key} keys + ${k1?.press_mouse} click (${k1?.downs} down, ${k1?.ups} up), player 2 ${k2?.press_key} keys + ${k2?.press_mouse} click (${k2?.downs} down, ${k2?.ups} up)`);
+        ok(k1 && k2 && k1.flaps_internal === 1 && k1.flaps_pressed >= 3 && k1.flaps_trusted === k1.flaps_pressed && k1.flaps_fresh >= 2 && k2.flaps_internal === 1 && k2.flaps_pressed >= 4 && k2.flaps_trusted === k2.flaps_pressed && k2.flaps_fresh >= 3,
+          `and each half's flaps are its own real presses (player 1: ${k1 ? flapsOf(k1) : 'none'}; player 2: ${k2 ? flapsOf(k2) : 'none'})`);
+        await leaveVersus();
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false }); // the boot viewport
+      }
     });
 
     await section('streaks', async () => {

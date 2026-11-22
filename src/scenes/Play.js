@@ -707,25 +707,16 @@ export class Play extends Phaser.Scene {
     // Input: any pointer (touch/mouse) on this scene's strip of the canvas, or the keys. Tray
     // taps go through trayHit. In a match the pointer is localised to the half (localPointer);
     // the keyboard is read by the left half alone and routed to the half whose key group
-    // pressed (onVersusKey), so one key never flaps twice.
-    this.input.on('pointerdown', (pointer) => {
-      const kind = pointer.wasTouch ? 'touch' : 'mouse';
-      this.statCall('press', kind, this.statNow(), pointer.x, pointer.y, this.fieldW, GAME_HEIGHT);
-      withInput(pointer.event, kind, () => {
-        const p = this.localPointer(pointer);
-        if (p) this.flap(p);
-      });
-    });
-    this.input.on('pointerup', () => this.statCall('release', this.statNow()));
+    // pressed (onVersusKey), so one key never flaps twice. Each press counts in the summary of
+    // the half it belongs to (plan 39, 2.8).
+    this.input.on('pointerdown', (pointer) => this.onPointerDown(pointer));
+    this.input.on('pointerup', (pointer) => this.onPointerUp(pointer));
     const keys = !this.match || this.player === 1 ? this.input.keyboard : null;
-    const flapKey = (event) => {
-      this.statCall('press', 'key', this.statNow());
-      return withInput(event, 'key', () => !this.match && this.flap());
-    };
-    keys?.on('keydown-SPACE', flapKey);
-    keys?.on('keydown-UP', flapKey);
-    keys?.on('keyup-SPACE', () => this.statCall('release', this.statNow()));
-    keys?.on('keyup-UP', () => this.statCall('release', this.statNow()));
+    keys?.on('keydown-SPACE', (event) => this.onFlapKey(event));
+    keys?.on('keydown-UP', (event) => this.onFlapKey(event));
+    keys?.on('keyup-SPACE', () => this.onFlapKeyUp());
+    keys?.on('keyup-UP', () => this.onFlapKeyUp());
+    keys?.on('keyup', (event) => this.onVersusKeyUp(event?.code)); // a match: a key group's flap key came up
     keys?.on('keydown-M', () => this.handleChrome('mute'));
     keys?.on('keydown-P', () => this.handleChrome('pause'));
     keys?.on('keydown-ESC', () => this.handleChrome('esc'));
@@ -739,12 +730,7 @@ export class Play extends Phaser.Scene {
     // Gamepad: one binding for the whole game (overlays, Over and the other half of a match run
     // on top of or beside this scene, which is never paused); onPadAction routes each press to
     // whichever scene is on top, and in a match to the half that claimed the pad.
-    this.pad = !this.match || this.player === 1
-      ? bindPad(this, (action, padIndex) => {
-          if (action === 'select' || action === 'power') this.statCall('press', 'pad', this.statNow());
-          return withInput(null, 'pad', () => this.onPadAction(action, padIndex));
-        }, T)
-      : null;
+    this.pad = !this.match || this.player === 1 ? bindPad(this, (action, padIndex) => this.onPadPress(action, padIndex), T) : null;
 
     // The resync (plan 35, 1.4): one guard per scene object, so a send in flight and a hide's time
     // outlast a restart; the browser's online and a show after a long hide send the queues again.
@@ -1022,15 +1008,17 @@ export class Play extends Phaser.Scene {
       this.saveDailyAttempt(false);
       this.countDailyStreak(daily.day);
     }
-    // This run's summary (plan 30): single-player and Daily runs only; never a test run, an
-    // education run (its popup promises its data stays here) or a match half.
-    this.runStatsOn = !this.match && !this.runIsTest && !this.runIsEducation;
+    // This run's summary (plan 30): single-player and Daily runs, and a split-screen race's half
+    // (plan 39, 2.8); never a test run, an education run (its popup promises its data stays here)
+    // or an online race's half (runSummaryMode).
+    const summary = this.runSummaryMode(daily);
+    this.runStatsOn = summary !== null;
     if (this.runStatsOn) this.statCall('begin', {
       runId: newId(),
       session: this.runSession(),
-      mode: daily ? 'daily' : 'single',
+      mode: summary,
       day: daily?.day ?? null,
-      toilet: this.toilet,
+      toilet: summary === 'race' ? false : this.toilet, // a race posts to the board off the toilet (racePosts, 2.5)
       level: this.level,
       version: APP_VERSION,
       now: this.statNow(),
@@ -1039,6 +1027,18 @@ export class Play extends Phaser.Scene {
       touch: (globalThis.navigator?.maxTouchPoints ?? 0) > 0,
       fieldW: this.fieldW,
     });
+  }
+
+  /**
+   * The summary this run keeps (plan 30): 'single', 'daily', or 'race' for a split-screen race's half
+   * (plan 39, 2.8: closed onto its slot at the finish line and queued only with its racer's 🏆 post,
+   * under that racer's id; Play.queueRacePosts); null for a test run, an education run, or an online
+   * race's half (the server writes that race's rows from finish_match).
+   */
+  runSummaryMode(daily = null) {
+    if (this.runIsTest || this.runIsEducation) return null;
+    if (!this.match) return daily ? 'daily' : 'single';
+    return this.match.hostKey ? null : 'race'; // a match naming no host is split screen's (matchHostKey)
   }
 
   /** A random value for this page load (never stored): which run summaries came from one page. */
@@ -1078,11 +1078,12 @@ export class Play extends Phaser.Scene {
     return lip === null ? null : lip - this.poop.y;
   }
 
-  /** Is a queued run the one behind a best this device has not posted yet (a 🏆 plan, or a queued 🌞 score)? The queue keeps it. */
+  /** Is a queued run the one behind a best this device has not posted yet (a 🏆 plan, a queued 🌞 score, or a queued race post naming it)? The queue keeps it. */
   runBehindUnposted(q) {
     const r = q?.row;
     if (!r) return false;
     if (r.mode === 'daily') return (this.dailyQueue?.load?.() ?? []).some((e) => e.playerId === q.playerId && e.day === r.day && e.score === r.score);
+    if (r.mode === 'race') return (this.racePostQueue?.load?.() ?? []).some((e) => e.runId === r.run_id);
     const id = this.save?.id ?? null;
     return q.playerId === id && submitPlans(this.save, this.submitStore?.load?.() ?? {}).some((p) => Boolean(p.toilet) === Boolean(r.toilet) && p.score === r.score && p.level === r.level);
   }
@@ -1138,13 +1139,51 @@ export class Play extends Phaser.Scene {
 
   /** The run's summary row, queued for the next sync (endRun); nothing when none was kept. */
   queueRunSummary() {
-    if (!this.runStatsOn) return;
-    this.runStatsOn = false;
+    const row = this.endRunSummary();
+    if (!row) return;
     try {
-      const row = this.runStats.end({ now: this.statNow(), wall: Date.now(), score: this.score, level: this.level, won: Boolean(this.won) });
-      if (row) this.runQueue.add({ playerId: this.save?.id ?? null, row }, { pinned: (q) => this.runBehindUnposted(q) });
+      this.runQueue.add({ playerId: this.save?.id ?? null, row }, { pinned: (q) => this.runBehindUnposted(q) });
     } catch {
       /* the summary never stops a run */
+    }
+  }
+
+  /** Close this run's summary (it is off after): its row, or null when none was kept. Never throws. */
+  endRunSummary() {
+    if (!this.runStatsOn) return null;
+    this.runStatsOn = false;
+    try {
+      return this.runStats.end({ now: this.statNow(), wall: Date.now(), score: this.score, level: this.level, won: Boolean(this.won) }) ?? null;
+    } catch {
+      return null; // the summary never stops a run
+    }
+  }
+
+  /**
+   * A split-screen race's 🏆 posts (plan 39, 2.5; racePosts, from tournamentPanel's onRace): each
+   * racer's half summary first (2.8: mode 'race', under that racer's id, so the run behind the post is
+   * stored before it), then the post, which names its run (`runId`). A sync follows when anything was
+   * queued. True when a post was queued.
+   */
+  queueRacePosts(posts) {
+    const q = this.racePostQueue;
+    if (!q) return false;
+    let added = false;
+    for (const { run, ...post } of Array.isArray(posts) ? posts : []) {
+      const runId = run && this.queueRaceRun(post.playerId, run) ? run.run_id : null;
+      added = Boolean(q.add({ ...post, ...(runId ? { runId } : {}), id: newId() })) || added;
+    }
+    if (added) Promise.resolve(this.syncLeaderboard?.()).catch(() => {});
+    return added;
+  }
+
+  /** One race half's summary (2.8) into the run queue under its racer's id, kept there while its post waits (runBehindUnposted). True when queued. */
+  queueRaceRun(playerId, row) {
+    if (typeof playerId !== 'string' || !playerId || row?.mode !== 'race' || !this.runQueue) return false;
+    try {
+      return Boolean(this.runQueue.add({ playerId, row }, { pinned: (q) => this.runBehindUnposted(q) }));
+    } catch {
+      return false;
     }
   }
 
@@ -1731,6 +1770,10 @@ export class Play extends Phaser.Scene {
     // Finished tournaments next: they carry their own host id, so they post even without a username here.
     const tournaments = merges
       .then(() => this.tournamentQueue.drain((payload, hostId) => submitTournament(payload, hostId)))
+      // A race post's run (2.8) is stored before it, as every post's is (plan 30): the runs go here while
+      // a race post waits (one batch per player: a second within submit_runs' pace would be refused), else
+      // once, below, as before.
+      .then(() => ((this.racePostQueue?.load?.() ?? []).length ? this.drainRuns() : null))
       // Split-screen race scores (plan 39, 2.5) carry their own ids too, and post under the board's current name (postRace).
       .then(() => this.racePostQueue?.drain((e) => this.postRace(e)));
     // A pilot tester's answer events (plan 21) need no username either: joining made the id.
@@ -1790,9 +1833,11 @@ export class Play extends Phaser.Scene {
    * no rows yet; nothing posts while the board cannot say ('keep'). A post the server will never take
    * (a name another player holds, a bad entry) is dropped, so it never holds up the ones behind it;
    * offline or rate limited waits for the next sync. Residual: a rename landing between the read and
-   * the post.
+   * the post. A post whose run (2.8, `runId`) is still queued waits like a 🏆 post (postWaits).
    */
   async postRace(e) {
+    const queued = Boolean(e.runId) && !this.runsUnsent?.has(e.playerId) && (this.runQueue?.load?.() ?? []).some((q) => q.row?.run_id === e.runId);
+    if (this.postWaits(`r:${e.id}`, queued)) return 'keep'; // its run goes first (plan 30)
     const board = await fetchBoardName(e.playerId);
     if (board === null) return 'keep';
     const name = board || (e.playerId === this.save?.id && this.save?.name) || e.name;
@@ -3227,14 +3272,25 @@ export class Play extends Phaser.Scene {
       host.onJoinInput?.(device, role);
       return;
     }
-    // A host with one local half (the online race: no join screen claims a device) gives it every
-    // device; split screen routes by the device each half claimed.
-    const i = host.halfScene?.(1) ? this.match.slots.findIndex((s) => sameDevice(s.device, device)) : this.player - 1;
-    if (i < 0) return;
-    const half = i === this.player - 1 ? this : host.halfScene?.(i);
+    const half = this.matchHalf(device);
     if (!half) return;
+    // The press counts in this half's summary (plan 39, 2.8), as single player counts one: a key group's
+    // flap key, a pad's A or RT. A touch counts in the listener of the half it landed on (onPointerDown).
+    if (device.kind === 'pad' || (device.kind === 'keys' && role === 'flap')) half.statCall('press', device.kind === 'pad' ? 'pad' : 'key', half.statNow());
     if (role === 'power') half.activatePower();
     else half.flap(half === this ? pointer : undefined);
+  }
+
+  /**
+   * The half of this match a device drives, or null: a host with one local half (the online race: no
+   * join screen claims a device) gives it every device; split screen routes by the device each half claimed.
+   */
+  matchHalf(device) {
+    const host = this.versusHost();
+    if (!host || !this.match) return null;
+    const i = host.halfScene?.(1) ? this.match.slots.findIndex((s) => sameDevice(s.device, device)) : this.player - 1;
+    if (i < 0) return null;
+    return i === this.player - 1 ? this : (host.halfScene?.(i) ?? null);
   }
 
   /** A match: a key inside a group is that player's flap or power (keyGroup); every other key is the chrome's. */
@@ -3242,6 +3298,52 @@ export class Play extends Phaser.Scene {
     if (!this.match) return;
     const g = keyGroup(code, T);
     if (g) this.versusInput({ kind: 'keys', group: g.group }, g.role);
+  }
+
+  /** A match's key came up: a key group's flap key is a release in the summary of the half that group drives (plan 39, 2.8). */
+  onVersusKeyUp(code) {
+    if (!this.match || this.match.status !== 'playing') return;
+    const g = keyGroup(code, T);
+    if (g?.role !== 'flap') return;
+    const half = this.matchHalf({ kind: 'keys', group: g.group });
+    half?.statCall('release', half.statNow());
+  }
+
+  /**
+   * A pointer went down on the canvas: the press counts in this run's summary, then the tap flaps
+   * (flap). In a match every half hears every pointer: only the half it landed on counts it, in its
+   * own coordinates (localPointer; plan 39, 2.8), and only that half flaps.
+   */
+  onPointerDown(pointer) {
+    const kind = pointer.wasTouch ? 'touch' : 'mouse';
+    const p = this.localPointer(pointer);
+    if (p) this.statCall('press', kind, this.statNow(), p.x, p.y, this.fieldW, GAME_HEIGHT);
+    withInput(pointer.event, kind, () => {
+      if (p) this.flap(p);
+    });
+  }
+
+  /** A pointer came up: a release in this run's summary; in a match only in the half it went down on (its downX). */
+  onPointerUp(pointer) {
+    const down = !this.half || (Number.isFinite(pointer?.downX) && this.localPointer({ x: pointer.downX, y: pointer.downY ?? 0 }));
+    if (down) this.statCall('release', this.statNow());
+  }
+
+  /** Space / ↑: single player's press and flap. In a match the key group decides (onVersusKey), so nothing here. */
+  onFlapKey(event) {
+    if (!this.match) this.statCall('press', 'key', this.statNow());
+    return withInput(event, 'key', () => !this.match && this.flap());
+  }
+
+  /** Space / ↑ came up: single player's release (a match's: onVersusKeyUp). */
+  onFlapKeyUp() {
+    if (!this.match) this.statCall('release', this.statNow());
+  }
+
+  /** A gamepad press (bindPad): A and RT count in single player's summary (a match's: versusInput), then onPadAction. */
+  onPadPress(action, padIndex = 0) {
+    if (!this.match && (action === 'select' || action === 'power')) this.statCall('press', 'pad', this.statNow());
+    return withInput(null, 'pad', () => this.onPadAction(action, padIndex));
   }
 
   setPauseBanner(visible) {
@@ -4878,10 +4980,14 @@ export class Play extends Phaser.Scene {
     for (const bean of this.beans.getChildren()) bean.setVelocityX(0);
     this.setPauseBanner(false);
     // A match records nothing either: the Versus scene hears the end (the result panel follows
-    // once both halves have reported).
+    // once both halves have reported). A split-screen half's summary goes on its slot first (plan 39,
+    // 2.8): the race can end inside onRunEnded, and the race's 🏆 posts queue it (queueRacePosts).
     if (this.match) {
       this.publishSlot();
-      this.match.slots[this.player - 1].ended = true;
+      const slot = this.match.slots[this.player - 1];
+      slot.ended = true;
+      const run = this.endRunSummary();
+      if (run) slot.run = run;
       if (report) this.versusHost()?.onRunEnded?.(this.player, { score: this.score, level: this.level, pipesPassed: this.pipesPassed, won: this.won });
       return;
     }
