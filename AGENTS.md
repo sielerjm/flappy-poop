@@ -953,6 +953,10 @@ src/
                             Play.onFieldResize() when the width would change (while a
                             race runs, OnlineRace.onFieldResize: it re-fits the canvas
                             around the same field, no pause),
+                            ?join=<code> (plan 39, 4.3) the same way (joinCodeFromSearch,
+                            withoutJoin) into the registry's pendingJoin, which
+                            Play.openPendingJoin opens in the 🌐 window on the first
+                            ready screen with no match;
                             ?invite=<code> read once (inviteFromSearch), taken out
                             of the address bar at once (withoutInvite,
                             history.replaceState) and handed to Play through the
@@ -1352,7 +1356,25 @@ src/
                             { round, level, at } and the pause reason `rewind`; roomStep's
                             `rejoin` action (room_state's answer for the race this device
                             still sits in: only a playing race, this device's seat).
+                            4.2: roomStep's `invited` (accept_invite's answer: this device is the
+                            guest and the room is 'ready' at once, no code, no Let in) and
+                            `renew` (a Resend kept the host's open room: its changedAt moves).
+                            4.3: joinLink(code) (SHARE.url + ?join=<code>), joinCodeFromSearch
+                            (the first join parameter that holds a room code) and withoutJoin
+                            (the address without it, the rest of the query and the hash kept).
                             tests/online.test.js.
+  onlineInvites.js          Online race (🌐, plan 39, 4.2) invites on the client, NO Phaser/DOM:
+                            inviteRow (a row taken only whole), inviteLeftMs, ringShare (the
+                            share of the span left) and mmss, each from the server's `sent_at`
+                            and `expires_at` alone: there is no client INVITE_TTL, so nothing
+                            drifts from what the server checks. incomingRows (invite_list's live
+                            incoming, one per friend), topicEvent (the topic's two events,
+                            `invite` and `invite_update`, parsed or dropped), inviteErrorKey
+                            (the error words) and createInvites({ rpc, now }): load() (the
+                            topic comes only from invite_list, never built from the save's id),
+                            onEvent, prune (expiry), count, accept and decline. Shown, read and
+                            subscribed only in online mode (the beat's rule).
+                            tests/onlineInvites.test.js.
   onlineNet.js              Online race (🌐, plan 39) transport for one page:
                             createOnlineNet(deps) and ONLINE_RPCS. Nothing loads until
                             signIn() / warm(); the only caller of loadSupabase(). Anonymous
@@ -1386,6 +1408,12 @@ src/
                             functions only. The token guard test's one exception (pagehide's online_beat(false)).
                             It sends the token the client refreshed to (`session` follows TOKEN_REFRESHED) and
                             nothing on an expired one (T3-review AUD-112).
+                            4.2: openTopic(topic) joins the player's own topic that invite_list names
+                            (private, no presence, no self; only 'user:' and 32 hex), queues
+                            { kind: 'user', event: 'invite' | 'invite_update' | 'joined' | 'closed' }
+                            (every join, a rejoin too, queues 'joined': the panel reads invite_list
+                            again); closeTopic() and topicState() ('none' / 'joining' / 'joined').
+                            close() closes it, and so does the race's hand-off.
                             tests/onlineNet.test.js, tests/onlineDevProject.test.js.
   onlineAccount.js          Online race (🌐, plan 39, 1.6a) the sign-in side on top of
                             createOnlineNet, NO Phaser/DOM: enter (sign in, link the
@@ -1430,7 +1458,17 @@ src/
                             (2.7, AUD-108); no room, finished or abandoned → { over }
                             (code and record forgotten, "That race is over."); offline or
                             a refused channel keeps both and never leaves the room.
-                            tests/onlineLobby.test.js.
+                            4.2: createOnlineLobby({ onUser }) hands the player's topic's items on to
+                            the panel; invite(peer, name) (the Friends row's Invite and Resend:
+                            send_invite makes the room or keeps the open one, 'renew'; only when
+                            canInvite() holds: no room or an open one we host), inviteUpdate (a
+                            friend's no shows 'declined', a cancel drops it, an accept reads
+                            room_state), acceptInvite(accept) (the 'invited' step, then the
+                            channel opens as the guest's) and inviteLeftMs. state.invite is
+                            { invite, peer, name, sentAt, expiresAt, status }. 4.3: joinCode(code,
+                            { link }) joins a share link's code; a room gone reads
+                            'onlineLinkExpired', the code kept on the join screen.
+                            tests/onlineLobby.test.js, tests/onlineJoinLink.test.js.
   onlineFriends.js          Online race (🌐, plan 39, 3.3) friends, NO Phaser/DOM: createOnlineFriends
                             ({ rpc, max }) over friend_list, friend_statuses and online_history:
                             the lists (requests to answer, friends sorted online, in a game,
@@ -1858,6 +1896,13 @@ src/
                             results arrive on 'tournament-race' ({ then }: 'next'
                             races on, else the panel). tournamentPadAction walks its
                             buttons for a controller. ROUND_KEYS names the rounds.
+                            4.2: loadInvites (invite_list on entering 🌐, on Friends and when the
+                            topic joins again, then net.openTopic), onUserItem, sendInvite,
+                            acceptInvite, declineInvite; closeTopic at the race hand-off.
+                            4.3: openTournamentPanel's `join` option (a share link's code) is kept
+                            through the sign-in, a name chosen first and a Retry, and joined once
+                            linked (joinFromLink); Share without a share sheet copies its text
+                            ('onlineLinkCopied').
                             The 🌐 view (plan 39, 1.6c): mounts onlineAccountViews and
                             onlineLobbyViews, pre-warms the transport on entering,
                             polls the lobby, leaves the room and closes online play on
@@ -1905,7 +1950,9 @@ src/
                             Play.onlineProjectName(), null on the real site) adds
                             onlineDevOnLive / onlineDevOnTest to the no-room error.
                             Both ready shows onlineStarting (the panel's onBothReady starts
-                            the race, 1.7a).
+                            the race, 1.7a). 4.2: the host's invite line ("Waiting for <name>
+                            to answer", m:ss) with Resend after a no or the two minutes. 4.3:
+                            Share sends the text with joinLink(code); Copy copies the code alone.
                             tests/onlineLobbyViews.test.js.
     onlineFriendsViews.js   Online race (🌐, plan 39, 3.3, Preview G) the 🤝 Friends button
                             with its badge (requests waiting; online mode only) and the
@@ -1919,7 +1966,13 @@ src/
                             and onPair draw only while it holds; openFriends returns true when it drew;
                             a refused Friends action reads the lists again before its error line (AUD-116).
                             pollFriends and refreshBadge are the panel's timers' reads.
-                            Plain DOM over onlineFriends. tests/onlineFriendsPanel.test.js.
+                            4.2: Invite on a 🟢 friend's row; a friend who invited you comes
+                            first with their ✉️ (a ring of the time left and m:ss, redrawn in place
+                            once a second by inviteTick) and ✕ to turn it down; a row wraps its
+                            buttons under the name (`.slot.fr`) when the name does not fit, so a
+                            long name never clips the time; ✉️ n beside the 🤝 Friends button.
+                            Plain DOM over onlineFriends and onlineInvites.
+                            tests/onlineFriendsPanel.test.js, tests/onlineInvitesPanel.test.js.
     savePanel.js            Plain DOM panel over the canvas (a three-step intro,
                             Username field, read-only user code + Copy, Load
                             field, an outlined Clear beside the Save button that
@@ -3354,6 +3407,16 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             null peer, blocked, asked), offer(), ask / accept / block errors,
                             createStatusBeat (start, stop quiet and loud, hide, show, 'not
                             trusted', one timer), beatMs under half of the schema's c_fresh
+  onlineInvites.test.js     src/onlineInvites.js (4.2): rows taken whole, the ring and m:ss from the
+                            server's times, one incoming per friend, the topic's events, the error
+                            words, load / accept / decline / expiry
+  onlineInvitesPanel.test.js src/ui/onlineFriendsViews.js and tournamentPanel's ✉️ on
+                            tests/support/panelDom.js: invite_list once linked, the topic it names,
+                            ✉️ n on 🤝 Friends, the inviting friend first, Invite, accept, ✕,
+                            Resend, nothing outside online mode, closed at the hand-off
+  onlineJoinLink.test.js    the share link (4.3): joinLink, joinCodeFromSearch, withoutJoin, the
+                            panel's `join` kept through sign-in, name and Retry, a gone room's
+                            'onlineLinkExpired', Share's copy fallback
   onlineFriendsPanel.test.js src/ui/onlineFriendsViews.js and tournamentPanel's Friends
                             screen on tests/support/panelDom.js: the button and badge, each
                             section, ⋯ with Remove / Block asking twice, polls, an
@@ -3928,6 +3991,13 @@ tools/
                             Plan 39's online-friends (3.3, 17 checks): the 🌐 home's 🤝 Friends and its
                             badge, the Friends screen's sections and ⋯, Add friend, and the beat on a stand-in
                             transport.
+                            Plan 39's online-invites (4.2): on a 320 phone and a stand-in transport, invite_list
+                            and its topic, ✉️ n on 🤝 Friends, the inviting friend first with a 16-character
+                            name (the buttons wrap inside the row), accept to the guest's ready screen, Invite,
+                            the wait, a no and Resend in the same room. Plan 39's online-join-link (4.3): the
+                            real page opened at ?join= takes the code out of the address, opens 🌐, keeps it
+                            through a failed sign-in, joins on Retry; a gone room says the link expired.
+                            Full smoke: 43 sections, 993 checks.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -4153,6 +4223,15 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   Clear and a Load of another player leave online play only on a device that holds
   a session (no client load otherwise: `tests/onlineSignOut.test.js`). A newly
   claimed online name is stored the save panel's way only after the link succeeds.
+  Invites (4.2, `src/onlineInvites.js`) show only in online mode, as the beat does. Every time comes
+  from the server's `sent_at` / `expires_at` (no client INVITE_TTL), and the player's topic only from
+  `invite_list`'s `topic`, never built from the save's id (`tests/onlineInvites.test.js`,
+  `tests/onlineInvitesPanel.test.js`); `onlineNet.closeTopic()` runs with `close()` and at the race's
+  hand-off. Invite and Resend are offered only when `lobby.canInvite()` holds. A share link (4.3) is
+  `?join=<code>`, read once in `main.js` and taken out of the address (`tests/onlineJoinLink.test.js`);
+  it makes no server call of its own, so a closed room reads 'onlineLinkExpired'. The 14 strings of 4.2
+  and 4.3 (`friendInvite` to `inviteGone`, `onlineLinkExpired`, `onlineLinkCopied`) carry rows in
+  `TRANSLATION_NOTES.md`.
   The lobby (`src/onlineLobby.js`, mounted by the 🌐 view of `ui/tournamentPanel.js`) feeds
   `roomStep` only RPC results and `{ kind: 'room' }` items, never a peer's own events. Lobby
   ready is the `ready` event with level 1 (`LOBBY_LEVEL`), newest wins by t / seq.
