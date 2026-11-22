@@ -2,8 +2,10 @@
 // Supabase project after db/schema.sql is pasted there. Four anonymous sessions on this machine (A,
 // A2, B and C) link to throwaway players, race-by-code through a room, and prove that the channel
 // policies admit the two seated devices and refuse everyone else, that public channels are off, that
-// a decline moves the room, that the join cap bites, that removing a device ends its session, and
-// that the friend and status functions answer a paired device and refuse anon (plan 39, 3.5).
+// a decline moves the room, that the join cap bites, that removing a device ends its session, that
+// the friend and status functions answer a paired device and refuse anon (plan 39, 3.5), and that the
+// invite functions do too and a player's own topic, user:<player id>, admits its paired device and
+// refuses another player's (plan 39, 4.1).
 // Each session unlinks itself at the end, which deletes its anonymous user, so nothing is left behind
 // but its join attempts (an IP hash, gone within the hour); when that cannot happen (a failed step, a
 // crash, Ctrl-C), the check prints the SQL that removes exactly its users (tagged
@@ -47,7 +49,8 @@ export const STEPS = [
   ['10', 'the join cap: the 6th wrong code is rate limited'],
   ['11', 'removing a device ends its session'],
   ['12', 'friends and status: anon refused, a paired device beats and reads its friends, the beacon\'s POST is taken'],
-  ['13', 'teardown: every session unlinked, every refresh refused'],
+  ['13', 'invites: anon refused, a paired device lists its invites and joins its own topic, another player is refused there'],
+  ['14', 'teardown: every session unlinked, every refresh refused'],
 ];
 
 /** --help, --live or --env <file>; exactly one of the last two. */
@@ -276,7 +279,8 @@ async function run(t, print) {
     const a = await must(S.A, 'link_online_player', { p_player_id: S.PA, p_name: S.nameA });
     const b = await must(S.B, 'link_online_player', { p_player_id: playerId(), p_name: checkName() });
     S.nameB = b.name;
-    const c = await must(S.C, 'link_online_player', { p_player_id: playerId(), p_name: checkName() });
+    S.PC = playerId();
+    const c = await must(S.C, 'link_online_player', { p_player_id: S.PC, p_name: checkName() });
     const a2 = await must(S.A2, 'link_online_player', { p_player_id: S.PA, p_name: S.nameA });
     const ok = a.trusted === true && b.trusted === true && c.trusted === true && a2.trusted === false && a2.name === S.nameA;
     return { ok, note: `A ${a.trusted}, B ${b.trusted}, C ${c.trusted}, A2 ${a2.trusted}` };
@@ -372,8 +376,25 @@ async function run(t, print) {
     return { ok, note: `anon friend_list ${list.error ? `${list.status} ${list.error.code}` : 'answered'}, anon online_beat ${beatAnon.error ? `${beatAnon.status} ${beatAnon.error.code}` : 'answered'}; C beat ${beat?.ok}, friends ${Array.isArray(states?.friends) ? states.friends.length : 'none'}; preflight ${pre.status}${preOk ? '' : ` (allow-headers '${allowed}')`}, beacon ${post.status} ${body?.ok === true ? 'ok' : JSON.stringify(body)?.slice(0, 60)}` };
   });
 
-  let leftBehind = false;
+  // 4.1: what PGlite cannot reach for invites: PostgREST's grants and schema cache for the five
+  // functions, and real Realtime's policy on user:<player id> (online_can), where the server alone sends.
+  // From C (paired, in no room); B is another player's device.
   await step(13, async () => {
+    const anon = { name: 'anon', c: makeClient(t) };
+    const refused = (r) => Boolean(r.error) && (r.status === 401 || r.error.code === '42501');
+    const listAnon = await rpc(anon, 'invite_list');
+    const sendAnon = await rpc(anon, 'send_invite', { p_peer: '0'.repeat(32) });
+    const list = await must(S.C, 'invite_list');
+    const stray = await must(S.C, 'send_invite', { p_peer: 'f'.repeat(32) });
+    const own = await join(S.C, `user:${S.PC}`);
+    const other = await join(S.B, `user:${S.PC}`);
+    const ok = refused(listAnon) && refused(sendAnon) && Array.isArray(list?.incoming) && list.incoming.length === 0
+      && Array.isArray(list?.outgoing) && stray?.ok === false && stray.error === 'unavailable' && own.kind === 'joined' && other.kind === 'refused';
+    return { ok, note: `anon invite_list ${listAnon.error ? `${listAnon.status} ${listAnon.error.code}` : 'answered'}, anon send_invite ${sendAnon.error ? `${sendAnon.status} ${sendAnon.error.code}` : 'answered'}; C lists ${Array.isArray(list?.incoming) ? list.incoming.length : 'nothing'}, a stray handle ${stray?.error ?? JSON.stringify(stray)}; C on its own topic ${own.kind}, B on C's ${other.kind}` };
+  });
+
+  let leftBehind = false;
+  await step(14, async () => {
     await rpc(S.A, 'leave_room', { p_code: S.room });
     const notes = [];
     for (const u of users) {

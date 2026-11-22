@@ -70,6 +70,11 @@ export const ONLINE_RPCS = Object.freeze([
   'unblock_user',
   'online_beat',
   'friend_statuses',
+  'send_invite',
+  'invite_list',
+  'accept_invite',
+  'decline_invite',
+  'cancel_invite',
 ]);
 
 const SEATS = ['host', 'guest'];

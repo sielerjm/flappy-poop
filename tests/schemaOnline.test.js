@@ -99,6 +99,11 @@ const ONLINE_FNS = {
   unblock_user: 'text',
   online_beat: 'boolean',
   friend_statuses: '',
+  send_invite: 'text',
+  invite_list: '',
+  accept_invite: 'uuid',
+  decline_invite: 'uuid',
+  cancel_invite: 'uuid',
 };
 
 // ---------------------------------------------------------------------------
@@ -793,7 +798,9 @@ test('room:<code> is read and written by its two seated devices only: broadcast 
   assert.equal(await canRead(db, outsider.uid, topic), false);
   assert.equal(await canWrite(db, outsider.uid, topic), false);
   assert.equal(await canRead(db, await addUser(db), topic), false, 'a device that is not linked');
-  for (const t of [`room:${code}x`, `room:0${code.slice(1)}`, `user:${host.player}`, 'lab:anything', '']) {
+  assert.equal(await canRead(db, host.uid, `user:${host.player}`), true, 'its own player\'s topic: invites (4.1, tests/schemaInvites.test.js)');
+  assert.equal(await canWrite(db, host.uid, `user:${host.player}`), false, 'which only the server writes');
+  for (const t of [`room:${code}x`, `room:0${code.slice(1)}`, `user:${guest.player}`, 'lab:anything', '']) {
     assert.equal(await canRead(db, host.uid, t), false, `nobody reads ${t || 'no topic'}`);
     assert.equal(await canWrite(db, host.uid, t), false, `nobody writes ${t || 'no topic'}`);
   }

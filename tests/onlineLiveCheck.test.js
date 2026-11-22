@@ -62,11 +62,11 @@ test('the run proves finding 20 (a session refused by the game\'s anon functions
   assert.ok((SOURCE.match(/TEARDOWN_SQL/g) ?? []).length >= 4, 'printed on leftovers, a crash and Ctrl-C');
 });
 
-test('the report: thirteen numbered steps, one PASS or FAIL line each; the teardown SQL deletes only the check\'s own users', () => {
-  assert.deepEqual(STEPS.map(([n]) => n), ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13']);
+test('the report: fourteen numbered steps, one PASS or FAIL line each; the teardown SQL deletes only the check\'s own users', () => {
+  assert.deepEqual(STEPS.map(([n]) => n), ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14']);
   assert.equal(reportLine(STEPS[0], { ok: true, note: '401 42501' }), 'PASS 01 anon cannot call online functions: 401 42501');
-  assert.equal(reportLine(STEPS[12], { ok: false }), `FAIL 13 ${STEPS[12][1]}`);
-  assert.match(STEPS[12][1], /^teardown/, 'the teardown stays last: it unlinks every session');
+  assert.equal(reportLine(STEPS[13], { ok: false }), `FAIL 14 ${STEPS[13][1]}`);
+  assert.match(STEPS[13][1], /^teardown/, 'the teardown stays last: it unlinks every session');
   assert.equal(TEARDOWN_SQL, "delete from auth.users where raw_user_meta_data ->> 'online_check' = '39';");
   assert.match(SOURCE, /signInAnonymously\(\{ options: \{ data: \{ online_check: '39' \} \} \}\)/, 'every user it makes carries the tag the teardown matches');
 });
@@ -91,4 +91,20 @@ test('step 12 checks the friend and status functions on a real project before th
   assert.match(SOURCE, /method: 'OPTIONS'/, 'the preflight a browser sends before the beacon');
   const at = (re) => SOURCE.search(re);
   assert.ok(at(/await step\(12,/) > at(/await step\(11,/) && at(/await step\(13,/) > at(/await step\(12,/), 'steps run in order, the teardown last');
+});
+
+// Plan 39, 4.1: the invite functions on a real project (PostgREST's grants and schema cache) and the
+// user:<player id> topic's policy on real Realtime, which PGlite only stubs. From C (paired, in no room);
+// B, another player's device, must be refused on C's topic.
+test('step 13 checks the invite functions and the player\'s own topic on a real project before the teardown', () => {
+  assert.match(STEPS[12][1], /invite/);
+  assert.match(SOURCE, /rpc\(anon, 'invite_list'\)/, 'anon is refused on invite_list');
+  assert.match(SOURCE, /rpc\(anon, 'send_invite', \{ p_peer: '0'\.repeat\(32\) \}\)/, 'and on send_invite');
+  assert.match(SOURCE, /must\(S\.C, 'invite_list'\)/, 'a paired device lists its invites (none)');
+  assert.match(SOURCE, /must\(S\.C, 'send_invite', \{ p_peer: 'f'\.repeat\(32\) \}\)/, 'a handle that names nobody is unavailable');
+  assert.match(SOURCE, /S\.PC = playerId\(\)/, 'C\'s player id is kept for its topic');
+  assert.match(SOURCE, /join\(S\.C, `user:\$\{S\.PC\}`\)/, 'C joins its own player\'s topic');
+  assert.match(SOURCE, /join\(S\.B, `user:\$\{S\.PC\}`\)/, 'another player\'s device is refused there');
+  const at = (re) => SOURCE.search(re);
+  assert.ok(at(/await step\(13,/) > at(/await step\(12,/) && at(/await step\(14,/) > at(/await step\(13,/), 'before the teardown');
 });

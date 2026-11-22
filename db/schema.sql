@@ -77,6 +77,14 @@
 --                                      or word that it left; a trusted device only
 --   * online friend_statuses()         the player's friends, each online, in a game or offline (from their
 --                                      devices' heartbeats; no shared channel), for a trusted device
+--   * online send_invite(...)          invite a friend in online mode into this device's own room (4.1), by a
+--                                      peer handle; their paired devices are told on their own topic; capped;
+--                                      an invite lives INVITE_TTL (2 minutes)
+--   * online invite_list()             the live invites to the player and their recent ones out, for a
+--                                      trusted device
+--   * online accept_invite(...)        take the guest's seat of the inviting friend's room: no code to type
+--   * online decline_invite(...)       turn an invite down (the sender is told)
+--   * online cancel_invite(...)        take back one's own invite (the friend is told)
 --   Apply this file before pushing a client that calls them.
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
@@ -188,6 +196,18 @@
 --     select * from public.friendships where '<player id>' in (a_player, b_player);
 --   devices in online mode now (plan 39, 3.2), owner only:
 --     select count(*) from public.online_beats where at > now() - interval '1 minute';
+--   invites (plan 39, 4.1), owner only: the last day's, by how they ended (a pending one past its time
+--     or off its room reads expired; nothing stores that):
+--     select status, count(*) from public.invites where sent_at > now() - interval '1 day' group by 1;
+--   undo invites (plan 39, 4.1), before the narrowed pairing's undo: drop function public.send_invite(text),
+--     public.invite_list(), public.accept_invite(uuid), public.decline_invite(uuid),
+--     public.cancel_invite(uuid), public.online_invite_live(public.invites),
+--     public.online_invite_json(public.invites, text), public.online_invite_friends(text, text); restore
+--     online_unseat, online_cleanup and online_can from git (plan 39, 3.7r, 20161aa) and run this file;
+--     then drop function public.online_invites_end(uuid), public.online_invite_told(uuid, text, text, text);
+--     drop table public.invites; delete from public.rooms where source = 'invite';
+--     alter table public.rooms drop constraint rooms_source_check,
+--       add constraint rooms_source_check check (source in ('code')).
 --   online races with a waiting seat (plan 39, 3.7), owner only: saved and counted, never a friendship:
 --     select count(*) from public.matches where status = 'agreed' and (host_trusted and guest_trusted) is not true;
 --   undo the narrowed pairing (plan 39, 3.7), before online status's undo: first end every race a waiting
@@ -3946,7 +3966,8 @@ grant  execute on function public.online_pair(text) to authenticated;
 -- the room's two seated devices may join (the policies below). The server tells them what changed with
 -- realtime.send: 'guest' (a guest sat down), 'answer' (accepted or declined), 'left' and 'status'.
 -- For the same reason a guest leaving closes the room (online_unseat): no code is offered twice.
--- source: how the room was reached; 'code' only until invites and share links (Tier 4).
+-- source: how the room was made: 'code' (create_room) or 'invite' (send_invite made it, 4.1; a room
+-- send_invite reuses keeps its own). A share link (4.3) carries a code, so its room is a 'code' room.
 -- Rooms expire when anything is created (online_cleanup; no pg_cron). Readable by no role.
 create table if not exists public.rooms (
   code         text primary key check (code ~ '^[1-9][0-9]{5}$'),
@@ -3956,7 +3977,7 @@ create table if not exists public.rooms (
   guest_player text check (guest_player ~ '^[A-Za-z0-9_-]{22}$'),
   status       text not null default 'open'
                check (status in ('open', 'asked', 'ready', 'playing', 'finished', 'abandoned')),
-  source       text not null default 'code' check (source in ('code')),
+  source       text not null default 'code' check (source in ('code', 'invite')),
   seed         bigint check (seed between 0 and 4294967295),
   started_at   timestamptz,                    -- the current race's GO time, minted by set_room_status
   round        int not null default 0,         -- races started in this room
@@ -3967,6 +3988,9 @@ alter table public.rooms enable row level security;
 revoke all on public.rooms from public, anon, authenticated;
 create unique index if not exists rooms_host on public.rooms (host_uid);   -- one room per host device
 create index if not exists rooms_guest on public.rooms (guest_uid);
+-- A table from before plan 39 (4.1) takes 'code' only.
+alter table public.rooms drop constraint if exists rooms_source_check;
+alter table public.rooms add constraint rooms_source_check check (source in ('code', 'invite'));
 
 -- Every join_room call, for its caps (failed joins per device, per IP and in all), kept an hour. The
 -- IP is never stored: only a hash of its bucket (online_ip_bucket) with this database's own random
@@ -4263,12 +4287,79 @@ as $$
   left join public.online_secret s on s.id = 1;
 $$;
 
+-- Invites (plan 39, 4.1): a paired device asks a friend in online mode into its own open room, by the
+-- handle its lists gave it (send_invite). An invite lives c_ttl (INVITE_TTL, 2 minutes, stored on the row
+-- as expires_at, so a client shows what the server checks) and only while its room is open under the
+-- device that sent it, that device beats (online mode) and the two are still friends, neither hidden nor
+-- merged away (online_invite_live, read every time: no pg_cron, and 'expired' is never stored). One live
+-- invite per sending device and per pair. Keyed on resolved player ids; the room by its code. Kept two
+-- days for the caps (online_cleanup). Readable by no role. Defined here because online_unseat and
+-- online_cleanup use it; its functions come after online status.
+create table if not exists public.invites (
+  id          uuid primary key default gen_random_uuid(),
+  from_uid    uuid not null references auth.users (id) on delete cascade, -- the sending device: its room's host
+  from_player text not null check (from_player ~ '^[A-Za-z0-9_-]{22}$'),
+  to_player   text not null check (to_player ~ '^[A-Za-z0-9_-]{22}$'),
+  room_code   text not null check (room_code ~ '^[1-9][0-9]{5}$'),
+  status      text not null default 'pending' check (status in ('pending', 'accepted', 'declined', 'cancelled')),
+  sent_at     timestamptz not null default now(),
+  expires_at  timestamptz not null
+);
+alter table public.invites enable row level security;
+revoke all on public.invites from public, anon, authenticated;
+create index if not exists invites_to on public.invites (to_player, sent_at);
+create index if not exists invites_from on public.invites (from_player, sent_at);
+create index if not exists invites_device on public.invites (from_uid) where status = 'pending';
+
+-- Tell both players an invite changed ('invite_update' { invite, status } on each one's own topic,
+-- user:<player id>, which only that player's paired devices read: online_can), so the friend's ✉️ and
+-- the sender's wait follow at once. Internal.
+create or replace function public.online_invite_told(p_invite uuid, p_status text, p_from text, p_to text)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+begin
+  perform realtime.send(jsonb_build_object('invite', p_invite, 'status', p_status), 'invite_update', 'user:' || p_to, true);
+  perform realtime.send(jsonb_build_object('invite', p_invite, 'status', p_status), 'invite_update', 'user:' || p_from, true);
+end;
+$$;
+revoke execute on function public.online_invite_told(uuid, text, text, text) from public, anon, authenticated;
+
+-- A device's invites end with its room (online_unseat: it left, hosts or joins another, or its link
+-- went) and when a code guest takes its room's seat (join_room): each one still in its time is cancelled
+-- and both players are told. One already past its time is
+-- left as it is (it reads expired, and nobody needs telling). Internal.
+create or replace function public.online_invites_end(p_uid uuid)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  r record;
+begin
+  for r in
+    update public.invites i set status = 'cancelled'
+     where i.from_uid = p_uid and i.status = 'pending' and i.expires_at > now()
+    returning i.id, i.from_player, i.to_player
+  loop
+    perform public.online_invite_told(r.id, 'cancelled', r.from_player, r.to_player);
+  end loop;
+end;
+$$;
+revoke execute on function public.online_invites_end(uuid) from public, anon, authenticated;
+
 -- Take a device out of every room it sits in (it left, hosts or joins another room, unlinked, was
 -- removed, or moved to another player), and tell the room's channel ('left', with the seat). A race
 -- in progress is abandoned (no winner) and kept, so the other device can read why. Any other room is
 -- closed, the guest's seat included: a device that leaves keeps its channel until its token
 -- refreshes (finding 19), so a freed seat is never offered again under the same code; the host makes
--- a new room. An abandoned room waits for housekeeping. Internal.
+-- a new room. An abandoned room waits for housekeeping. The device's invites go with its room
+-- (online_invites_end, after the rooms: rooms are locked before invites everywhere). Internal.
 create or replace function public.online_unseat(p_uid uuid)
 returns void
 language plpgsql
@@ -4296,6 +4387,7 @@ begin
       delete from public.rooms x where x.code = r.code;
     end if;
   end loop;
+  perform public.online_invites_end(p_uid);
 end;
 $$;
 
@@ -4331,6 +4423,8 @@ begin
   delete from public.online_pairings c where c.expires_at < now();
   delete from public.friend_asks k where k.id in ( -- the ask caps count 7 days at most (3.1)
     select x.id from public.friend_asks x where x.at < now() - interval '7 days' order by x.at limit 500);
+  delete from public.invites i where i.id in ( -- the invite caps count a day at most (4.1)
+    select x.id from public.invites x where x.sent_at < now() - interval '2 days' order by x.sent_at limit 500);
   delete from auth.users u where u.id in (
     select x.id from auth.users x
       left join public.online_players o on o.uid = x.id
@@ -4444,7 +4538,8 @@ $$;
 -- { ok: false, error: 'rate limited' } past 5 failures from this device or 20 from its IP in 10
 -- minutes, 'busy' past 200 in all in a minute. A room idle 15 minutes is no room, housekeeping or not.
 -- Raises 'not signed in', 'not linked', 'in a race' (checked first, so a racing device learns nothing),
--- 'online closed' (the switch; no try is spent).
+-- 'online closed' (the switch; no try is spent). The seat taken, the host's live invite ends (4.1: its
+-- friend is told).
 create or replace function public.join_room(p_code text)
 returns jsonb
 language plpgsql
@@ -4504,6 +4599,7 @@ begin
   update public.rooms r
      set guest_uid = v_uid, guest_player = v_me.player_id, status = 'asked', updated_at = now()
    where r.code = v_code;
+  perform public.online_invites_end(v_room.host_uid); -- the seat is taken: the host's invite ends (4.1)
   perform realtime.send(
     jsonb_build_object('name', (select p.name from public.online_profiles p where p.player_id = v_me.player_id)),
     'guest', 'room:' || v_code, true);
@@ -5446,10 +5542,312 @@ begin
 end;
 $$;
 
+-- Invites (plan 39, 4.1; the table is with the rooms). Only between accepted friends, both in online mode
+-- (the outline's "both online": 🟢 means "can be invited now"), each named by a peer handle, never an id.
+-- Every function is for a trusted device (M1 rule 2: invites are private, item 61) and keyed on resolved
+-- player ids. The server tells the players on their own topics, user:<player id> ('invite' to the friend
+-- when one is sent; 'invite_update' { invite, status } to both when one is accepted, declined or
+-- cancelled), which only that player's paired devices read and nobody writes (online_can). An invite past
+-- its time is told to nobody: both sides count down from its expires_at.
+
+-- Are two players friends who may invite each other? An accepted friendship, neither id folded away,
+-- neither hidden (plan 30: their friends do not list them), no block either way. Internal.
+create or replace function public.online_invite_friends(p_me text, p_other text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select p_me <> p_other
+     and public.resolve_player(p_me) = p_me and public.resolve_player(p_other) = p_other
+     and not public.player_hidden(p_me) and not public.player_hidden(p_other)
+     and exists (select 1 from public.friendships f
+                  where f.a_player = least(p_me, p_other) and f.b_player = greatest(p_me, p_other) and f.status = 'accepted')
+     and not exists (select 1 from public.blocks b
+                      where (b.blocker = p_me and b.blocked = p_other) or (b.blocker = p_other and b.blocked = p_me));
+$$;
+revoke execute on function public.online_invite_friends(text, text) from public, anon, authenticated;
+
+-- Is an invite live? Pending and inside its time; its room open (and inside its 15 minutes) under the
+-- device that sent it, as the player it sent as; that device still paired and beating within c_fresh
+-- (online_state's: in online mode, so a closed app's invite goes with its beat, at once when its pagehide
+-- beacon lands); and the two still friends (online_invite_friends). Read every time, never stored: an
+-- unfriend, a block, a merge, a demotion or a lost beat ends it at once,
+-- with nothing to clean up. Internal.
+create or replace function public.online_invite_live(p_inv public.invites)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  c_fresh constant interval := interval '60 seconds';
+begin
+  return p_inv.status = 'pending' and p_inv.expires_at > now()
+     and exists (select 1 from public.rooms r
+                   join public.online_players o on o.uid = r.host_uid
+                  where r.code = p_inv.room_code and r.host_uid = p_inv.from_uid and r.host_player = p_inv.from_player
+                    and r.status = 'open' and r.updated_at > now() - interval '15 minutes'
+                    and o.player_id = p_inv.from_player and o.trusted)
+     and exists (select 1 from public.online_beats b where b.uid = p_inv.from_uid and b.at > now() - c_fresh)
+     and public.online_invite_friends(p_inv.from_player, p_inv.to_player);
+end;
+$$;
+revoke execute on function public.online_invite_live(public.invites) from public, anon, authenticated;
+
+-- An invite as p_viewer sees it: { invite, peer, name, sent_at, expires_at }, the other player's handle
+-- for p_viewer (the one friend_list gives) and their shown name, times in ms. No ids. Internal.
+create or replace function public.online_invite_json(p_inv public.invites, p_viewer text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'invite', p_inv.id,
+    'peer', public.online_peer(p_viewer, x.other),
+    'name', public.online_shown_name(x.other),
+    'sent_at', floor(extract(epoch from p_inv.sent_at) * 1000)::bigint,
+    'expires_at', floor(extract(epoch from p_inv.expires_at) * 1000)::bigint)
+  from (select case when p_viewer = p_inv.from_player then p_inv.to_player else p_inv.from_player end as other) x;
+$$;
+revoke execute on function public.online_invite_json(public.invites, text) from public, anon, authenticated;
+
+-- Invite a friend (by the handle friend_list or friend_statuses gave) into this device's own room: its
+-- open room when it hosts one (the code stays, so a Resend keeps the host on its channel; its 15 minutes
+-- start again), else a new one ('invite'; create_room's rules: one per 2 seconds, housekeeping, the
+-- device's other seat goes). The friend's paired devices are told at once ('invite' on user:<their id>,
+-- as invite_list shows it) and list it. { ok: true, invite, code, sent_at, expires_at } (ms; expires_at
+-- is sent_at + c_ttl, INVITE_TTL), { ok: false, error: 'unavailable' } (the handle names no accepted
+-- friend, or the friend is not in online mode now or is in a game, or either is hidden: never which),
+-- { ok: false, error: 'rate limited' } (c_minute invites a minute or c_day a day from this player,
+-- c_pair_hour to this friend an hour, a replaced one counted; or a new room within 2 seconds). One live
+-- invite per sending device and per pair: this device's other one and this player's other one to this
+-- friend are cancelled first, both players told. Sending is a beat: the device is in online mode, sending
+-- from it, so another window of the same browser that just left online mode (and deleted this device's
+-- beat: item 60's two-tab note) does not leave the invite dead or the sender offline. Raises as
+-- online_friend_start ('not signed in', 'not linked', 'not trusted', 'bad peer'), 'in a race' (as
+-- create_room), 'online closed' (the switch) and 'busy' (no free code).
+create or replace function public.send_invite(p_peer text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  c_ttl constant interval := interval '2 minutes'; -- INVITE_TTL, stored on the row
+  c_minute    constant int := 5;   -- invites a player sends in a minute
+  c_pair_hour constant int := 10;  -- to one friend in an hour
+  c_day       constant int := 100; -- a player in a day
+  s record;
+  v_me public.online_players;
+  v_code text;
+  v_inv public.invites;
+  r record;
+begin
+  select * into s from public.online_friend_start(p_peer); -- a paired device, a well-formed handle, both players' locks
+  v_me := public.online_me();
+  if exists (select 1 from public.rooms x where v_me.uid in (x.host_uid, x.guest_uid) and x.status = 'playing') then
+    raise exception 'in a race';
+  end if;
+  perform public.online_require_open();
+  if s.other is null or not public.online_invite_friends(s.me, s.other) or public.online_state(s.other) <> 'online' then
+    return jsonb_build_object('ok', false, 'error', 'unavailable');
+  end if;
+  if (select count(*) from public.invites i where i.from_player = s.me and i.sent_at > now() - interval '1 minute') >= c_minute
+     or (select count(*) from public.invites i where i.from_player = s.me and i.sent_at > now() - interval '1 day') >= c_day
+     or (select count(*) from public.invites i
+          where i.from_player = s.me and i.to_player = s.other and i.sent_at > now() - interval '1 hour') >= c_pair_hour then
+    return jsonb_build_object('ok', false, 'error', 'rate limited');
+  end if;
+  select x.code into v_code from public.rooms x
+   where x.host_uid = v_me.uid and x.status = 'open' and x.updated_at > now() - interval '15 minutes'
+   for update;
+  if v_code is null then
+    if exists (select 1 from public.rooms x where x.host_uid = v_me.uid and x.created_at > now() - interval '2 seconds') then
+      return jsonb_build_object('ok', false, 'error', 'rate limited');
+    end if;
+    perform public.online_cleanup();
+    perform public.online_unseat(v_me.uid); -- its seat elsewhere, and its invites with its room
+    delete from public.rooms x where x.host_uid = v_me.uid; -- its abandoned or finished room too
+    for i in 1 .. 20 loop
+      v_code := (100000 + public.online_random(900000))::text;
+      begin
+        insert into public.rooms (code, host_uid, host_player, source) values (v_code, v_me.uid, v_me.player_id, 'invite');
+        exit;
+      exception when unique_violation then
+        v_code := null; -- that code is taken: draw another
+      end;
+    end loop;
+    if v_code is null then
+      raise exception 'busy';
+    end if;
+  else
+    update public.rooms x set updated_at = now() where x.code = v_code;
+  end if;
+  for r in
+    update public.invites i set status = 'cancelled'
+     where i.status = 'pending' and i.expires_at > now()
+       and (i.from_uid = v_me.uid or (i.from_player = s.me and i.to_player = s.other))
+    returning i.id, i.from_player, i.to_player
+  loop
+    perform public.online_invite_told(r.id, 'cancelled', r.from_player, r.to_player);
+  end loop;
+  insert into public.online_beats as b (uid, at) values (v_me.uid, now())
+  on conflict (uid) do update set at = excluded.at;
+  insert into public.invites (from_uid, from_player, to_player, room_code, expires_at)
+  values (v_me.uid, s.me, s.other, v_code, now() + c_ttl)
+  returning * into v_inv;
+  perform realtime.send(public.online_invite_json(v_inv, s.other), 'invite', 'user:' || s.other, true);
+  return (public.online_invite_json(v_inv, s.me) - 'peer' - 'name') || jsonb_build_object('ok', true, 'code', v_code);
+end;
+$$;
+
+-- The player's invites, for a trusted device: { incoming: [{ invite, peer, name, sent_at, expires_at }],
+-- outgoing: [{ invite, peer, name, status, sent_at, expires_at }] } (ms, newest first). Incoming: the live
+-- ones (online_invite_live), what a missed 'invite' event would have shown; read on entering online mode.
+-- Outgoing: this player's from the last c_recent (up to 20), from any of its devices, each 'pending'
+-- (live), 'accepted', 'declined', 'cancelled' or 'expired' (anything else: past its time, its room gone
+-- or taken, the sender out of online mode, the friendship ended: never which); a hidden friend and an id
+-- a merge folded away are left out. No ids.
+create or replace function public.invite_list()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  c_recent constant interval := interval '10 minutes';
+  v_id text := (public.online_trusted_me()).player_id;
+begin
+  return jsonb_build_object(
+    'incoming', coalesce((select jsonb_agg(public.online_invite_json(i, v_id) order by i.sent_at desc, i.id)
+                            from public.invites i
+                           where i.to_player = v_id and i.status = 'pending' and i.expires_at > now()
+                             and public.online_invite_live(i)), '[]'::jsonb),
+    'outgoing', coalesce((select jsonb_agg(public.online_invite_json(i, v_id)
+                                           || jsonb_build_object('status', case when i.status = 'pending' and not public.online_invite_live(i)
+                                                                                then 'expired' else i.status end)
+                                           order by i.sent_at desc, i.id)
+                            from (select * from public.invites x
+                                   where x.from_player = v_id and x.sent_at > now() - c_recent
+                                     and public.resolve_player(x.to_player) = x.to_player and not public.player_hidden(x.to_player)
+                                   order by x.sent_at desc, x.id
+                                   limit 20) i), '[]'::jsonb));
+end;
+$$;
+
+-- Take the guest's seat of a friend's room by their invite, with one tap: no code (so no join cap) and no
+-- Let in (the host chose this guest): { ok: true, code, status: 'ready', host_name }. The host is told
+-- ('status' on room:<code>, the room as room_state shows it, as set_room_status tells it), and both
+-- players ('invite_update', accepted). This device leaves its other seat first, as join_room, and its
+-- own invite goes with its room. { ok: false, error: 'expired' } for anything but a live invite to this
+-- player (past its time, answered, cancelled, its room gone or taken, the sender out of online mode, the
+-- friendship ended, or not this player's at all: never which). Raises as online_trusted_me, 'in a race'
+-- (first, as join_room) and 'online closed' (the switch).
+create or replace function public.accept_invite(p_invite uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players := public.online_trusted_me();
+  v_inv public.invites;
+  v_room public.rooms;
+begin
+  if exists (select 1 from public.rooms x where v_me.uid in (x.host_uid, x.guest_uid) and x.status = 'playing') then
+    raise exception 'in a race';
+  end if;
+  perform public.online_require_open();
+  select * into v_inv from public.invites i where i.id = p_invite and i.to_player = v_me.player_id;
+  if v_inv.id is null then
+    return jsonb_build_object('ok', false, 'error', 'expired');
+  end if;
+  -- Both players' locks, as fold_player and the friend functions take them; then the room, then the
+  -- invite (rooms before invites, as online_unseat). The link is read again under the locks.
+  perform pg_advisory_xact_lock(hashtext(least(v_inv.from_player, v_inv.to_player)));
+  perform pg_advisory_xact_lock(hashtext(greatest(v_inv.from_player, v_inv.to_player)));
+  v_me := public.online_me();
+  select * into v_room from public.rooms x where x.code = v_inv.room_code for update;
+  select * into v_inv from public.invites i where i.id = p_invite for update;
+  if v_me.uid is null or not v_me.trusted or v_me.player_id is distinct from v_inv.to_player
+     or not public.online_invite_live(v_inv) then
+    return jsonb_build_object('ok', false, 'error', 'expired');
+  end if;
+  perform public.online_unseat(v_me.uid);
+  update public.rooms x
+     set guest_uid = v_me.uid, guest_player = v_me.player_id, status = 'ready', updated_at = now()
+   where x.code = v_room.code
+  returning * into v_room;
+  update public.invites i set status = 'accepted' where i.id = p_invite;
+  perform realtime.send(public.online_room_json(v_room, null) - 'seat' - 'server_ms' - 'ok', 'status', 'room:' || v_room.code, true);
+  perform public.online_invite_told(p_invite, 'accepted', v_inv.from_player, v_inv.to_player);
+  return jsonb_build_object('ok', true, 'code', v_room.code, 'status', 'ready',
+    'host_name', (select p.name from public.online_profiles p where p.player_id = v_room.host_player));
+end;
+$$;
+
+-- Turn a friend's invite down: both players are told ('invite_update', declined: the sender's "<name>
+-- can't play right now"), and the sender's room stays open (invite someone else, or resend). { ok: true }
+-- whatever the id: someone else's, or one no longer live, changes nothing and tells nobody. Raises as
+-- online_trusted_me.
+create or replace function public.decline_invite(p_invite uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players := public.online_trusted_me();
+  v_inv public.invites;
+begin
+  select * into v_inv from public.invites i where i.id = p_invite and i.to_player = v_me.player_id for update;
+  if v_inv.id is not null and public.online_invite_live(v_inv) then
+    update public.invites i set status = 'declined' where i.id = p_invite;
+    perform public.online_invite_told(p_invite, 'declined', v_inv.from_player, v_inv.to_player);
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- Take back one's own invite, from any of the player's paired devices: both players are told
+-- ('invite_update', cancelled), and the room stays open. { ok: true } whatever the id: someone else's,
+-- or one no longer live, changes nothing and tells nobody. Raises as online_trusted_me. (Leaving the
+-- room, or online play, cancels it too: online_unseat.)
+create or replace function public.cancel_invite(p_invite uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players := public.online_trusted_me();
+  v_inv public.invites;
+begin
+  select * into v_inv from public.invites i where i.id = p_invite and i.from_player = v_me.player_id for update;
+  if v_inv.id is not null and public.online_invite_live(v_inv) then
+    update public.invites i set status = 'cancelled' where i.id = p_invite;
+    perform public.online_invite_told(p_invite, 'cancelled', v_inv.from_player, v_inv.to_player);
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
 -- The Realtime policies' check (granted to authenticated, because a policy runs it as the device
 -- asking): may this device read (p_write false) or write a channel topic? room:<code>: its two seated
--- devices, each still linked as the player it sat down as. Every other topic: nobody (user:<player id>
--- comes with invites, Tier 4). Answers only about the caller.
+-- devices, each still linked as the player it sat down as. user:<player id> (invites, 4.1): read by that
+-- player's paired devices only (M1 rule 2: a waiting device, which may be someone else's, reads nothing
+-- private) and written by nobody: only the server sends there (realtime.send runs as the definer), so
+-- what arrives there is the server's word. Every other topic: nobody. Answers only about the caller.
 create or replace function public.online_can(p_topic text, p_write boolean)
 returns boolean
 language sql
@@ -5464,6 +5862,9 @@ as $$
        where r.code = substr(p_topic, 6)
          and ((r.host_uid = o.uid and r.host_player = o.player_id)
               or (r.guest_uid = o.uid and r.guest_player = o.player_id)))
+    when p_topic ~ '^user:[A-Za-z0-9_-]{22}$' then not coalesce(p_write, true) and exists (
+      select 1 from public.online_players o
+       where o.uid = auth.uid() and o.player_id = substr(p_topic, 6) and o.trusted)
     else false
   end;
 $$;
@@ -5527,6 +5928,16 @@ revoke execute on function public.online_beat(boolean) from public, anon;
 grant  execute on function public.online_beat(boolean) to authenticated;
 revoke execute on function public.friend_statuses() from public, anon;
 grant  execute on function public.friend_statuses() to authenticated;
+revoke execute on function public.send_invite(text) from public, anon;
+grant  execute on function public.send_invite(text) to authenticated;
+revoke execute on function public.invite_list() from public, anon;
+grant  execute on function public.invite_list() to authenticated;
+revoke execute on function public.accept_invite(uuid) from public, anon;
+grant  execute on function public.accept_invite(uuid) to authenticated;
+revoke execute on function public.decline_invite(uuid) from public, anon;
+grant  execute on function public.decline_invite(uuid) to authenticated;
+revoke execute on function public.cancel_invite(uuid) from public, anon;
+grant  execute on function public.cancel_invite(uuid) to authenticated;
 
 -- Which version of this file the database last ran: a short SHA-256 of the file with the value
 -- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
@@ -5538,7 +5949,7 @@ returns text
 language sql
 immutable
 as $$
-  select '19e9d414907975ce'::text; -- schema stamp
+  select '24b427e149605f92'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
