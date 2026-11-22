@@ -679,6 +679,14 @@ test('a race with a waiting seat shows on both sides with no handle: no ask, no 
   h = await call(db, hal, 'online_history');
   assert.deepEqual(h.recent.map((r) => [r.name, r.peer]), [['Gus', peer], ['Gus', peer]], 'a race from paired devices: the handle works for both rows');
   assert.deepEqual(await ask(db, hal, gus), { ok: true, status: 'pending' });
+  // A waiting device that hosts gives no handle either (3.7r).
+  const jon = await device(db, 'Jon');
+  const ivy = await device(db, 'Ivy');
+  await raced(db, await waiting(db, jon), ivy);
+  assert.deepEqual((await call(db, ivy, 'online_history')).recent.map((r) => [r.name, r.peer]), [['Jon', null]]);
+  assert.deepEqual((await call(db, jon, 'online_history')).recent.map((r) => [r.name, r.peer]), [['Ivy', null]]);
+  assert.deepEqual(await call(db, ivy, 'block_user', [await peerOf(db, ivy, jon)]), { ok: false, error: 'no peer' });
+  assert.deepEqual(await call(db, jon, 'block_user', [await peerOf(db, jon, ivy)]), { ok: false, error: 'no peer' });
 });
 
 test('a merge carries each seat\'s trust with the race: a waiting seat\'s race moved to the kept player still makes nobody friends', async () => {

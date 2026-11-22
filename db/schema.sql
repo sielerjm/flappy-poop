@@ -67,7 +67,8 @@
 --   * online online_history()          the player's online rival and recent races, for a trusted device
 --   * online friend_list()             the player's friends, asks both ways and blocks (3.1), each named by
 --                                      a peer handle (never an id), for a trusted device
---   * online send_friend_request(...)  ask a player raced (an agreed race) to be friends; asks are capped
+--   * online send_friend_request(...)  ask a player raced (an agreed race from two paired devices, 3.7) to be
+--                                      friends; asks are capped
 --   * online respond_friend_request(...) accept or decline an ask
 --   * online remove_friend(...)        end a friendship, take back an ask, or turn one down
 --   * online block_user(...)           block a player raced or befriended: no friendship, no asks either way
@@ -188,8 +189,12 @@
 --   devices in online mode now (plan 39, 3.2), owner only:
 --     select count(*) from public.online_beats where at > now() - interval '1 minute';
 --   online races with a waiting seat (plan 39, 3.7), owner only: saved and counted, never a friendship:
---     select count(*) from public.matches where status = 'agreed' and not (host_trusted and guest_trusted);
---   undo the narrowed pairing (plan 39, 3.7), before online status's undo: restore finish_match,
+--     select count(*) from public.matches where status = 'agreed' and (host_trusted and guest_trusted) is not true;
+--   undo the narrowed pairing (plan 39, 3.7), before online status's undo: first end every race a waiting
+--     seat reported, as the old schema would have left it (its 🏅 and 🏆 rows stay; 3.7r), or the old
+--     functions make friends and handles of them:
+--     update public.matches set status = 'abandoned' where status = 'agreed' and (host_trusted and guest_trusted) is not true;
+--     then restore finish_match,
 --     online_peer_find, online_peer_shown, friend_eligible and online_races from git (plan 39, 3.2c,
 --     4b9e28b) and run this file (without 3.7's do block); then
 --     alter table public.matches drop column host_trusted, drop column guest_trusted.
@@ -4703,7 +4708,7 @@ as $$
   update public.online_settings s set open = coalesce(p_on, true) where s.id returning s.open;
 $$;
 
--- A seated, trusted device reports its race's end (plan 39, 2.4a). p_result is { slots, stats }:
+-- A seated device, paired or waiting (3.7), reports its race's end (plan 39, 2.4a). p_result is { slots, stats }:
 -- slots are both seats' final numbers in seat order (host, guest) as this device saw them, each
 -- { score, deaths, levelWins, finalFirst } (what raceOutcome reads); stats are its own numbers-only
 -- telemetry (a key not in c_stat_keys, a non-number or a number out of range is dropped, never the
@@ -5533,7 +5538,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'cc8984adbf659cff'::text; -- schema stamp
+  select '19e9d414907975ce'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
