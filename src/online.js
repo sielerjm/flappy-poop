@@ -496,6 +496,17 @@ export function roomStep(room, action) {
       if (r.phase === 'creating') return { ...r, phase: 'open', code, changedAt: at };
       return { ...r, phase: 'asked', code, hostName: text(res.host_name), changedAt: at };
     }
+    case 'invited': {
+      // 4.2: a friend's invite accepted (accept_invite's answer): this device is the room's guest and
+      // the room is 'ready' at once (no code typed, no Let in: the host chose this guest; item 65).
+      const res = a.result;
+      const code = parseCode(res?.code);
+      if (live || res?.ok !== true || res.status !== 'ready' || !code) return r;
+      return { ...roomInit(), phase: 'ready', role: 'guest', code, hostName: text(res.host_name), changedAt: at };
+    }
+    case 'renew':
+      // 4.2: a Resend kept the host's open room (send_invite) and restarted its 15 minutes on the server.
+      return r.role === 'host' && r.phase === 'open' && parseCode(a.code) === r.code ? { ...r, changedAt: at } : r;
     case 'guest':
       return r.role === 'host' && r.phase === 'open' ? { ...r, phase: 'asked', guestName: text(a.name), changedAt: at } : r;
     case 'answered': {

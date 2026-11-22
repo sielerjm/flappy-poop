@@ -21,6 +21,7 @@
 
 import { VERSION } from './logic.js';
 import { codeExpiresAt, compareVersions, parseCode, protocolVersion, roomInit, roomStep } from './online.js';
+import { inviteErrorKey } from './onlineInvites.js';
 
 /** The `ready` event's level in the lobby (a level break's ready names the level it starts). */
 export const LOBBY_LEVEL = 1;
@@ -72,8 +73,10 @@ function screenOf(room) {
  * @param {() => number} [deps.now] server ms (the transport's clock)
  * @param {(lobby: object) => void} [deps.onBothReady] both players ready (1.7a: start the race)
  */
-export function createOnlineLobby({ net, name, width, mine = { protocol: protocolVersion(), app: VERSION }, now = () => net.serverNow(), onBothReady = null, memory = null, resume = null }) {
-  const state = { screen: 'home', room: roomInit(), typed: '', meReady: false, themReady: false, message: null };
+export function createOnlineLobby({ net, name, width, mine = { protocol: protocolVersion(), app: VERSION }, now = () => net.serverNow(), onBothReady = null, memory = null, resume = null, onUser = null }) {
+  // 4.2: `invite` is the host's invite to a friend while its room is open: { invite, peer, name,
+  // sentAt, expiresAt, status: 'pending' | 'expired' | 'declined' }, or null.
+  const state = { screen: 'home', room: roomInit(), typed: '', meReady: false, themReady: false, message: null, invite: null };
   const pending = new Set();
   let themT = -Infinity; // the newest peer ready's time (server ms) and sequence
   let themSeq = -Infinity;
@@ -123,7 +126,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
 
   function signature() {
     const r = state.room;
-    return JSON.stringify([state.screen, r.phase, r.code, r.hostName, r.guestName, state.meReady, state.themReady, state.message]);
+    return JSON.stringify([state.screen, r.phase, r.code, r.hostName, r.guestName, state.meReady, state.themReady, state.message, state.invite?.invite ?? null, state.invite?.status ?? null]);
   }
 
   /** The room moved: the screen follows, a new ready round starts clean, both-ready fires once. */
@@ -140,6 +143,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
       closed(prev, r);
       return;
     }
+    if (r.phase !== 'open') state.invite = null; // 4.2: accepted (ready), or a code guest took the seat (the server ended it)
     const screen = screenOf(r);
     if (screen) state.screen = screen;
     const now2 = r.phase === 'ready' && state.meReady && state.themReady;
@@ -161,6 +165,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     const other = (role === 'host' ? prev.guestName : prev.hostName) ?? net.peer?.()?.name ?? '';
     net.closeRoom();
     if (code && reason !== 'you left') track(net.rpc('leave_room', { p_code: code }));
+    state.invite = null; // leave_room cancels it on the server (item 65)
     state.room = roomInit();
     state.meReady = false;
     state.themReady = false;
@@ -223,6 +228,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     generation += 1;
     state.room = roomInit();
     state.screen = 'home';
+    state.invite = null;
     state.meReady = false;
     state.themReady = false;
     both = false;
@@ -357,6 +363,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     const live = r.phase !== 'idle' && r.phase !== 'closed';
     state.room = roomInit();
     state.screen = 'home';
+    state.invite = null; // leave_room cancels it on the server
     state.meReady = false;
     state.themReady = false;
     state.message = null;
@@ -378,6 +385,10 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
           state.themReady = false;
           settle(state.room);
         } else checkPeer(item.peer);
+      } else if (item.kind === 'user') {
+        // 4.2: the player's own topic (the server's word): this host's invite answered, then the panel's ✉️.
+        if (item.event === 'invite_update') inviteUpdate(item.update);
+        onUser?.(item);
       } else if (item.kind === 'channel' && CHANNEL_ENDS.has(item.state)) {
         if (state.room.phase !== 'idle') failChannel(item.state === 'closed' ? item.reason : item.state);
       } else if (item.kind === 'peer' && item.event === 'ready' && item.msg?.level === LOBBY_LEVEL && state.room.phase === 'ready') {
@@ -391,7 +402,107 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
       }
     }
     step({ type: 'tick', at: now() });
+    if (state.invite?.status === 'pending' && now() >= state.invite.expiresAt) state.invite = { ...state.invite, status: 'expired' };
     return signature() !== before;
+  }
+
+  /**
+   * 4.2: invite a friend (their 🟢 row's Invite, or Resend). send_invite uses this device's open room
+   * when it hosts one (the code stays; its 15 minutes start again: 'renew'), else makes one, whose
+   * channel opens as the host's. Only with no room or an open one (item 65: from any other room the
+   * server would leave it). → { ok: true } | { ok: false, error, errorKey }; a refusal leaves the room as it was.
+   */
+  async function invite(peer, friendName) {
+    const r = state.room;
+    const idle = r.phase === 'idle' || r.phase === 'closed';
+    if (!idle && !(r.role === 'host' && r.phase === 'open')) return { ok: false, error: 'busy room', errorKey: 'onlineErrGeneric' };
+    if (idle && (staleLeave || memory?.get?.())) await staleLeft();
+    const gen = generation;
+    const screen = state.screen;
+    if (idle) state.screen = 'busy';
+    const res = await net.rpc('send_invite', { p_peer: peer });
+    if (gen !== generation) {
+      const code = parseCode(res?.data?.code);
+      if (idle && res?.ok && code) track(net.rpc('leave_room', { p_code: code })); // cancelled while it ran
+      return { ok: false, error: 'you left' };
+    }
+    const d = res?.ok ? res.data ?? {} : { ok: false, error: res?.error ?? 'error' };
+    const code = parseCode(d.code);
+    if (d.ok !== true || !code || !Number.isFinite(d.sent_at) || !Number.isFinite(d.expires_at)) {
+      if (idle) state.screen = screen;
+      const error = d.ok === true ? 'error' : d.error ?? 'error';
+      return { ok: false, error, errorKey: inviteErrorKey(error) };
+    }
+    state.message = null;
+    // A Resend keeps the room and its channel (the same code); a new room's channel opens as the host's.
+    const fresh = idle || code !== state.room.code;
+    if (!fresh) step({ type: 'renew', code, at: d.sent_at });
+    else {
+      if (!idle) {
+        net.closeRoom();
+        generation += 1;
+        state.room = roomInit();
+      }
+      step({ type: 'create', at: d.sent_at });
+      step({ type: 'rpc', result: { ok: true, code }, at: d.sent_at });
+    }
+    state.invite = { invite: d.invite, peer, name: friendName ?? '', sentAt: d.sent_at, expiresAt: d.expires_at, status: 'pending' };
+    state.screen = 'host';
+    if (fresh) await openChannel('host');
+    return { ok: true };
+  }
+
+  /**
+   * 4.2: this host's invite answered (invite_update on the player's topic). Accepted: the room is read
+   * (the room's own 'status' event can come before its channel is open); declined: the line says so and
+   * offers Resend; cancelled (a code guest took the seat, or another device's invite replaced it): gone.
+   */
+  function inviteUpdate(update) {
+    const inv = state.invite;
+    if (!inv || !update || update.invite !== inv.invite) return;
+    if (update.status === 'declined') state.invite = { ...inv, status: 'declined' };
+    else if (update.status === 'cancelled') state.invite = null;
+    else if (update.status === 'accepted') {
+      const code = state.room.code;
+      const gen = generation;
+      track(
+        Promise.resolve(net.rpc('room_state', { p_code: code })).then((res) => {
+          if (gen !== generation || state.room.code !== code) return;
+          if (res?.ok && res.data?.ok === true) step({ type: 'status', room: res.data, at: Number.isFinite(res.data.server_ms) ? res.data.server_ms : now() });
+        }),
+      );
+    }
+  }
+
+  /**
+   * 4.2: a friend's ✉️ tapped: `accept()` (the invites' accept_invite) seats this device as the guest,
+   * the room 'ready' at once, and its channel opens as the guest's. → { ok: true } | { ok: false, error, errorKey } (home again).
+   */
+  async function acceptInvite(accept) {
+    if (state.room.phase !== 'idle' && state.room.phase !== 'closed') return { ok: false, error: 'busy room', errorKey: 'onlineErrGeneric' };
+    if (staleLeave || memory?.get?.()) await staleLeft();
+    state.screen = 'busy';
+    state.message = null;
+    const gen = generation;
+    const res = await accept();
+    if (gen !== generation) return { ok: false, error: 'you left' };
+    if (!res?.ok) {
+      state.screen = 'home';
+      return res ?? { ok: false, error: 'error', errorKey: 'onlineErrGeneric' };
+    }
+    step({ type: 'invited', result: { ok: true, code: res.code, status: res.status, host_name: res.hostName }, at: now() });
+    if (state.room.phase !== 'ready') {
+      state.screen = 'home';
+      return { ok: false, error: 'error', errorKey: 'onlineErrGeneric' };
+    }
+    await openChannel('guest');
+    return { ok: true };
+  }
+
+  /** 4.2: the host's invite line, its time left (server ms), or null. */
+  function inviteLeftMs() {
+    const inv = state.invite;
+    return inv && inv.status === 'pending' ? Math.max(0, inv.expiresAt - now()) : null;
   }
 
   /**
@@ -446,6 +557,11 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
 
   return Object.assign(lobby, {
     create: () => create(),
+    invite,
+    acceptInvite,
+    inviteLeftMs,
+    /** 4.2: Invite and Resend are offered only with no room or an open one (item 65). */
+    canInvite: () => ['idle', 'closed'].includes(state.room.phase) || (state.room.role === 'host' && state.room.phase === 'open'),
     rejoin,
     join,
     answer,

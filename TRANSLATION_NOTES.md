@@ -621,6 +621,18 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | friendResultAdd | Add {name} as a friend (button on the online results panel after a saved race; {name} is the opponent) | 加 {name} 为好友 |
 | friendResultIsFriend | {name} is your friend (the results panel when the opponent is already a friend; {name} is the opponent) | {name} 是你的好友 |
 | friendResultPair | Pair this device to add friends from your next races (the results panel's friend line on a device waiting to pair: its race is saved, but only a race between two paired devices lets the players become friends, so pairing helps the next races, not this one) | 配对这台设备后，可以从之后的比赛中加好友 |
+| friendInvite | Invite (the button on a 🟢 online friend's row on the Friends screen: sends them an invite to race (it lasts 2 minutes)) | 邀请 |
+| inviteFromSub | ✉️ invites you to race (under a friend's name on the Friends screen while their invite is live (replaces the Online word)) | ✉️ 邀请你比赛 |
+| inviteJoinLabel | Join {name}'s race (screen-reader label of the ✉️ button (a ring of the time left and m:ss); tapping it joins the friend's room; {name} is the friend) | 加入 {name} 的比赛 |
+| inviteDeclineLabel | Turn down {name}'s invite (screen-reader label of the ✕ beside the ✉️; {name} is the friend) | 拒绝 {name} 的邀请 |
+| inviteCodeLead | Invite sent. You can also give someone this code (the host's code screen after inviting a friend (the room code shows under it)) | 邀请已发出。你也可以把这个代码给别人 |
+| inviteWaiting | Waiting for {name} to answer (the host's code screen while the invite is live (the friend's row above shows ✉️ and the time left); {name} is the friend) | 等待 {name} 回应 |
+| inviteExpired | Your invite to {name} ran out. (the host's code screen once the 2 minutes are up; a Resend button follows) | 给 {name} 的邀请已过期。 |
+| inviteDeclined | {name} can't play right now. (the host's code screen when the friend turned the invite down (worded softly on purpose); a Resend button follows) | {name} 现在不能玩。 |
+| inviteResend | Resend (button on the host's code screen after an invite ran out or was turned down: sends it again in the same room) | 再次邀请 |
+| inviteUnavailable | {name} can't be invited right now. (status line when the server refuses an invite (the friend left online mode, started a race, or is no longer a friend: deliberately one message for all)) | 现在不能邀请 {name}。 |
+| inviteRateLimited | That's a lot of invites. Try again in a few minutes. (status line past the invite limits (5 a minute, 10 an hour to one friend, 100 a day)) | 邀请太多了，请过几分钟再试。 |
+| inviteGone | That invite has ended. (status line on the Friends screen when tapping a friend's ✉️ fails because the invite ran out or was taken back) | 这个邀请已经结束了。 |
 | onlineDevicesLead | Devices that use your player online | 在线使用你玩家的设备 |
 | onlineThisDevice | This device | 这台设备 |
 | onlineOtherDevice | Device {n} | 设备 {n} |

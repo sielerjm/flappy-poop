@@ -92,6 +92,7 @@ export const SECTIONS = [
   { name: 'online-race', needs: [], about: "the online race (plan 39, 1.7a-1.8) against a scripted guest in the page (its own referee and feed, a 40 ms link; no network): the scene and its Play, Space flapping the one half, the purse under the opponent's pill and a long name fitted to it, the host taking level 1's line, the wait timer and Keep waiting, the shared count and GO, the final line to the guest, one outcome on both, the results panel, Rematch's states and round 2, then Leave from the wait offer back to single player" },
   { name: 'online-reload', needs: [], about: "reload resume (plan 39, 2.3, D4) against a scripted guest in the page (a 40 ms link; no network): the race into level 2 with its level start kept in the tab's record; the guest's reload restarts this race at level 2's start under the overlay; then a real page reload: a stand-in transport under Play, the 🌐 window rejoins (room_state, the channel as the host, nothing left), the race back rewound, both Ready, one GO, level 2 from its first pair with the kept score, purse, beans and level wins, the race to its end and the record gone; 2.3b: a relaunch (a new tab id, the record's beat stale) rejoins and takes the record over; the racing page whose record another page takes steps aside (the transport closed, no leave_room, Play plain, the 🌐 window's line) and, once that page stops beating, looks again and rejoins; a fresh page beside a live beat offers nothing, rejoins nothing, leaves nothing, and its 🌐 window says the race runs in another window" },
   { name: 'online-friends', needs: [], about: "friends and online status (plan 39, 3.3, Preview G), on a stand-in transport under Play (no network): the 🌐 window beats once linked; the online home's 🤝 Friends with its badge; the Friends screen's order (a request, friends online → in a game → offline with dot and word, a request sent, a recent opponent, Blocked closed); Accept, Add friend, ⋯ Block asked twice, Back with the badge read again; ✕ out of 🌐 says offline once" },
+  { name: 'online-invites', needs: [], about: "invites, the ✉️ (plan 39, 4.2, Preview I), on a stand-in transport under Play (no network) on a 320 phone: invite_list once linked and the topic it names; ✉️ 1 on 🤝 Friends; the inviting 🟢 friend first with the ✉️ and its time, the buttons inside the row under a 16-character name (Michael's ask); a topic invite adds one; the ✉️ tapped: the ready screen as the guest; Invite on a 🟢 friend: the room screen waiting, their no with Resend, Resend in the same room" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -7685,6 +7686,110 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await click('tour-close');
       ok(await until(`__fr.calls.includes('online_beat:false')`), '✕ out of 🌐: online_beat false');
       ok((await calls()).filter((c) => c === 'online_beat:false').length === 1, 'once');
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+    });
+
+    await section('online-invites', async () => {
+      // Invites (plan 39, 4.2), in the real page over Play on a 320 phone (the narrowest the panel takes),
+      // with a stand-in account and transport answering the Tier 3 and 4.1 functions; a topic event is
+      // pushed into the transport's queue (__iv.q) as onlineNet would queue it.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 320, height: 640, deviceScaleFactor: 1, mobile: false });
+      await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+      let sp = null;
+      for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+        await sleep(500);
+        sp = await splashNow().catch(() => null);
+      }
+      if (sp?.enabled) {
+        await splashKey('keydown', ' ');
+        await splashKey('keyup', ' ');
+      }
+      for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+      const ex0 = exceptions.length;
+      const until = async (expr, ms = 5000) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          if (await evaluate(expr)) return true;
+          await sleep(50);
+        }
+        return false;
+      };
+      const text = (id) => evaluate(`document.getElementById('${id}')?.textContent ?? null`);
+      const click = (id) => evaluate(`(document.getElementById('${id}')?.click(), Boolean(document.getElementById('${id}')))`);
+      const calls = () => evaluate(`JSON.stringify(__iv.calls)`).then(JSON.parse);
+      const LONG = 'WWWWWWWWWWWWWWWW';
+      await evaluate(`(() => {
+        const P = (n) => n.toString(16).padStart(2, '0').repeat(16);
+        const U = (n) => String(n).padStart(8, '0') + '-0000-4000-8000-000000000000';
+        const list = { friends: [{ peer: P(1), name: 'zedFriend' }, { peer: P(3), name: 'bobFriend' }, { peer: P(4), name: '${LONG}' }], incoming: [], outgoing: [], blocked: [] };
+        const states = { friends: [{ peer: P(3), state: 'online', name: 'bobFriend' }, { peer: P(4), state: 'online', name: '${LONG}' }, { peer: P(1), state: 'in_game', name: 'zedFriend' }] };
+        const t0 = Date.now();
+        let incoming = [{ invite: U(1), peer: P(4), name: '${LONG}', sent_at: t0 - 40000, expires_at: t0 + 80000 }];
+        const calls = [];
+        const q = [];
+        let sent = 0;
+        const net = { warm: async () => ({ ok: true }), serverNow: () => Date.now(), pump() {}, take: () => q.splice(0), send: () => true, peer: () => null, channelState: () => 'joined', close() { calls.push('close'); }, closeRoom() {}, beacon: () => true,
+          async openRoom(code, o) { calls.push('openRoom:' + code + ':' + o.seat); return { ok: true }; },
+          async openTopic(topic) { calls.push('openTopic:' + topic); return { ok: true }; }, closeTopic() { calls.push('closeTopic'); },
+          async rpc(fn, args) {
+            calls.push(fn);
+            if (fn === 'friend_list') return { ok: true, data: list };
+            if (fn === 'friend_statuses') return { ok: true, data: states };
+            if (fn === 'online_history') return { ok: true, data: { rival: null, recent: [] } };
+            if (fn === 'invite_list') return { ok: true, data: { incoming, outgoing: [], topic: 'user:' + P(10) } };
+            if (fn === 'accept_invite') { incoming = []; return { ok: true, data: { ok: true, code: '482913', status: 'ready', host_name: '${LONG}' } }; }
+            if (fn === 'send_invite') { sent += 1; const t = Date.now(); return { ok: true, data: { ok: true, invite: U(100 + sent), code: '615204', sent_at: t, expires_at: t + 120000 } }; }
+            return { ok: true, data: { ok: true } };
+          } };
+        const account = { enter: async () => ({ ok: true, view: 'home', name: 'Smoke', trusted: true, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted: true, name: 'Smoke' }) };
+        const p = __flappy.scene.getScene('Play');
+        p.onlineNet = net;
+        p.onlineAccount = () => account;
+        p.onlineStatusBeatRef = null;
+        globalThis.__iv = { calls, q, U, P };
+        p.openVersusWindow();
+        return true;
+      })()`);
+      ok(await until(`document.getElementById('tour-friends-inv')?.textContent === '✉️ 1'`), 'the online home: ✉️ 1 on 🤝 Friends');
+      const c0 = await calls();
+      ok(c0.includes('invite_list') && c0.includes(`openTopic:user:${'0a'.repeat(16)}`), 'linked: invite_list, then the topic it names');
+      await click('tour-friends');
+      ok(await until(`Boolean(document.getElementById('tour-fr-inv-0'))`), 'Friends: the ✉️ on the first row');
+      ok((await text('tour-fr-0'))?.includes(LONG) && /^1:[12]\d$/.test((await text('tour-fr-inv-left-0')) ?? ''), `the inviting friend first, with the time left (${await text('tour-fr-inv-left-0')})`);
+      const fit = await evaluate(`(() => {
+        const r = (id) => document.getElementById(id).getBoundingClientRect();
+        const row = r('tour-fr-0'), btn = r('tour-fr-inv-0'), no = r('tour-fr-invno-0'), left = r('tour-fr-inv-left-0');
+        const who = document.querySelector('#tour-fr-0 .who').getBoundingClientRect();
+        const inside = (b) => b.left >= row.left - 0.5 && b.right <= row.right + 0.5;
+        return JSON.stringify({ inside: inside(btn) && inside(no) && inside(left) && left.right <= btn.right + 0.5, whoW: Math.round(who.width), btnW: Math.round(btn.width), wrapped: btn.top >= who.bottom - 1 });
+      })()`).then(JSON.parse);
+      ok(fit.inside && fit.whoW >= 150 && fit.wrapped, `a 16-character name on a 320 phone: the ✉️, its time and ✕ inside the row, under the name, which keeps its width (${JSON.stringify(fit)})`);
+      ok((await text('tour-fr-invite-1')) !== null && (await text('tour-fr-invite-2')) === null, 'Invite on the other 🟢 friend, none on In a game');
+      await evaluate(`(__iv.q.push({ kind: 'user', event: 'invite', invite: { invite: __iv.U(2), peer: __iv.P(3), name: 'bobFriend', sentAt: Date.now(), expiresAt: Date.now() + 120000 } }), true)`);
+      ok(await until(`Boolean(document.getElementById('tour-fr-inv-1'))`), "a topic invite: bobFriend's ✉️ too");
+      await click('tour-fr-inv-0');
+      ok(await until(`Boolean(document.getElementById('tour-ready'))`), 'the ✉️ tapped: the ready screen as their guest');
+      ok((await calls()).includes('openRoom:482913:guest') && !(await calls()).includes('join_room'), 'the channel as the guest; no code typed');
+      await click('tour-leave');
+      ok(await until(`Boolean(document.getElementById('tour-friends'))`), 'Leave: the online home');
+      await click('tour-friends');
+      ok(await until(`Boolean(document.getElementById('tour-fr-invite-1')) || Boolean(document.getElementById('tour-fr-invite-0'))`), 'Friends again');
+      const inviteId = await evaluate(`document.getElementById('tour-fr-invite-0') ? 'tour-fr-invite-0' : 'tour-fr-invite-1'`);
+      await click(inviteId);
+      ok(await until(`Boolean(document.getElementById('tour-inv-ttl'))`), 'Invite: the room screen with the invite');
+      ok((await text('tour-inv'))?.startsWith('Waiting for ') && /^(2:00|1:5\d)$/.test((await text('tour-inv-ttl')) ?? ''), `waiting, the time left (${await text('tour-inv-ttl')})`);
+      await evaluate(`(__iv.q.push({ kind: 'user', event: 'invite_update', update: { invite: __iv.U(101), status: 'declined' } }), true)`);
+      ok(await until(`Boolean(document.getElementById('tour-resend'))`), 'their no: Resend');
+      ok((await text('tour-inv'))?.includes("can't play right now"), 'the line says so');
+      await click('tour-resend');
+      ok(await until(`__iv.calls.filter((c) => c === 'send_invite').length === 2 && Boolean(document.getElementById('tour-inv-ttl'))`), 'Resend: waiting again');
+      ok((await calls()).filter((c) => c.startsWith('openRoom:615204')).length === 1, 'in the same room (one channel)');
+      await click('tour-close');
+      ok(await until(`__iv.calls.includes('leave_room') && Boolean(document.getElementById('tour-create')) && !document.getElementById('tour-inv')`), '✕ on the room screen: leave_room (which cancels the invite), the online home');
+      await click('tour-close');
+      ok(await until(`__iv.calls.includes('close')`), '✕ again, out of 🌐: the transport closed (the topic with it)');
       ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
     });
 

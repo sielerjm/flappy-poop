@@ -28,6 +28,7 @@ import { LEADERBOARD, TUNING } from './config.js';
 import { browserStorage, pageStorage } from './store.js';
 import { debugHandleAllowed } from './logic.js';
 import { loadSupabase } from './supabaseLoader.js';
+import { USER_TOPIC, topicEvent } from './onlineInvites.js';
 import {
   SERVER_EVENTS,
   createClock,
@@ -293,6 +294,7 @@ export function createOnlineNet({
   let sampling = null; // the server_now sample in flight
   let nextSampleAt = -Infinity;
   let slot = null; // the room channel
+  let user = null; // 4.2: the player's own topic (invites), { topic, ch, joined }
   const queue = [];
   const tracks = []; // presence track times, for the per-client cap
   const stats = { sent: 0, received: 0, lost: 0, bad: 0, stale: 0, verifies: 0, rejoins: 0, retries: 0, tracks: 0, rttMs: null, rttMinMs: null };
@@ -721,6 +723,68 @@ export function createOnlineNet({
     return true;
   }
 
+  // --- the player's own topic (4.2) ---
+
+  /**
+   * The topic invite_list() names (never one built from the save's id): private, no presence (the
+   * policy refuses any write there), no self. Its events are the server's own (realtime.send as the
+   * definer), so they need no room_state check; each is parsed (topicEvent) and queued as
+   * { kind: 'user', event: 'invite' | 'invite_update', invite | update }. Every join, a rejoin
+   * included, queues { kind: 'user', event: 'joined' }: the panel reads invite_list() again then
+   * (events may have been missed while it was away). A refusal or a close drops it ('closed').
+   */
+  async function openTopic(topic) {
+    if (typeof topic !== 'string' || !USER_TOPIC.test(topic)) return { ok: false, error: 'bad topic' };
+    if (user?.topic === topic) return { ok: true };
+    closeTopic();
+    const u = { topic, ch: null, joined: false };
+    user = u;
+    if (signing) await signing;
+    if (user !== u) return { ok: false, error: 'closed' };
+    if (!client || !session) {
+      user = null;
+      return { ok: false, error: 'signed out' };
+    }
+    const fresh = await ensureFresh();
+    if (user !== u) return { ok: false, error: 'closed' };
+    if (!fresh.ok) {
+      user = null;
+      return fresh;
+    }
+    try {
+      const ch = client.channel(topic, { config: { private: true, broadcast: { self: false, ack: false } } });
+      u.ch = ch;
+      ch.on('broadcast', { event: '*' }, (m) => {
+        if (user !== u || u.ch !== ch) return;
+        const e = topicEvent(m?.event, m?.payload);
+        if (e) emit({ kind: 'user', ...e });
+      });
+      ch.subscribe((status, err) => {
+        if (user !== u || u.ch !== ch) return;
+        if (status === 'SUBSCRIBED') {
+          u.joined = true;
+          emit({ kind: 'user', event: 'joined' });
+        } else if ((status === 'CHANNEL_ERROR' && REFUSED.test(String(err?.message ?? err ?? ''))) || status === 'CLOSED') {
+          closeTopic();
+          emit({ kind: 'user', event: 'closed' });
+        }
+      });
+    } catch {
+      closeTopic();
+      return { ok: false, error: 'error' };
+    }
+    return { ok: true };
+  }
+
+  function closeTopic() {
+    const u = user;
+    if (!u) return;
+    user = null;
+    const ch = u.ch;
+    u.ch = null;
+    if (ch) quietly(() => client?.removeChannel(ch));
+  }
+
   // --- entering and leaving online play ---
 
   async function warm() {
@@ -733,6 +797,7 @@ export function createOnlineNet({
 
   function close() {
     closeRoom();
+    closeTopic();
     active = false;
     if (!client) return;
     if (ticking) {
@@ -791,6 +856,9 @@ export function createOnlineNet({
     peer: () => slot?.peer ?? null,
     channelState: () => slot?.state ?? 'none',
     closeRoom,
+    openTopic,
+    closeTopic,
+    topicState: () => (user ? (user.joined ? 'joined' : 'joining') : 'none'),
     close,
     signOut,
     stats: () => ({ ...stats }),

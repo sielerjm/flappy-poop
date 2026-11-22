@@ -90,11 +90,38 @@ export function lobbyMessage(ui, lobby) {
 
 /** The host's countdown, redrawn in place once a second (no redraw, so the pad's ring stays). */
 export function lobbyTick(ui, lobby) {
+  const inv = globalThis.document?.getElementById?.('tour-inv-ttl');
+  const invLeft = lobby.inviteLeftMs?.() ?? null;
+  if (inv && invLeft !== null) inv.textContent = mmss(invLeft); // 4.2: the invite's own countdown
   const el = globalThis.document?.getElementById?.('tour-ttl');
   const left = lobby.codeLeftMs();
   if (!el || left === null) return;
   el.textContent = ttlText(ui, left);
   el.className = left < LOW_MS ? 'ttl low' : 'ttl';
+}
+
+/**
+ * 4.2: the host's invite: the friend's row with ✉️ and the time left, and "Waiting for <name>…"; once
+ * it expired or they said no, the row is empty again, the line says why, and Resend sends it again
+ * (send_invite in this room: the code stays). Leave (Cancel) cancels it on the server.
+ */
+function inviteRows(ui, lobby, redraw) {
+  const inv = lobby.state.invite;
+  const { tr } = ui;
+  if (inv.status === 'pending') {
+    const ttl = h('span', { id: 'tour-inv-ttl' });
+    ttl.textContent = mmss(lobby.inviteLeftMs() ?? 0); // lobbyTick rewrites it in place
+    return {
+      them: h('div', { class: 'slot', id: 'tour-on-them' }, h('span', { class: 'who' }, inv.name), h('span', { class: 'mark' }, '✉️ ', ttl)),
+      line: h('p', { class: 'hint dots', id: 'tour-inv' }, tr('inviteWaiting').replace('{name}', inv.name)),
+      resend: null,
+    };
+  }
+  return {
+    them: h('div', { class: 'slot', id: 'tour-on-them' }, h('span', { class: 'who empty' }, '—'), h('span', { class: 'mark dots' }, tr('onlineWaitingOpponent'))),
+    line: h('p', { class: 'hint warn', id: 'tour-inv' }, tr(inv.status === 'declined' ? 'inviteDeclined' : 'inviteExpired').replace('{name}', inv.name)),
+    resend: button('tour-resend', tr('inviteResend'), '', () => redraw(ui.resend?.(inv)), true),
+  };
 }
 
 /** The elements for the lobby's screen, under the 🌐 row. */
@@ -119,8 +146,9 @@ export function lobbyBody(ui, lobby) {
     case 'host':
     case 'asked': {
       const left = lobby.codeLeftMs() ?? 0;
+      const inv = st.screen === 'host' && st.invite ? inviteRows(ui, lobby, redraw) : null;
       const out = [
-        h('p', { class: 'lead' }, tr('onlineCodeLead')),
+        h('p', { class: 'lead' }, inv ? tr('inviteCodeLead') : tr('onlineCodeLead')),
         h('p', { class: 'code', id: 'tour-code' }, formatCode(code)),
         h('p', { class: left < LOW_MS ? 'ttl low' : 'ttl', id: 'tour-ttl' }, ttlText(ui, left)),
         h(
@@ -132,8 +160,9 @@ export function lobbyBody(ui, lobby) {
         slot('tour-on-me', ui.me, tr('tournamentHostTag'), tr('onlineHostTag')),
       ];
       if (st.screen === 'host') {
-        out.push(h('div', { class: 'slot', id: 'tour-on-them' }, h('span', { class: 'who empty' }, '—'), h('span', { class: 'mark dots' }, tr('onlineWaitingOpponent'))));
-        out.push(h('div', { class: 'actions' }, button('tour-cancel', tr('onlineCancel'), 'outline', () => redraw(lobby.leave()))));
+        out.push(inv?.them ?? h('div', { class: 'slot', id: 'tour-on-them' }, h('span', { class: 'who empty' }, '—'), h('span', { class: 'mark dots' }, tr('onlineWaitingOpponent'))));
+        if (inv) out.push(inv.line);
+        out.push(h('div', { class: 'actions' }, button('tour-cancel', tr('onlineCancel'), 'outline', () => redraw(lobby.leave())), inv?.resend ?? null));
         return out;
       }
       out.push(h('p', { class: 'hint', id: 'tour-asked' }, tr('onlineAsked').replace('{name}', lobby.opponent())));

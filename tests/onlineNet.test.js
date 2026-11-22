@@ -1049,3 +1049,98 @@ test('T3-review AUD-112: the beacon carries the token the client refreshed to, a
   assert.equal(calls.length, before);
   net.close();
 });
+
+// --- 4.2: the player's own topic (invites) ----------------------------------------------------------
+
+const TOPIC = `user:${'5e'.repeat(16)}`;
+const INV = (over = {}) => ({ invite: '00000001-0000-4000-8000-000000000000', peer: 'ab'.repeat(16), name: 'SirFlushALot', sent_at: 1_763_550_000_000, expires_at: 1_763_550_120_000, ...over });
+
+test('4.2 openTopic: the topic invite_list names, private, no echo, no ack, no presence (writes are refused there); the token refreshed first; joined says so', async () => {
+  const s = setup();
+  await s.net.signIn();
+  const p = s.net.openTopic(TOPIC);
+  await flush();
+  const ch = s.client().channels.at(-1);
+  assert.equal(ch.topic, TOPIC);
+  assert.deepEqual(ch.options, { config: { private: true, broadcast: { self: false, ack: false } } });
+  assert.deepEqual(await p, { ok: true });
+  assert.equal(s.net.topicState(), 'joining');
+  ch.status('SUBSCRIBED');
+  assert.equal(s.net.topicState(), 'joined');
+  assert.deepEqual(s.net.take(), [{ kind: 'user', event: 'joined' }]);
+  assert.deepEqual(ch.tracks, [], 'nothing tracked');
+  const names = s.client().names();
+  assert.ok(names.lastIndexOf('setAuth') >= 0 && names.lastIndexOf('setAuth') < names.lastIndexOf('channel'), 'Realtime has the token before the join');
+  assert.deepEqual(await s.net.openTopic(TOPIC), { ok: true });
+  assert.equal(s.client().channels.length, 1, 'the same topic again: one channel');
+});
+
+test("4.2 the topic's events: invite and invite_update parsed and queued as { kind: 'user' }; junk and other names dropped; a rejoin says joined again (the panel reads invite_list)", async () => {
+  const s = setup();
+  await s.net.signIn();
+  s.net.openTopic(TOPIC);
+  await flush();
+  const ch = s.client().channels.at(-1);
+  ch.status('SUBSCRIBED');
+  s.net.take();
+  ch.broadcast('invite', INV());
+  ch.broadcast('invite', INV({ peer: 'nope' }));
+  ch.broadcast('invite_update', { invite: INV().invite, status: 'declined' });
+  ch.broadcast('invite_update', { invite: INV().invite, status: 'expired' });
+  ch.broadcast('status', { code: CODE });
+  assert.deepEqual(s.net.take(), [
+    { kind: 'user', event: 'invite', invite: { invite: INV().invite, peer: INV().peer, name: 'SirFlushALot', sentAt: INV().sent_at, expiresAt: INV().expires_at } },
+    { kind: 'user', event: 'invite_update', update: { invite: INV().invite, status: 'declined' } },
+  ]);
+  ch.status('SUBSCRIBED');
+  assert.deepEqual(s.net.take(), [{ kind: 'user', event: 'joined' }]);
+});
+
+test('4.2 a bad topic, or one not from invite_list (never built from the save), opens nothing; signed out opens nothing', async () => {
+  const s = setup();
+  await s.net.signIn();
+  for (const bad of [null, 'user:abc', `room:${CODE}`, `user:${'5E'.repeat(16)}`, `${TOPIC}x`]) assert.deepEqual(await s.net.openTopic(bad), { ok: false, error: 'bad topic' }, String(bad));
+  assert.equal(s.client().channels.length, 0);
+  const out = setup();
+  assert.equal((await out.net.openTopic(TOPIC)).ok, false);
+  assert.equal(out.net.topicState(), 'none');
+});
+
+test('4.2 refused (Unauthorized: a device that dropped to pending) or closed: removed, and closed said once; closeTopic and close() remove it; a room channel is untouched', async () => {
+  const s = setup();
+  const { ch: roomCh } = await joined(s);
+  s.net.take();
+  s.net.openTopic(TOPIC);
+  await flush();
+  const ch = s.client().channels.at(-1);
+  ch.status('CHANNEL_ERROR', 'Unauthorized: You do not have permissions to read from this Channel topic');
+  assert.equal(ch.removed, true);
+  assert.equal(s.net.topicState(), 'none');
+  assert.deepEqual(s.net.take(), [{ kind: 'user', event: 'closed' }]);
+  assert.notEqual(roomCh.removed, true);
+  s.net.openTopic(TOPIC);
+  await flush();
+  const ch2 = s.client().channels.at(-1);
+  ch2.status('SUBSCRIBED');
+  s.net.closeTopic();
+  assert.equal(ch2.removed, true);
+  assert.notEqual(roomCh.removed, true, 'closeTopic leaves the room alone');
+  s.net.openTopic(TOPIC);
+  await flush();
+  const ch3 = s.client().channels.at(-1);
+  s.net.close();
+  assert.equal(ch3.removed, true, 'leaving 🌐 closes it');
+  assert.equal(s.net.topicState(), 'none');
+});
+
+test('4.2 closeTopic while its join waits for a refresh: nothing opens', async () => {
+  let release;
+  const s = setup({ script: { stored: { life: Math.floor(N.refreshMarginMs / 1000) - 5 }, refresh: () => new Promise((r) => (release = () => r({ data: { session: null }, error: null }))) } });
+  await s.net.signIn();
+  const p = s.net.openTopic(TOPIC);
+  await flush();
+  s.net.closeTopic();
+  release?.();
+  await p;
+  assert.equal(s.client().channels.filter((c) => c.topic === TOPIC).length, 0);
+});

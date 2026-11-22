@@ -43,8 +43,9 @@ import { rollGuestName } from '../tournamentNames.js';
 import { panelFrameCss } from './panelFrame.js';
 import { accountBody, accountCss, accountNotes, createAccountState, devicesButton, enterOnline, h as viewH, pairCodeLeft } from './onlineAccountViews.js';
 import { lobbyBody, lobbyCss, lobbyMessage, lobbyTick, netSwitch } from './onlineLobbyViews.js';
-import { friendsBody, friendsButton, friendsCss, pollFriends, refreshBadge } from './onlineFriendsViews.js';
+import { friendsBody, friendsButton, friendsCss, inviteTick, openFriends, pollFriends, refreshBadge } from './onlineFriendsViews.js';
 import { createOnlineFriends } from '../onlineFriends.js';
+import { createInvites } from '../onlineInvites.js';
 
 const PANEL_ID = 'tournament-panel';
 const REGISTRY_KEY = 'tournament';
@@ -764,7 +765,19 @@ function accountUi() {
     now: () => Date.now(),
     confirmMs: T.saveClearConfirmMs,
     onLinked: (r) => startLobby(r),
-    onPaired: () => online?.on && statusBeat()?.start(), // 3.3: a device just paired starts beating (a waiting one's beat stops itself); never with 🌐 off (3.6)
+    onPaired: () => {
+      if (!online?.on) return;
+      statusBeat()?.start(); // 3.3: a device just paired starts beating (a waiting one's beat stops itself); never with 🌐 off (3.6)
+      loadInvites(online); // 4.2: and hears its invites from now on
+    },
+    // 4.2: invites, read and shown only in online mode (the beat's rule).
+    invites: online?.invites ?? null,
+    serverNow: () => online?.net?.serverNow?.() ?? Date.now(),
+    refreshInvites: () => (online ? loadInvites(online) : null),
+    canInvite: () => online?.lobby?.canInvite?.() ?? false,
+    invite: (x) => sendInvite(online, x),
+    acceptInvite: (inv) => acceptInvite(online, inv),
+    declineInvite: (inv) => declineInvite(online, inv),
   };
 }
 
@@ -777,6 +790,7 @@ function lobbyUi() {
     project: ctx.play?.onlineProjectName?.() ?? null, // a dev host's 'live' / 'test' for the no-room hint (item 43)
     homeExtras: () => ({ notes: accountNotes(aui, online.st), devices: devicesButton(aui, online.st, online.account), friends: online.friends ? friendsButton(aui, online.st, online.friends) : null }),
     share: (text, code) => shareCode(text, code),
+    resend: (inv) => sendInvite(online, inv, { resend: true }),
   };
 }
 
@@ -840,6 +854,7 @@ function startOnline() {
   }
   const net = o.net;
   o.friends = createOnlineFriends({ rpc: (fn, args) => net.rpc(fn, args), max: T.online.status.opponents });
+  o.invites = createInvites({ rpc: (fn, args) => net.rpc(fn, args), now: () => net.serverNow() });
   o.net.warm?.().catch?.(() => {});
   enterOnline(accountUi(), o.st, o.account).catch(() => {
     if (online !== o) return;
@@ -863,13 +878,14 @@ function startLobby(r) {
   let record = store?.get?.() ?? null;
   const live = Boolean(record) && store.owner?.() === 'live';
   if (record && !live) record = store.claim?.() ?? record;
-  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start(), memory: raceMemory(), resume: record });
+  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start(), memory: raceMemory(), resume: record, onUser: (item) => onUserItem(o, item) });
   if (o.poll === null) o.poll = ctx.timers.setInterval(() => pollOnline(o), ONLINE_POLL_MS);
   // 3.3: in online mode from here: this device's status beat (item 58), and the Friends button's badge.
   // T3-review AUD-114: not while another page races (one device, one beat row): that page beats, and
   // this page's ✕ or pagehide would delete its row. lookAgain starts it once the race is claimed here.
   if (!live) statusBeat()?.start();
   updateBadge(o);
+  loadInvites(o); // 4.2: the missed-broadcast read on entering online mode, then the player's topic
   if (live) {
     o.lobby.notice?.('onlineRaceElsewhere');
     o.look = ctx.timers.setTimeout?.(() => lookAgain(o), T.online.resume.staleMs) ?? null;
@@ -937,6 +953,80 @@ function updateBadge(o) {
     .catch(() => {});
 }
 
+/** 4.2: the ✉️ shows where it can be seen now: the Friends screen, or the online home (the Friends button's count). */
+function redrawInvites(o) {
+  if (online !== o || !o.on || view) return;
+  if (o.st.view === 'friends' || (o.st.view === 'home' && o.lobby?.state.screen === 'home')) renderLobby();
+}
+
+/** 4.2: invite_list() (entering 🌐, Friends, the topic joined again), then the topic it names. */
+async function loadInvites(o) {
+  const net = o?.net;
+  if (!o?.invites || !net) return;
+  const r = await o.invites.load();
+  if (online !== o || o.net !== net || !o.on) return;
+  if (r.ok && r.topic) net.openTopic?.(r.topic);
+  if (r.changed) redrawInvites(o);
+}
+
+/** 4.2: an item from the player's topic (the lobby hands it on from its poll). */
+function onUserItem(o, item) {
+  if (online !== o) return;
+  if (item.event === 'joined') {
+    loadInvites(o);
+    return;
+  }
+  if (o.invites?.onEvent(item)) redrawInvites(o);
+}
+
+/**
+ * 4.2: Invite on a 🟢 friend's row, or Resend on the host's code screen: the room's screen (Connecting
+ * while send_invite runs); a refusal goes back to where the tap was, with its words.
+ */
+async function sendInvite(o, x, { resend = false } = {}) {
+  if (!o?.lobby || online !== o || !o.on) return;
+  const from = o.st.view;
+  o.st.view = 'home';
+  setStatus('');
+  renderLobby();
+  const res = await o.lobby.invite(x.peer, x.name);
+  if (online !== o || !o.on || res.error === 'you left') return;
+  if (!res.ok && !resend && from === 'friends') o.st.view = 'friends';
+  renderLobby();
+  if (!res.ok) setStatus(tr(res.errorKey).replace('{name}', x.name), 'error');
+  else {
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+  }
+}
+
+/** 4.2: a friend's ✉️ tapped: Connecting, then the ready screen as their guest; a refusal back on Friends with its words. */
+async function acceptInvite(o, inv) {
+  if (!o?.lobby || !o.invites || online !== o || !o.on) return;
+  o.st.view = 'home';
+  setStatus('');
+  renderLobby();
+  const res = await o.lobby.acceptInvite(() => o.invites.accept(inv.invite));
+  if (online !== o || !o.on || res.error === 'you left') return;
+  if (res.ok) {
+    renderLobby();
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+    return;
+  }
+  o.st.view = 'friends';
+  await openFriends(accountUi(), o.st, o.friends, { keepStatus: true });
+  if (online === o) setStatus(tr(res.errorKey ?? 'onlineErrGeneric').replace('{name}', inv.name), 'error');
+}
+
+/** 4.2: ✕ on a friend's ✉️: decline_invite; the ✉️ goes at once. */
+function declineInvite(o, inv) {
+  if (!o?.invites || online !== o) return;
+  o.invites.decline(inv.invite).catch?.(() => {});
+  setStatus('');
+  renderLobby();
+}
+
 /** Back to the online home from the Friends screen (its Back, or ✕), the badge read again. */
 function backHome(o) {
   o.st.view = 'home';
@@ -951,6 +1041,11 @@ function pollOnline(o) {
   // 3.3: the Friends screen's dots every status.pollMs; the home's badge every status.badgeMs.
   if (o.on && !view && o.st.view === 'friends' && o.ticks % Math.round(T.online.status.pollMs / ONLINE_POLL_MS) === 0) pollFriends(accountUi(), o.st, o.friends).catch(() => {});
   if (o.on && !view && o.st.view === 'home' && o.ticks % Math.round(T.online.status.badgeMs / ONLINE_POLL_MS) === 0) updateBadge(o);
+  // 4.2: an invite past its time drops by itself (no message); the rings tick in place once a second.
+  if (o.on && !view && o.ticks % Math.round(1000 / ONLINE_POLL_MS) === 0 && o.invites) {
+    if (o.invites.prune()) redrawInvites(o);
+    else if (o.st.view === 'friends') inviteTick(accountUi());
+  }
   const changed = o.lobby.poll();
   if (o.lobby.state.room.phase === 'playing' && handOffRace(o)) return;
   if (!o.on || view) return;
@@ -1022,6 +1117,7 @@ function handOffRace(o) {
   if (o.poll !== null) ctx.timers.clearInterval(o.poll);
   o.poll = null;
   o.lobby = null; // closing must not leave the room or close the transport: the race has them
+  net.closeTopic?.(); // 4.2: no invites in a race (the player reads 🟡 In a game); the next 🌐 entry reads them again
   o.net = null;
   o.handed = true; // 3.3: the race keeps this device's status beat (it reads in a game now)
   // Over a running Versus (wide screens: 👥 starts split screen, 🌐 is switched on in its lobby):

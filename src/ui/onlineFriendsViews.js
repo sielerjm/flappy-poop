@@ -11,6 +11,7 @@
 // `friendOpen` (the handle whose actions show), `friendArmed` / `friendArmedAt` and `blockedOpen` there.
 
 import { stateLook } from '../onlineFriends.js';
+import { inviteLeftMs, mmss, ringShare } from '../onlineInvites.js';
 import { h } from './onlineAccountViews.js';
 
 /** The CSS the Friends screen adds to the panel whose root is `#id`. */
@@ -25,6 +26,14 @@ export function friendsCss(id) {
 #${id} .slot .acts { display: flex; flex: none; gap: 6px; }
 #${id} .more { display: flex; justify-content: flex-end; gap: 8px; margin: -2px 0 8px; }
 #${id} button.wide { display: block; width: 100%; margin: 12px 0 0; padding: 10px 14px; font-size: 17px; }
+#${id} .badge.inv { background: #9be89b; }
+#${id} button.inv { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; }
+#${id} .ring { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: conic-gradient(#1a0b14 calc(var(--f, 1) * 1turn), rgba(26, 11, 20, 0.25) 0); }
+#${id} .ring > span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #f8a0c8; font-size: 15px; }
+#${id} .slot .sub.inv { color: #9be89b; }
+#${id} .slot.fr { flex-wrap: wrap; }
+#${id} .slot.fr .who { flex: 1 0 auto; max-width: 100%; }
+#${id} .slot.fr .acts { margin-left: auto; }
 `;
 }
 
@@ -39,7 +48,14 @@ function button(id, label, cls, fn, primary = false) {
 
 /** The online home's 🤝 Friends button, with the number of asks waiting for an answer. */
 export function friendsButton(ui, st, friends) {
-  const b = h('button', { type: 'button', id: 'tour-friends', class: 'outline wide' }, ui.tr('friendsButton'), st.badge > 0 ? h('span', { class: 'badge', id: 'tour-friends-badge' }, String(st.badge)) : null);
+  const invites = ui.invites?.count?.() ?? 0; // 4.2: the outline's ✉️ count of friends' invites waiting
+  const b = h(
+    'button',
+    { type: 'button', id: 'tour-friends', class: 'outline wide' },
+    ui.tr('friendsButton'),
+    st.badge > 0 ? h('span', { class: 'badge', id: 'tour-friends-badge' }, String(st.badge)) : null,
+    invites > 0 ? h('span', { class: 'badge inv', id: 'tour-friends-inv' }, `✉️ ${invites}`) : null,
+  );
   b.addEventListener('click', () => openFriends(ui, st, friends));
   return b;
 }
@@ -60,7 +76,9 @@ export async function refreshBadge(st, friends) {
  */
 export async function openFriends(ui, st, friends, { keepStatus = false } = {}) {
   const still = ui.mark?.() ?? (() => true);
-  const r = await friends.load();
+  // 4.2: the invites are read with the lists (entering Friends, and after every call here: a Block or
+  // Remove ends that friend's invite, item 65), so a missed broadcast never leaves a ✉️ behind.
+  const [r] = await Promise.all([friends.load(), Promise.resolve(ui.refreshInvites?.()).catch(() => null)]);
   if (!still()) return false;
   if (r.ok) {
     st.friends = r;
@@ -176,6 +194,46 @@ function moreLine(ui, st, friends, i, x, { remove = false, add = false }) {
   );
 }
 
+/**
+ * 4.2: a 🟢 friend's buttons: their ✉️ (a ring of the time left, and m:ss) with ✕ when they invited
+ * this player, else Invite (only with no room or an open one: ui.canInvite). Shown only while the
+ * friend reads 🟢 (item 65: a sender who left online mode leaves an invite that reads expired, untold).
+ */
+function inviteButtons(ui, i, x) {
+  const inv = x.state === 'online' ? ui.invites?.from?.(x.peer) ?? null : null;
+  if (inv) {
+    const now = ui.serverNow?.() ?? Date.now();
+    const left = h('span', { class: 'left', id: `tour-fr-inv-left-${i}` });
+    left.textContent = mmss(inviteLeftMs(inv, now));
+    const yes = h(
+      'button',
+      { type: 'button', id: `tour-fr-inv-${i}`, class: 'small inv', 'data-primary': '', 'aria-label': ui.tr('inviteJoinLabel').replace('{name}', x.name), 'data-exp': String(inv.expiresAt), 'data-sent': String(inv.sentAt) },
+      h('span', { class: 'ring', id: `tour-fr-inv-ring-${i}`, style: `--f: ${ringShare(inv, now).toFixed(3)}` }, h('span', {}, '✉️')),
+      left,
+    );
+    yes.addEventListener('click', () => ui.acceptInvite?.(inv));
+    const no = button(`tour-fr-invno-${i}`, '✕', 'outline small', () => ui.declineInvite?.(inv));
+    no.setAttribute('aria-label', ui.tr('inviteDeclineLabel').replace('{name}', x.name));
+    return [yes, no];
+  }
+  if (x.state === 'online' && ui.invites && (ui.canInvite?.() ?? true)) return [button(`tour-fr-invite-${i}`, ui.tr('friendInvite'), 'small', () => ui.invite?.(x))];
+  return [];
+}
+
+/** 4.2: the ✉️ rings and times redrawn in place once a second (no redraw, so the pad's ring stays). */
+export function inviteTick(ui) {
+  const byId = (id) => globalThis.document?.getElementById?.(id) ?? null;
+  const now = ui.serverNow?.() ?? Date.now();
+  for (let i = 0; byId(`tour-fr-${i}`); i += 1) {
+    const b = byId(`tour-fr-inv-${i}`);
+    if (!b) continue;
+    const inv = { sentAt: Number(b.getAttribute('data-sent')), expiresAt: Number(b.getAttribute('data-exp')) };
+    byId(`tour-fr-inv-ring-${i}`)?.setAttribute('style', `--f: ${ringShare(inv, now).toFixed(3)}`);
+    const left = byId(`tour-fr-inv-left-${i}`);
+    if (left) left.textContent = mmss(inviteLeftMs(inv, now));
+  }
+}
+
 /** The Friends screen. `back()` returns to the online home. */
 export function friendsBody(ui, st, friends, back) {
   const { tr } = ui;
@@ -206,14 +264,19 @@ export function friendsBody(ui, st, friends, back) {
   }
   out.push(h('p', { class: 'sect' }, tr('friendsList').replace('{n}', String(list.length))));
   if (!list.length) out.push(h('p', { class: 'hint', id: 'tour-fr-none' }, tr('friendsNone')));
-  list.forEach((x, i) => {
+  // 4.2: a 🟢 friend whose invite is live comes first (it lasts 2 minutes: never below the fold).
+  const invitedBy = (x) => x.state === 'online' && Boolean(ui.invites?.from?.(x.peer));
+  [...list.filter(invitedBy), ...list.filter((x) => !invitedBy(x))].forEach((x, i) => {
     const look = stateLook(x.state);
+    const invited = x.state === 'online' && Boolean(ui.invites?.from?.(x.peer));
     out.push(
       h(
         'div',
-        { class: 'slot', id: `tour-fr-${i}` },
-        h('span', { class: 'who' }, `${look.dot} ${x.name}`, h('span', { class: `sub st ${look.cls}` }, tr(look.key))),
-        h('span', { class: 'acts' }, moreButton(ui, st, `tour-fr-more-btn-${i}`, x)),
+        // 4.2 (Michael, Preview I): a friend's buttons go under the name when it does not fit beside them,
+        // so a 16-character name never pushes the ✉️'s time out or shrinks the name to nothing.
+        { class: 'slot fr', id: `tour-fr-${i}` },
+        h('span', { class: 'who' }, `${look.dot} ${x.name}`, invited ? h('span', { class: 'sub inv' }, tr('inviteFromSub')) : h('span', { class: `sub st ${look.cls}` }, tr(look.key))),
+        h('span', { class: 'acts' }, ...inviteButtons(ui, i, x), moreButton(ui, st, `tour-fr-more-btn-${i}`, x)),
       ),
     );
     const more = moreLine(ui, st, friends, i, x, { remove: true });

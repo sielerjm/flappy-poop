@@ -681,3 +681,208 @@ test("2.3 a lobby made for a rejoin does not leave the remembered room on entry 
   await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(rpcs(net2, 'leave_room').map((c) => c[2]), [{ p_code: '482913' }], 'without one: as before');
 });
+
+// --- 4.2: invites (Preview I accepted 22 Nov; item 65's "For 4.2") ---------------------------------
+
+const UID = (n) => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
+const PEER = 'ab'.repeat(16);
+/** send_invite answering with a fresh invite in `code` (sent now, 2 minutes), as db/schema.sql does. */
+function inviteNet(extra = {}, code = '615204') {
+  let n = 0;
+  const net = fakeNet({
+    send_invite: () => {
+      n += 1;
+      const t = net.serverNow();
+      return { ok: true, data: { ok: true, invite: UID(n), code, sent_at: t, expires_at: t + 120_000 } };
+    },
+    ...extra,
+  });
+  return net;
+}
+
+test('4.2 invite from the home: Connecting while send_invite runs, then the host screen on its code, the channel as the host, the invite waiting with its two minutes', async () => {
+  const net = inviteNet();
+  const lobby = lobbyOn(net);
+  assert.equal(lobby.canInvite(), true);
+  const p = lobby.invite(PEER, 'colonelKernel');
+  assert.equal(lobby.state.screen, 'busy');
+  assert.deepEqual(await p, { ok: true });
+  assert.deepEqual(rpcs(net).map((c) => [c[1], c[2]]), [['send_invite', { p_peer: PEER }]], 'no create_room: send_invite makes the room');
+  assert.equal(lobby.state.screen, 'host');
+  assert.equal(lobby.state.room.code, '615204');
+  assert.equal(lobby.state.room.role, 'host');
+  assert.deepEqual(opens(net), [['openRoom', '615204', { seat: 'host', name: 'PlopMaster', width: 720 }]]);
+  assert.deepEqual(lobby.state.invite, { invite: UID(1), peer: PEER, name: 'colonelKernel', sentAt: 1_000_000, expiresAt: 1_120_000, status: 'pending' });
+  assert.equal(lobby.inviteLeftMs(), 120_000);
+  assert.equal(lobby.codeLeftMs(), T.online.codeTtlMs, "the room's 15 minutes from the send");
+  net.advance(30_000);
+  assert.equal(lobby.inviteLeftMs(), 90_000);
+});
+
+test('4.2 the invite runs out: the poll marks it expired (no message; the screen offers Resend), the room stays open on its code', async () => {
+  const net = inviteNet();
+  const lobby = lobbyOn(net);
+  await lobby.invite(PEER, 'colonelKernel');
+  net.advance(119_999);
+  assert.equal(lobby.poll(), false);
+  assert.equal(lobby.state.invite.status, 'pending');
+  net.advance(1);
+  assert.equal(lobby.poll(), true, 'the screen redraws');
+  assert.equal(lobby.state.invite.status, 'expired');
+  assert.equal(lobby.inviteLeftMs(), null);
+  assert.equal(lobby.state.message, null);
+  assert.equal(lobby.state.screen, 'host');
+  assert.equal(rpcs(net, 'leave_room').length, 0);
+});
+
+test("4.2 Resend in the open room: send_invite again, the same code (no new channel, nothing left), the room's 15 minutes and the invite's two start again", async () => {
+  const net = inviteNet();
+  const lobby = lobbyOn(net);
+  await lobby.invite(PEER, 'colonelKernel');
+  net.advance(130_000);
+  lobby.poll();
+  assert.equal(lobby.canInvite(), true, 'an open room may invite again');
+  assert.deepEqual(await lobby.invite(PEER, 'colonelKernel'), { ok: true });
+  assert.equal(opens(net).length, 1, 'the channel stays');
+  assert.equal(rpcs(net, 'leave_room').length, 0);
+  assert.equal(lobby.state.invite.status, 'pending');
+  assert.equal(lobby.state.invite.invite, UID(2));
+  assert.equal(lobby.inviteLeftMs(), 120_000);
+  assert.equal(lobby.codeLeftMs(), T.online.codeTtlMs, "item 65: the lobby's clock restarts with the server's, or it would close a live room");
+  net.advance(T.online.codeTtlMs - 1);
+  lobby.poll();
+  assert.equal(lobby.state.room.code, '615204', 'still open one ms before its renewed end');
+});
+
+test('4.2 an invite refused (unavailable, rate limited, a raise): the words for it, the home as it was, no room and no channel', async () => {
+  for (const [answer, error, key] of [[{ ok: true, data: { ok: false, error: 'unavailable' } }, 'unavailable', 'inviteUnavailable'], [{ ok: true, data: { ok: false, error: 'rate limited' } }, 'rate limited', 'inviteRateLimited'], [{ ok: false, error: 'in a race' }, 'in a race', 'onlineErrInRace'], [{ ok: false, error: 'offline' }, 'offline', 'onlineErrOffline']]) {
+    const net = fakeNet({ send_invite: answer });
+    const lobby = lobbyOn(net);
+    assert.deepEqual(await lobby.invite(PEER, 'colonelKernel'), { ok: false, error, errorKey: key }, error);
+    assert.equal(lobby.state.screen, 'home');
+    assert.equal(lobby.state.room.phase, 'idle');
+    assert.equal(lobby.state.invite, null);
+    assert.equal(opens(net).length, 0);
+  }
+});
+
+test('4.2 a Resend refused keeps the room open on its code with the invite as it was', async () => {
+  let n = 0;
+  const net = inviteNet({ send_invite: () => (++n === 1 ? { ok: true, data: { ok: true, invite: UID(1), code: '615204', sent_at: 1_000_000, expires_at: 1_120_000 } } : { ok: true, data: { ok: false, error: 'rate limited' } }) });
+  const lobby = lobbyOn(net);
+  await lobby.invite(PEER, 'colonelKernel');
+  net.advance(121_000);
+  lobby.poll();
+  assert.equal((await lobby.invite(PEER, 'colonelKernel')).errorKey, 'inviteRateLimited');
+  assert.equal(lobby.state.screen, 'host');
+  assert.equal(lobby.state.room.code, '615204');
+  assert.equal(lobby.state.invite.status, 'expired');
+});
+
+test('4.2 no invite from a room past open (a guest asking, the ready screen): nothing is sent (the server would leave that room)', async () => {
+  const { lobby, net } = await hostAsked(inviteNet({ create_room: { ok: true, data: { ok: true, code: '482913', status: 'open' } } }));
+  assert.equal(lobby.canInvite(), false);
+  assert.equal((await lobby.invite(PEER, 'x')).ok, false);
+  assert.equal(rpcs(net, 'send_invite').length, 0);
+});
+
+test("4.2 the friend's answer on the player's topic: declined offers Resend; cancelled (a code guest took the seat) clears it; another invite's update changes nothing; every item is handed on", async () => {
+  const seen = [];
+  const net = inviteNet();
+  const lobby = lobbyOn(net, { onUser: (item) => seen.push(item) });
+  await lobby.invite(PEER, 'colonelKernel');
+  net.push({ kind: 'user', event: 'invite_update', update: { invite: UID(9), status: 'declined' } });
+  lobby.poll();
+  assert.equal(lobby.state.invite.status, 'pending');
+  net.push({ kind: 'user', event: 'invite_update', update: { invite: UID(1), status: 'declined' } }, { kind: 'user', event: 'invite', invite: { invite: UID(5) } }, { kind: 'user', event: 'joined' });
+  assert.equal(lobby.poll(), true);
+  assert.equal(lobby.state.invite.status, 'declined');
+  assert.equal(seen.length, 4, 'the panel gets every topic item (its ✉️, its refetch)');
+  await lobby.invite(PEER, 'colonelKernel');
+  net.push({ kind: 'user', event: 'invite_update', update: { invite: UID(2), status: 'cancelled' } });
+  lobby.poll();
+  assert.equal(lobby.state.invite, null);
+  assert.equal(lobby.state.screen, 'host', 'the room is still open on its code');
+});
+
+test("4.2 accepted: the host reads room_state (its 'status' event may come before the channel is open) and moves to the ready screen; the invite line goes", async () => {
+  const net = inviteNet({ room_state: () => ({ ok: true, data: room({ code: '615204', status: 'ready', guest_name: 'colonelKernel', source: 'invite', server_ms: 1_005_000 }) }) });
+  const lobby = lobbyOn(net);
+  await lobby.invite(PEER, 'colonelKernel');
+  net.push({ kind: 'user', event: 'invite_update', update: { invite: UID(1), status: 'accepted' } });
+  lobby.poll();
+  await lobby.settled();
+  assert.deepEqual(rpcs(net, 'room_state').map((c) => c[2]), [{ p_code: '615204' }]);
+  assert.equal(lobby.state.screen, 'ready');
+  assert.equal(lobby.state.room.guestName, 'colonelKernel');
+  assert.equal(lobby.state.invite, null);
+  assert.equal(lobby.opponent(), 'colonelKernel');
+});
+
+test('4.2 a code guest asks while the invite waits: the asked screen as ever, the invite line gone (the server ended it)', async () => {
+  const net = inviteNet();
+  const lobby = lobbyOn(net);
+  await lobby.invite(PEER, 'colonelKernel');
+  net.push({ kind: 'room', hint: 'guest', action: { type: 'status', room: room({ code: '615204', status: 'asked', guest_name: 'Stranger' }), at: net.serverNow() } });
+  lobby.poll();
+  assert.equal(lobby.state.screen, 'asked');
+  assert.equal(lobby.state.invite, null);
+});
+
+test('4.2 Cancel (leave) with an invite waiting: leave_room (which cancels it on the server), the line gone, home; a Cancel while send_invite is out leaves the room it made', async () => {
+  const net = inviteNet();
+  const lobby = lobbyOn(net);
+  await lobby.invite(PEER, 'colonelKernel');
+  await lobby.leave();
+  assert.deepEqual(rpcs(net, 'leave_room').map((c) => c[2]), [{ p_code: '615204' }]);
+  assert.equal(lobby.state.invite, null);
+  assert.equal(lobby.state.screen, 'home');
+
+  let release;
+  const slow = inviteNet({ send_invite: () => new Promise((r) => (release = () => r({ ok: true, data: { ok: true, invite: UID(1), code: '615204', sent_at: 1, expires_at: 2 } }))) });
+  const l2 = lobbyOn(slow);
+  const p = l2.invite(PEER, 'colonelKernel');
+  await new Promise((r) => setTimeout(r, 0));
+  await l2.leave();
+  release();
+  assert.equal((await p).ok, false);
+  await l2.settled();
+  assert.deepEqual(rpcs(slow, 'leave_room').map((c) => c[2]), [{ p_code: '615204' }]);
+  assert.equal(l2.state.room.phase, 'idle');
+  assert.equal(opens(slow).length, 0);
+});
+
+test("4.2 acceptInvite: Connecting while accept_invite runs, then the ready screen as the guest with the host named; the channel as the guest; no join_room, no Let in", async () => {
+  const net = fakeNet();
+  const lobby = lobbyOn(net);
+  let release;
+  const p = lobby.acceptInvite(() => new Promise((r) => (release = () => r({ ok: true, code: '482913', status: 'ready', hostName: 'SirFlushALot' }))));
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(lobby.state.screen, 'busy');
+  release();
+  assert.deepEqual(await p, { ok: true });
+  assert.equal(lobby.state.screen, 'ready');
+  assert.equal(lobby.state.room.role, 'guest');
+  assert.equal(lobby.opponent(), 'SirFlushALot');
+  assert.deepEqual(opens(net), [['openRoom', '482913', { seat: 'guest', name: 'PlopMaster', width: 720 }]]);
+  assert.equal(rpcs(net, 'join_room').length, 0);
+  assert.equal(lobby.canInvite(), false);
+});
+
+test('4.2 acceptInvite refused: home again with the answer handed back (the panel says it on Friends); never from a live room', async () => {
+  const net = fakeNet();
+  const lobby = lobbyOn(net);
+  const res = await lobby.acceptInvite(async () => ({ ok: false, error: 'expired', errorKey: 'inviteGone' }));
+  assert.deepEqual(res, { ok: false, error: 'expired', errorKey: 'inviteGone' });
+  assert.equal(lobby.state.screen, 'home');
+  assert.equal(lobby.state.room.phase, 'idle');
+  assert.equal(opens(net).length, 0);
+
+  const host = hostNet();
+  const busy = lobbyOn(host);
+  await busy.create();
+  let asked = false;
+  assert.equal((await busy.acceptInvite(async () => ((asked = true), { ok: true, code: '482913', status: 'ready' }))).ok, false);
+  assert.equal(asked, false);
+  assert.equal(busy.state.room.code, '482913');
+});

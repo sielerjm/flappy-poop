@@ -707,6 +707,33 @@ test('a status for another code is ignored (a stale topic after a Decline)', () 
   assert.equal(roomStep(r, { type: 'status', room: { code: '482913', status: 'playing', seed: 1, start_ms: AT, round: 1 }, at: AT }), r);
 });
 
+test("4.2 'invited': a friend's invite accepted puts this device in the room as the guest, 'ready' at once (no code typed, no Let in); only from no room, only accept_invite's ready answer", () => {
+  const ok = { ok: true, code: '482913', status: 'ready', host_name: 'SirFlushALot' };
+  const r = roomStep(roomInit(), { type: 'invited', result: ok, at: AT });
+  assert.deepEqual(r, { ...roomInit(), phase: 'ready', role: 'guest', code: '482913', hostName: 'SirFlushALot', changedAt: AT });
+  assert.equal(codeExpiresAt(r), AT + T.online.codeTtlMs, "the room's clock starts at the accept, as join's");
+  const closed = { ...roomInit(), phase: 'closed', reason: 'left' };
+  assert.equal(roomStep(closed, { type: 'invited', result: ok, at: AT }).phase, 'ready');
+  const open = roomStep(roomStep(roomInit(), { type: 'create', at: AT }), { type: 'rpc', result: { ok: true, code: '551204', status: 'open' }, at: AT });
+  assert.equal(roomStep(open, { type: 'invited', result: ok, at: AT }), open, 'a live room is never replaced');
+  for (const bad of [null, { ...ok, ok: false }, { ...ok, status: 'asked' }, { ...ok, code: '12' }]) {
+    const idle = roomInit();
+    assert.equal(roomStep(idle, { type: 'invited', result: bad, at: AT }), idle, JSON.stringify(bad));
+  }
+});
+
+test("4.2 'renew': a Resend kept the host's open room, so its 15 minutes start again; nothing else renews", () => {
+  const open = roomStep(roomStep(roomInit(), { type: 'create', at: AT }), { type: 'rpc', result: { ok: true, code: '551204', status: 'open' }, at: AT });
+  const r = roomStep(open, { type: 'renew', code: '551204', at: AT + 600_000 });
+  assert.deepEqual(r, { ...open, changedAt: AT + 600_000 });
+  assert.equal(codeExpiresAt(r), AT + 600_000 + T.online.codeTtlMs);
+  assert.equal(roomStep(open, { type: 'renew', code: '482913', at: AT + 1 }), open, 'another code');
+  const asked = roomStep(open, { type: 'guest', name: 'Mia', at: AT + 1 });
+  assert.equal(roomStep(asked, { type: 'renew', code: '551204', at: AT + 2 }), asked, 'a guest asking: not open');
+  const guest = roomStep(roomInit(), { type: 'invited', result: { ok: true, code: '551204', status: 'ready', host_name: 'X' }, at: AT });
+  assert.equal(roomStep(guest, { type: 'renew', code: '551204', at: AT + 2 }), guest);
+});
+
 test('roomStep never mutates its input', () => {
   const r = Object.freeze(roomInit());
   assert.doesNotThrow(() => roomStep(r, { type: 'create', at: AT }));
