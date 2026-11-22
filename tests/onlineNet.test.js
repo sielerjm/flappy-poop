@@ -1012,3 +1012,40 @@ test('3.3 beacon: an online function as a keepalive POST with the session token 
   assert.equal(sent[0].init.headers.apikey, CONFIG.publishableKey);
   assert.deepEqual(JSON.parse(sent[0].init.body), { p_here: false });
 });
+
+test('T3-review AUD-112: the beacon carries the token the client refreshed to, and sends nothing on an expired one', async () => {
+  const lib = realSupabase();
+  const calls = [];
+  let n = 0;
+  const user = { id: UID, aud: 'authenticated', role: 'authenticated', is_anonymous: true, app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
+  const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  const f = async (input, init = {}) => {
+    const url = String(typeof input === 'string' ? input : input.url);
+    calls.push({ url, headers: Object.fromEntries(new Headers(init.headers ?? input.headers)), keepalive: init.keepalive });
+    if (url.endsWith('/auth/v1/signup') || url.includes('/auth/v1/token')) {
+      n += 1;
+      const life = n === 1 ? 10 : 3600; // the first token ends inside supabase-js's margin: its next read refreshes
+      const exp = Math.floor(Date.now() / 1000) + life;
+      return json(200, { access_token: `${jwt(UID, exp)}.${n}`, token_type: 'bearer', expires_in: life, expires_at: exp, refresh_token: `refresh-${n}`, user });
+    }
+    if (url.endsWith('/auth/v1/user')) return json(200, user);
+    if (url.includes('/rest/v1/')) return new Response(null, { status: 204 });
+    return json(404, {});
+  };
+  let clock = Date.now();
+  const net = createOnlineNet({ load: async () => lib, config: CONFIG, storage: memStorage(), fetch: f, netsim: null, now: () => clock });
+  assert.equal((await net.signIn()).ok, true);
+  assert.equal((await net.rpc('online_beat', { p_here: true })).ok, true);
+  assert.ok(calls.some((c) => c.url.includes('/auth/v1/token')), 'the client refreshed its token');
+  const rpcTok = calls.filter((c) => c.url.endsWith('/rest/v1/rpc/online_beat') && !c.keepalive).at(-1).headers.authorization;
+  assert.equal(net.beacon('online_beat', { p_here: false }), true);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(calls.filter((c) => c.keepalive).at(-1).headers.authorization, rpcTok, 'the token the client now uses, not the one from the sign-in');
+  // Two hours on with no refresh: the held token has ended, so the server would answer 401. Send nothing.
+  clock += 2 * 3600 * 1000;
+  const before = calls.length;
+  assert.equal(net.beacon('online_beat', { p_here: false }), false, 'an expired token is not sent');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(calls.length, before);
+  net.close();
+});

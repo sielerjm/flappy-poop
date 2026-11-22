@@ -298,10 +298,19 @@ export function createOnlineNet({
     if (client) return { ok: true };
     try {
       const lib = await load();
-      client ??= lib.createClient(url, config.publishableKey, {
-        auth: { storage: sessionStorageOver(storage), storageKey: config.onlineSessionKey, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
-        ...(fetch ? { global: { fetch } } : {}),
-      });
+      if (!client) {
+        client = lib.createClient(url, config.publishableKey, {
+          auth: { storage: sessionStorageOver(storage), storageKey: config.onlineSessionKey, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
+          ...(fetch ? { global: { fetch } } : {}),
+        });
+        // The ticker and supabase-js's own reads refresh the token without us; beacon() reads `session`
+        // synchronously, so keep it current (T3-review AUD-112). Only while signed in: sign-in sets it.
+        quietly(() =>
+          client.auth.onAuthStateChange?.((event, s) => {
+            if (event === 'TOKEN_REFRESHED' && s && session) session = s;
+          }),
+        );
+      }
       return { ok: true };
     } catch (e) {
       return { ok: false, error: 'load failed', messageKey: e?.messageKey ?? 'onlineLoadFailed' };
@@ -736,6 +745,7 @@ export function createOnlineNet({
    */
   function beacon(fn, args = {}) {
     if (typeof fn !== 'string' || !ONLINE_RPCS.includes(fn) || !url || !session?.access_token) return false;
+    if (Number.isFinite(Number(session.expires_at)) && !(Number(session.expires_at) * 1000 > now())) return false; // the server would answer 401
     const go = fetch ?? globalThis.fetch;
     if (typeof go !== 'function') return false;
     try {
