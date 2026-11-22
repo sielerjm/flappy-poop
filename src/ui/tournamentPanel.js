@@ -845,7 +845,8 @@ function startOnline() {
 /** Linked: the lobby for this player, polled while 🌐 is on. */
 function startLobby(r) {
   const o = online;
-  if (!o || !o.net) return;
+  // T3-review AUD-113: a link that answers after 🌐 was switched off starts nothing (no beat, poll or race).
+  if (!o || !o.net || !o.on) return;
   // Both ready: the host starts the race (set_room_status), and a room in 'playing' hands off (1.7a).
   // 2.3, D4: a race this page left by a reload (its resume record) is rejoined first. 2.3b: a relaunch's
   // too (the record is in localStorage): one that is this page's or free is claimed and rejoined; one
@@ -858,7 +859,9 @@ function startLobby(r) {
   o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start(), memory: raceMemory(), resume: record });
   if (o.poll === null) o.poll = ctx.timers.setInterval(() => pollOnline(o), ONLINE_POLL_MS);
   // 3.3: in online mode from here: this device's status beat (item 58), and the Friends button's badge.
-  statusBeat()?.start();
+  // T3-review AUD-114: not while another page races (one device, one beat row): that page beats, and
+  // this page's ✕ or pagehide would delete its row. lookAgain starts it once the race is claimed here.
+  if (!live) statusBeat()?.start();
   updateBadge(o);
   if (live) {
     o.lobby.notice?.('onlineRaceElsewhere');
@@ -883,6 +886,7 @@ function lookAgain(o) {
   if (phase !== 'idle' && phase !== 'closed') return;
   const record = raceResume()?.claim?.() ?? null; // null while the other page still beats, or with no record
   if (!record) return;
+  statusBeat()?.start(); // AUD-114: this page races now
   rejoinRace(o, record);
   if (o.st.view !== 'home' || view) return;
   renderLobby();

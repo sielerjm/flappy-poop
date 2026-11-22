@@ -29,7 +29,7 @@ const LIST = {
 const STATES = { friends: [{ peer: P(3), name: 'bobFriend', state: 'online' }, { peer: P(1), name: 'zedFriend', state: 'in_game' }, { peer: P(2), name: 'AmyFriend', state: 'offline' }] };
 const HISTORY = { rival: null, recent: [{ name: 'Opp7', peer: P(7), at: Date.now(), won: true, mine: 1, theirs: 0 }, { name: 'zedFriend', peer: P(1), at: Date.now(), won: true, mine: 1, theirs: 0 }, { name: 'Merged', peer: null, at: Date.now(), won: true, mine: 1, theirs: 0 }] };
 
-function setup({ trusted = true, answers = {} } = {}) {
+function setup({ trusted = true, answers = {}, versus = null, active = false } = {}) {
   const calls = [];
   let list = structuredClone(LIST);
   const base = {
@@ -79,7 +79,8 @@ function setup({ trusted = true, answers = {} } = {}) {
     send: () => true,
     closeRoom: () => {},
   };
-  const account = { enter: async () => ({ ok: true, view: 'home', name: 'PlopMaster', trusted, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted, name: 'PlopMaster' }) };
+  let gate = null; // set: the link waits for it (a slow network)
+  const account = { enter: async () => (gate && (await gate.p), { ok: true, view: 'home', name: 'PlopMaster', trusted, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted, name: 'PlopMaster' }) };
   const ticks = [];
   const timers = { setInterval: (fn, ms) => (ticks.push({ fn, ms }), ticks.length), clearInterval: (h) => ticks[h - 1] && (ticks[h - 1].dead = true), setTimeout: () => 0, clearTimeout: () => {} };
   let beat = null;
@@ -90,12 +91,18 @@ function setup({ trusted = true, answers = {} } = {}) {
     onlineTestProject: () => false,
     onlineStatusBeat: () => (beat ??= createStatusBeat({ rpc: (fn, a) => net.rpc(fn, a), timers, beatMs: TUNING.online.status.beatMs })),
   };
-  const game = fakeGame({ play });
+  const game = fakeGame({ play, versus, active });
   const pollTicks = (n) => {
     for (let i = 0; i < n; i += 1) ticks.filter((x) => !x.dead && x.ms === POLL_MS).forEach((x) => x.fn());
   };
   const beats = () => calls.filter((c) => c[1] === 'online_beat').map((c) => c[2].p_here);
-  return { net, calls, play, game, timers, pollTicks, beats, open: () => openTournamentPanel({ game, locale: 'en', play, timers }), setList: (l) => (list = l) };
+  const holdLink = () => {
+    let r;
+    gate = { p: new Promise((x) => (r = x)) };
+    return () => ((gate = null), r());
+  };
+  const live = () => ticks.filter((x) => !x.dead);
+  return { net, calls, play, game, timers, pollTicks, beats, holdLink, live, open: () => openTournamentPanel({ game, locale: 'en', play, timers }), setList: (l) => (list = l) };
 }
 
 test('the online home has 🤝 Friends with a badge of the asks waiting for an answer; nothing about friends is read before 🌐 links', async () => {
@@ -265,4 +272,50 @@ test("a recent opponent's row shows only its ⋯; the ⋯ opens Add friend and B
   assert.deepEqual(k.calls.filter((c) => c[1] === 'send_friend_request').map((c) => c[2]), [{ p_peer: P(7) }]);
   assert.equal(el('tour-status').textContent, t('en', 'friendAddedSent').replace('{name}', 'Opp7'));
   closeTournamentPanel();
+});
+
+test('T3-review AUD-113: over a running Versus, 🌐 on then off before the link answers: no beat, no poll, no badge read', async () => {
+  const k = setup({ versus: { leave: () => {}, restartWith: () => {} }, active: true });
+  k.open();
+  await flush();
+  const release = k.holdLink();
+  el('tour-online').click(); // on: linking
+  await flush();
+  el('tour-online').click(); // off before the link answers
+  await flush();
+  assert.ok(el('tour-start'), 'the local lobby, 🌐 off');
+  release();
+  await flush();
+  assert.deepEqual(k.beats(), [], 'no status beat with 🌐 off (presence only in online mode)');
+  assert.equal(k.live().length, 0, 'no online poll or beat timer');
+  assert.ok(!k.calls.some((c) => c[1] === 'friend_list'), 'no badge read');
+  assert.ok(el('tour-start'), 'still the local lobby');
+  closeTournamentPanel();
+});
+
+test("T3-review AUD-114: a page showing \"race in another window\" does not beat, so its ✕ never turns the racing page's device offline; claiming the race starts the beat", async () => {
+  const rec = { v: 1, code: '482913', round: 1, seat: 'host', pauseRound: 0, levels: {}, wall: Date.now() };
+  for (const claimLater of [false, true]) {
+    const k = setup();
+    let owner = 'live';
+    const later = [];
+    k.timers.setTimeout = (fn) => (later.push(fn), later.length);
+    k.play.raceResumeStore = () => ({ get: () => rec, owner: () => owner, claim: () => (owner === 'live' ? null : rec), forget: () => {} });
+    k.open();
+    await flush();
+    assert.equal(el('tour-status').textContent, t('en', 'onlineRaceElsewhere'));
+    assert.deepEqual(k.beats(), [], 'the other page is the one in online play: no beat from here');
+    if (!claimLater) {
+      el('tour-close').click();
+      await flush();
+      assert.deepEqual(k.beats(), [], "✕ sends no online_beat(false): it would delete the racing page's row (one device)");
+      assert.ok(!k.calls.some((c) => c[0] === 'beacon'));
+    } else {
+      owner = 'mine'; // the other page stopped beating: lookAgain claims the race here
+      later.forEach((fn) => fn());
+      await flush();
+      assert.deepEqual(k.beats(), [true], 'this page now races: it beats');
+      closeTournamentPanel();
+    }
+  }
 });
