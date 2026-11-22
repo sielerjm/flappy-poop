@@ -1383,6 +1383,8 @@ src/
                             beacon(fn, args) (3.3): an online function as a keepalive POST to the Data API with
                             the session's token, never awaited, false when nothing can send it; ONLINE_RPCS
                             functions only. The token guard test's one exception (pagehide's online_beat(false)).
+                            It sends the token the client refreshed to (`session` follows TOKEN_REFRESHED) and
+                            nothing on an expired one (T3-review AUD-112).
                             tests/onlineNet.test.js, tests/onlineDevProject.test.js.
   onlineAccount.js          Online race (🌐, plan 39, 1.6a) the sign-in side on top of
                             createOnlineNet, NO Phaser/DOM: enter (sign in, link the
@@ -1874,6 +1876,9 @@ src/
                             3.3: the online home gains 🤝 Friends (onlineFriendsViews); once linked, and
                             after pairing (onPaired), Play.onlineStatusBeat() starts; leaving online
                             mode stops it (online_beat(false)) unless the race took over (o.handed).
+                            T3-review: a link answering after 🌐 was switched off starts nothing (AUD-113);
+                            a window showing the race another page runs does not beat (that page does: one
+                            device, one row), and starts when lookAgain claims the race (AUD-114).
                             The only caller of the beat's start() in src/ (tests/onlineFriends.test.js guards it).
                             tests/onlinePanel.test.js.
     panelFrame.js           The frame every DOM window shares (plan 28, 4.1):
@@ -3862,9 +3867,9 @@ tools/
                             record is this page's and beaten every second) and a takeover
                             (another page's fresh record: this page steps aside, the
                             transport closed, no leave_room).
-                            Plan 39's online-friends (3.3, 16 checks): the 🌐 home's 🤝 Friends and its
-                            badge, the Friends screen's sections and ⋯, Add friend, the results panel's offer,
-                            and the beat on a stand-in transport.
+                            Plan 39's online-friends (3.3, 17 checks): the 🌐 home's 🤝 Friends and its
+                            badge, the Friends screen's sections and ⋯, Add friend, and the beat on a stand-in
+                            transport. The results panel's offer is not checked in a real page (AUD-118).
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -4081,7 +4086,7 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   older clients are told to update) and never reuses a server event name.
   A new online function goes in `ONLINE_RPCS` as well as the schema header
   (`tests/onlineNet.test.js` keeps them equal). Friends (3.1) name another player only by
-  a peer handle (`peer` in `online_history()` and `friend_list()`), never an id or a name. The client (3.3) lives in `src/onlineFriends.js` and `src/ui/onlineFriendsViews.js` (`TUNING.online.status`: `beatMs` 20 s, tied below half of the schema's `c_fresh` by a test; `pollMs` 10 s; `badgeMs` 30 s; `opponents` 5). The status beat (`Play.onlineStatusBeat()`, once per page; pagehide sends `online_beat(false)` through `onlineNet.beacon`, pageshow beats again) starts on link in the 🌐 window and after pairing, and stops with `online_beat(false)` on 🌐 off, ✕ and Leave after a race; it is quiet on stepping aside and on Clear / Load and is kept through the race hand-off. It never runs outside online mode: `tests/onlineFriends.test.js` checks that `tournamentPanel.js` is the only caller. The results panel offers Add as a friend only once the report is agreed. The 39 friend strings (`friendsButton` to `friendResultIsFriend`) carry rows in `TRANSLATION_NOTES.md`. The server's event names on
+  a peer handle (`peer` in `online_history()` and `friend_list()`), never an id or a name. The client (3.3) lives in `src/onlineFriends.js` and `src/ui/onlineFriendsViews.js` (`TUNING.online.status`: `beatMs` 20 s, tied below half of the schema's `c_fresh` by a test; `pollMs` 10 s; `badgeMs` 30 s; `opponents` 5). The status beat (`Play.onlineStatusBeat()`, once per page; pagehide sends `online_beat(false)` through `onlineNet.beacon`, pageshow beats again) starts on link in the 🌐 window and after pairing, and stops with `online_beat(false)` on 🌐 off, ✕ and Leave after a race; it is quiet on stepping aside and on Clear / Load and is kept through the race hand-off. It never runs outside online mode: `tests/onlineFriends.test.js` checks that `tournamentPanel.js` is the only caller. The results panel offers Add as a friend only once the report is agreed. The 38 friend strings (`friendsButton` to `friendResultIsFriend`) carry rows in `TRANSLATION_NOTES.md`. The server's event names on
   `room:<code>` are hints: the transport confirms them with `room_state`, since a
   seated peer can broadcast those names too.
   The sign-in side (enter, claim, devices, pairing, leave) lives in
