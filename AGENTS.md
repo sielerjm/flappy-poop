@@ -2925,9 +2925,21 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             under both current ids, no block either way, neither hidden
                             (friend_eligible, at every ask). A merge moves friend data
                             following trust, as it moves races (online_fold_friends), and
-                            the online name follows trust. Merge seniority is
-                            online_trust.since (the first trusted link, kept through a Clear).
-                            online_history() adds `peer` to the rival line and each race.
+                            the online name follows trust. A made-up player merged with a
+                            stolen id brings the owner none of its friends while the owner's
+                            side keeps trust; under M1's accepted residual (the made-up side
+                            linked first, or the owner was away 7 days or has no device) its
+                            friends land on the owner's id (accepted, 22 Nov). Merge
+                            seniority is online_trust.since (the first trusted link, kept
+                            through a Clear: for good while the player has races or friends,
+                            else 90 days from the last link).
+                            online_trust.seen_at is the last link by any device, stamped on
+                            every link; online_cleanup drops a row 90 days after it when the
+                            player has no device, agreed race, friendship or block.
+                            online_history() adds `peer` to the rival line and each race;
+                            it is null on a race a merge left under an old opponent id
+                            (online_peer_shown: the handle only when online_peer_find finds
+                            that player), so the client shows no Add friend or Block there.
                             Status (3.2, tests/schemaStatus.test.js): online_beats, one row
                             per device (uid, at), readable by no role, gone with the device's
                             link. online_beat(p_here): a trusted device's heartbeat, nothing
@@ -3225,7 +3237,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   schemaFriends.test.js     Plan 39, 3.1 in PGlite: friends, blocks, peer handles (per viewer,
                             no ids out), eligibility, merges of friend data following trust,
                             AUD-103 seniority (online_trust.since), the upgrade backfill, the
-                            guard against finding a player by a name or search
+                            guard against finding a player by a name or search, a dead handle
+                            (null peer), the 90-day trust cleanup, the 3.1-paste upgrade
   schemaStatus.test.js      Plan 39, 3.2 in PGlite: online_beat (trusted only, 5 s write gap,
                             a leave deletes), friend_statuses (states, order, friends only, no
                             ids), in_game from a room 'playing', the 60 s fresh window
