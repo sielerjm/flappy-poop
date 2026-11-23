@@ -3857,7 +3857,9 @@ tools/
                             project, --live for the live project after the paste. Throwaway ids start
                             CHECK_ID_PREFIX ('chk39'); TEARDOWN_SQL also deletes their matches,
                             online_trust and online_profiles rows and is printed at every end,
-                            a pass included (AUD-140). Four anonymous
+                            a pass included (AUD-140). Step 8 waits DECLINE_WAIT_MS (2.5 s)
+                            after minting before it declines, past answer_guest's 2 s decline
+                            pacing (AUD-136; plan 39, 5.3b). Four anonymous
                             sessions, fourteen PASS/FAIL lines (line 12: friends and status; line 13:
                             invites; line 14: teardown; a test project expects 13 of 14, live 14 of 14); each session unlinks itself; never a
                             secret key. tests/onlineLiveCheck.test.js covers it.

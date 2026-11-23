@@ -120,3 +120,19 @@ test('step 13 checks the invite functions and the player\'s own topic on a real 
   const at = (re) => SOURCE.search(re);
   assert.ok(at(/await step\(13,/) > at(/await step\(12,/) && at(/await step\(14,/) > at(/await step\(13,/), 'before the teardown');
 });
+
+// Plan 39, 5.3b: 5.2b's answer_guest refuses a decline within 2 s of the code's minting (AUD-136), so
+// step 8, which mints a code and declines its guest, waits that out before the decline, or the run fails
+// at that step on a real project. The wait is tied to the schema's own interval.
+test('step 8 waits out answer_guest\'s decline pacing before it declines', async () => {
+  const { DECLINE_WAIT_MS } = await import('../tools/online_live_check.mjs');
+  const SCHEMA = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8');
+  const fn = SCHEMA.slice(SCHEMA.indexOf('create or replace function public.answer_guest('));
+  const secs = Number(/not coalesce\(p_accept, false\) and v_room\.created_at > now\(\) - interval '(\d+) seconds?'/.exec(fn)?.[1]);
+  assert.ok(secs > 0, 'answer_guest paces declines by an interval in seconds');
+  assert.ok(Number.isFinite(DECLINE_WAIT_MS) && DECLINE_WAIT_MS > secs * 1000, `the wait (${DECLINE_WAIT_MS} ms) is longer than the pacing (${secs} s)`);
+  const step8 = SOURCE.slice(SOURCE.search(/await step\(8,/), SOURCE.search(/await step\(9,/));
+  const at = (re) => step8.search(re);
+  assert.ok(at(/'create_room'/) >= 0 && at(/sleep\([^)]*DECLINE_WAIT_MS/) > at(/'create_room'/), 'the wait comes after the code is minted');
+  assert.ok(at(/p_accept: false/) > at(/sleep\([^)]*DECLINE_WAIT_MS/), 'and before the decline');
+});

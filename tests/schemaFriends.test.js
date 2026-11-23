@@ -555,7 +555,7 @@ test('pasting db/schema.sql again keeps every friendship, ask, block and first t
   assert.deepEqual(await snap(), before);
 });
 
-test('the upgrade from the live schema: first trust filled in from the trusted devices already linked, and friends work over old races', async () => {
+test('the upgrade from the live schema: first trust filled in from the trusted devices already linked, and friends work over old races', async (t) => {
   const db = new PGlite();
   await db.exec(SUPABASE_PREAMBLE);
   await db.exec(FIXTURE);
@@ -565,6 +565,12 @@ test('the upgrade from the live schema: first trust filled in from the trusted d
   const pend = await addUser(db);
   await link(db, pend, a.player, 'UpA'); // a pending device, linked later
   await raced(db, a, b);
+  // After the push the fixture is db/schema.sql (npm run push copies it), which writes first trust at
+  // each link: empty the table so the backfill below still has something to fill (plan 39, 5.3a).
+  if (/create table if not exists public\.online_trust\b/.test(FIXTURE)) {
+    t.diagnostic('the fixture already has online_trust: its rows are emptied to stand for the schema before 3.1');
+    await db.exec('delete from public.online_trust');
+  }
   await db.exec(SQL);
   await db.exec(SQL);
   const rows = (await db.query("select player_id, (now() - since) > interval '4 days' as old from public.online_trust order by 1")).rows;

@@ -146,6 +146,10 @@ export function reportLine([idStr, title], { ok, note = '' }) {
 /** Every throwaway player id starts with this (22 characters in all, as a save code's), so TEARDOWN_SQL can find its rows. */
 export const CHECK_ID_PREFIX = 'chk39';
 
+// answer_guest refuses a decline within 2 s of the code's minting (5.2b, AUD-136); step 8 waits this
+// long after minting before it declines (plan 39, 5.3b).
+export const DECLINE_WAIT_MS = 2500;
+
 /**
  * The SQL that removes exactly this check's users and its throwaway players' rows (AUD-140): the
  * users first (their devices go with them), then the races, the first trusts and the online names.
@@ -331,9 +335,11 @@ async function run(t, print) {
 
   await step(8, async () => {
     const code2 = (await must(S.A2, 'create_room')).code;
+    const minted = Date.now();
     await join(S.A2, `room:${code2}`);
     const asked = await must(S.C, 'join_room', { p_code: code2 });
     const stale = await join(S.C, `room:${code2}`);
+    await sleep(Math.max(0, minted + DECLINE_WAIT_MS - Date.now()));
     const moved = await must(S.A2, 'answer_guest', { p_code: code2, p_accept: false });
     const told = await waitFor(S.C, (m) => m.event === 'answer' && m.payload?.accept === false);
     await S.A2.c.removeChannel(S.A2.channels.get(`room:${code2}`));
