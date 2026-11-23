@@ -1980,7 +1980,11 @@ src/
     onlineAccountViews.js   Online race (🌐, plan 39, 1.6a) the sign-in side's screens
                             (Preview B): name claim, linking, devices, pairing code,
                             pair, errors. Plain DOM over onlineAccount.js's results;
-                            tournamentPanel's 🌐 view mounts them (1.6c).
+                            tournamentPanel's 🌐 view mounts them (1.6c). keypad(): the code
+                            boxes keep one height empty or typed, so the keys never move on
+                            the first digit (item 70, N9); a press redraws the keypad, so the
+                            pressed key carries `hit` (light pink) for KEY_FLASH_MS (150 ms)
+                            after it (st.hit; item 70, N10).
                             tests/onlineAccountViews.test.js.
     onlineLobbyViews.js     Online race (🌐, plan 39, 1.6c) the lobby's screens (Preview A):
                             home, Connecting, host code with countdown and Share / Copy,
@@ -1991,8 +1995,10 @@ src/
                             Both ready shows onlineStarting (the panel's onBothReady starts
                             the race, 1.7a). 4.2: the host's invite line ("Waiting for <name>
                             to answer", m:ss) with Resend after a no or the two minutes. 4.3:
-                            Share sends the text with joinLink(code); Copy copies the code alone.
-                            tests/onlineLobbyViews.test.js.
+                            Share sends joinLink(code) alone, no line before it (item 70, N1);
+                            Copy copies the code alone. The 🌐 row locked on (a screen too
+                            narrow to split) reads onlineSwitchOnSub, with no line saying why
+                            (item 70, N4). tests/onlineLobbyViews.test.js.
     onlineFriendsViews.js   Online race (🌐, plan 39, 3.3, Preview G) the 🤝 Friends button
                             with its badge (requests waiting; online mode only) and the
                             Friends screen: requests (Accept | Decline), friends with a
@@ -2556,7 +2562,11 @@ src/
                             tab); lostSeat() (top of update, onWake, the beat) sees
                             another page's record and stepAside()s: net.close() with
                             no leave_room, Play started plain, the record left to the
-                            new owner. forgetRecord() does the clears. A rewound scene (data.resume) launches Play at that
+                            new owner. forgetRecord() does the clears. pauseOverBreak() (a
+                            host method; Versus's is false): the shared pause over this
+                            device's level break, so Play's 💰 pill neither shows nor opens
+                            and an open shop sells nothing under the overlay (item 70, N3).
+                            A rewound scene (data.resume) launches Play at that
                             level (launchData), holds under the pause overlay until this
                             side's Ready (own reason `rewind`), sends `rewind` every
                             online.pause.heartbeatMs until its GO and agrees its field
