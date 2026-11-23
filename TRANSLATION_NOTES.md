@@ -743,7 +743,7 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineSaveLeft | Not saved: the race was left before the end (someone left mid-race: no winner, nothing saved) | 未保存：比赛没打完就有人离开了 |
 | onlineDevOnLive | (Dev: this device is on the live project. A 🧪 test device cannot see its rooms.) (plan 39, item 43: added after onlineErrNoRoom on a developer's own machine only; players never see it) | （开发：本设备连接的是正式项目，🧪 测试设备看不到这里的房间。） |
 | onlineDevOnTest | (Dev: this device is on the 🧪 test project. The other device must be on it too.) (plan 39, item 43: as onlineDevOnLive) | （开发：本设备连接的是 🧪 测试项目，另一台设备也必须连接测试项目。） |
-| onlineErrRateLimited | Too many wrong codes. Wait a few minutes, then try again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 输错的房间码太多了，请等几分钟再试。 |
+| onlineErrRateLimited | Too many tries. Wait a few minutes, then try again. (plan 39: the 🌐 lobby's status line, for any of the room limits: wrong codes, too many joins, a room made or a guest declined too fast; 5.3) | 尝试次数太多了，请等几分钟再试。 |
 | onlineErrTooSoon | A new race can start a minute after the last one began. Wait a moment, then try again. (plan 39, 5.2b: the 🌐 lobby's status line when the server refuses a Start; one race a minute from a host device) | 上一场比赛开始一分钟后才能开始新的比赛。请稍等，再试一次。 |
 | onlineErrBusy | Online races are busy right now. Try again in a minute. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 在线比赛现在太忙，请一分钟后再试。 |
 | onlineUpdateYou | {name} has a newer version of the game. Reload this page to update, then join again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 的游戏版本更新。请刷新本页面更新，然后重新加入。 |
