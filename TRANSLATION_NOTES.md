@@ -669,7 +669,6 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineSwitch | 🌐 Online | 🌐 在线 |
 | onlineSwitchOffSub | Off: everyone plays on this screen | 关：大家在这块屏幕上一起玩 |
 | onlineSwitchOnSub | On: race a friend on their own phone | 开：和朋友各用自己的手机比赛 |
-| onlineForced | This screen is too narrow to split, so races here are online | 屏幕太窄无法分屏，只能在线比赛 |
 | onlineLead | Race one friend on their own phone or computer | 和一位朋友比赛，对方用自己的手机或电脑 |
 | onlineOpponentNone | Opponent | 对手 |
 | onlineCreate | Create room | 创建房间 |
@@ -749,7 +748,6 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineUpdateYou | {name} has a newer version of the game. Reload this page to update, then join again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 的游戏版本更新。请刷新本页面更新，然后重新加入。 |
 | onlineUpdateThem | {name} needs to update: ask them to reload the page, then join again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 需要更新：请对方刷新页面，然后重新加入。 |
 | onlineDeclinedGuest | {name} didn't let you in. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 没有让你进来。 |
-| onlineShareText | Race me in Flappy Poop: code {code} (plan 39, 1.6c: the share sheet's text from the host's Share button, followed by the game's link; {code} is the room code grouped, 482 913) | 来 Flappy Poop 和我比赛：房间码 {code} |
 | onlineLeftGuest | {name} left the room. (plan 39, 1.6c: the guest's status line when the host left; {name} is the host's username) | {name} 离开了房间。 |
 | onlineRoomClosed | The room closed. Ask your friend for a new code. (plan 39, 1.6c: the guest's status line when the room ran out or closed) | 房间已关闭。请向朋友要一个新的房间码。 |
 | onlineUpdateBoth | Your games don't match. Both of you reload the page, then join again. (plan 39, 1.6c: the same app version with different race rules, so both reload) | 你们的游戏版本不一致。请双方都刷新页面，然后重新加入。 |

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { El, installDom } from './support/dom.js';
 import { catalogFor, t } from '../src/i18n.js';
-import { accountBody, accountNotes, createAccountState, devicesButton, enterOnline, keypad, pairCodeLeft } from '../src/ui/onlineAccountViews.js';
+import { accountBody, accountCss, accountNotes, createAccountState, devicesButton, enterOnline, keypad, pairCodeLeft, KEY_FLASH_MS } from '../src/ui/onlineAccountViews.js';
 
 installDom();
 
@@ -224,4 +224,27 @@ test('📱 Devices: one day ago reads "yesterday", not "1 days ago" (2.5)', asyn
   const k = harness({ devices: { ok: true, rows } }, { ...createAccountState(), view: 'home', trusted: true });
   await devicesButton(k.ui, k.st, k.account).find('tour-devices').click();
   assert.match(text(k.find('tour-dev-1')), /last online yesterday/);
+});
+
+test('item 70, N10: a pressed key is light pink after the redraw that replaced it (hit), only that key, and not once KEY_FLASH_MS has passed', async () => {
+  const st = { ...createAccountState(), typed: '' };
+  const root = new El('div');
+  const ui = { setStatus() {}, rerender: () => ((root.children = []), root.append(...keypad(ui, st, 'Go', () => {}))) };
+  ui.rerender();
+  assert.ok(!/\bhit\b/.test(root.find('tour-key-1').className), 'nothing pressed yet');
+  await root.find('tour-key-1').click();
+  assert.match(root.find('tour-key-1').className, /\bhit\b/, 'the redrawn 1 carries hit');
+  assert.ok(!/\bhit\b/.test(root.find('tour-key-2').className), 'only the key pressed');
+  await root.find('tour-key-back').click();
+  assert.match(root.find('tour-key-back').className, /\bhit\b/, '⌫ too');
+  st.hit.at -= KEY_FLASH_MS + 1;
+  ui.rerender();
+  assert.ok(!/\bhit\b/.test(root.find('tour-key-back').className), 'past KEY_FLASH_MS a redraw shows no press');
+  assert.ok(!/\bhit\b/.test(root.find('tour-key-go').className ?? ''), 'the go key never carries it');
+});
+
+test('item 70, N9 and N10: the code boxes keep one height empty or typed; the outline keys\' pressed look beats their transparent background', () => {
+  const css = accountCss('p');
+  assert.match(css, /#p \.boxes span \{[^}]*\bheight: 1\.2em;[^}]*line-height: 1\.2em;/, 'an empty box is as tall as a typed one, so the keys do not move');
+  assert.match(css, /#p \.keys button\.outline:active, #p \.keys button\.outline\.hit \{ background: rgba\(248, 160, 200, 0\.3\); \}/, 'two classes and an id: above button.outline\'s transparent');
 });

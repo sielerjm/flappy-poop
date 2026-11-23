@@ -1641,3 +1641,15 @@ test("T4-review AUD-127: Leave closes the transport through the race's own lease
   assert.equal(net.closes, 0, 'never close() past the lease');
   assert.deepEqual(started, ['Play']);
 });
+
+test('item 70, N3: pauseOverBreak is true only for a level break under the shared pause; the pause and its resume redraw the shop pill', () => {
+  const { s, half } = pauseRig();
+  assert.equal(s.pauseOverBreak(), false, 'racing: no');
+  half.levelBreak = true;
+  half.state = 'paused';
+  assert.equal(s.pauseOverBreak(), false, 'a level break with no pause: no');
+  const before = called(half, 'shop');
+  s.setPaused(true);
+  assert.equal(s.pauseOverBreak(), true, 'the pause over the break: yes');
+  assert.ok(called(half, 'shop') > before, 'the pause redraws the 💰 pill (it hides)');
+});

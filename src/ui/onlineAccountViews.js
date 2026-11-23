@@ -24,11 +24,12 @@ export function accountCss(id) {
 #${id} .dots::after { content: ''; animation: online-dots 1.2s steps(4) infinite; }
 @keyframes online-dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
 #${id} .boxes { display: flex; justify-content: center; gap: 6px; margin: 4px 0 14px; }
-#${id} .boxes span { width: 2.1ch; padding: 6px 0; font: bold 30px ui-monospace, Menlo, monospace; text-align: center; color: #ffd700; border-bottom: 3px solid #e85e96; }
+#${id} .boxes span { width: 2.1ch; height: 1.2em; line-height: 1.2em; padding: 6px 0; font: bold 30px ui-monospace, Menlo, monospace; text-align: center; color: #ffd700; border-bottom: 3px solid #e85e96; }
 #${id} .boxes span.gap { width: 1ch; border: 0; }
 #${id} .boxes span.cur { border-bottom-color: #ffd700; }
 #${id} .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 300px; margin: 0 auto; }
 #${id} .keys button { padding: 12px 0; font-size: 22px; }
+#${id} .keys button.outline:active, #${id} .keys button.outline.hit { background: rgba(248, 160, 200, 0.3); }
 `;
 }
 
@@ -58,6 +59,24 @@ function button(id, label, cls, fn, primary = false) {
   return b;
 }
 
+/** How long a pressed key stays light pink after the redraw that replaced it (plan 39, item 70, N10). */
+export const KEY_FLASH_MS = 150;
+
+/**
+ * A pressed key's light pink: each press redraws the keypad, so the key under the thumb is a new
+ * element at once and its :active look is gone; the press records `st.hit` and the redrawn key
+ * carries `hit` until KEY_FLASH_MS after the press.
+ */
+function pressedLook(st, b) {
+  const left = st.hit?.id === b.id ? st.hit.at + KEY_FLASH_MS - Date.now() : 0;
+  if (left <= 0) return b;
+  b.className = `${b.className || ''} hit`.trim();
+  setTimeout(() => {
+    b.className = b.className.replace(/\s*\bhit\b/, '');
+  }, left);
+  return b;
+}
+
 /**
  * Six code boxes (a gap after the third) and a 3×4 keypad: digits, ⌫ and the go key, which waits
  * for six digits. The room code (1.6c) and the pairing code share it. `st.typed` holds the digits.
@@ -71,17 +90,20 @@ export function keypad(ui, st, goLabel, onGo) {
   const press = (d) => {
     if (st.typed.length >= 6) return;
     st.typed += d;
+    st.hit = { id: `tour-key-${d}`, at: Date.now() };
     ui.setStatus('');
     ui.rerender();
   };
   const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => button(`tour-key-${d}`, d, 'outline', () => press(d)));
   const back = button('tour-key-back', '⌫', 'outline', () => {
     st.typed = st.typed.slice(0, -1);
+    st.hit = { id: 'tour-key-back', at: Date.now() };
     ui.rerender();
   });
   const go = button('tour-key-go', goLabel, '', onGo);
   go.disabled = st.typed.length !== 6;
-  return [h('div', { class: 'boxes', id: 'tour-boxes' }, ...boxes), h('div', { class: 'keys', id: 'tour-keys' }, ...digits, back, button('tour-key-0', '0', 'outline', () => press('0')), go)];
+  const keys = [...digits, back, button('tour-key-0', '0', 'outline', () => press('0'))].map((b) => pressedLook(st, b));
+  return [h('div', { class: 'boxes', id: 'tour-boxes' }, ...boxes), h('div', { class: 'keys', id: 'tour-keys' }, ...keys, go)];
 }
 
 /** An account result's state into `st` (enter, claim). */

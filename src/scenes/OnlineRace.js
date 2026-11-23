@@ -899,6 +899,15 @@ export class OnlineRace extends Phaser.Scene {
     return Boolean(this.pause?.frozen());
   }
 
+  /**
+   * The pause overlay is over this device's level break (Play.shopButtonShown, Play's tap): its Ready
+   * and Leave own the taps, so the break's shop under it neither shows nor opens nor sells (item 70, N3).
+   */
+  pauseOverBreak() {
+    const half = this.half();
+    return Boolean(half?.levelBreak && this.isPaused());
+  }
+
   togglePause() {
     if (this.isPaused()) this.toggleReady();
     else this.setPaused(true);
@@ -945,6 +954,7 @@ export class OnlineRace extends Phaser.Scene {
         if (!s.solo) this.feed.hold(s.theirs === 'lost' ? (this.feed.heardT() ?? this.net.serverNow()) : this.net.serverNow());
         this.countText.setVisible(false);
         this.wake.want(false);
+        half?.refreshShopButton?.(); // the shop pill hides under the overlay (pauseOverBreak)
       } else if (e.type === 'count') {
         this.pauseCount = e.startAt;
         this.pauseShown = null;
@@ -964,6 +974,7 @@ export class OnlineRace extends Phaser.Scene {
         this.halfHeld = false;
         if (counted && this.match.status === 'playing') this.showStep(3);
         if (this.match.status === 'playing') this.wake.want(true);
+        half?.refreshShopButton?.(); // the break's shop pill back (pauseOverBreak)
         this.persist(); // the pause round moved
       } else if (e.type === 'back') {
         this.feed.again();

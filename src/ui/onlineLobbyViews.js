@@ -59,13 +59,14 @@ export function netSwitch(ui, { on, forced }, onToggle) {
   sw.addEventListener('click', () => {
     if (!forced) onToggle(!on);
   });
-  const sub = forced ? ui.tr('onlineForced') : ui.tr(on ? 'onlineSwitchOnSub' : 'onlineSwitchOffSub');
+  // Forced on (a screen too narrow to split): the switch is locked on and reads as on (item 70, N4: no line saying why).
+  const sub = ui.tr(forced || on ? 'onlineSwitchOnSub' : 'onlineSwitchOffSub');
   return h('div', { class: 'net', id: 'tour-net' }, h('span', { class: 'lbl' }, ui.tr('onlineSwitch'), h('span', { class: 'sub' }, sub)), sw);
 }
 
-/** "Race me in Flappy Poop: code 482 913" and the link that joins the room (4.3: ?join=<code>; the share sheet's text). */
-export function shareText(ui, code) {
-  return `${ui.tr('onlineShareText').replace('{code}', formatCode(code))} ${joinLink(code)}`;
+/** The share sheet's text: the link that joins the room alone (4.3: ?join=<code>; Michael, item 70, N1: no line before it). */
+export function shareText(_ui, code) {
+  return joinLink(code);
 }
 
 const ttlText = (ui, left) => ui.tr('onlineCodeExpires').replace('{time}', mmss(left));

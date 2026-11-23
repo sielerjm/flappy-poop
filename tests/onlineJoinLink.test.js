@@ -111,7 +111,7 @@ test("a link's code that no longer opens a room: the join screen with the code, 
   closeTournamentPanel();
 });
 
-test('Share with no share sheet copies the link (the share text), Copy the code alone', async () => {
+test('Share with no share sheet copies the link (the share text, the link alone: item 70, N1), Copy the code alone', async () => {
   const copied = [];
   const nav = globalThis.navigator;
   Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: async (x) => copied.push(x) } }, configurable: true });
@@ -123,7 +123,7 @@ test('Share with no share sheet copies the link (the share text), Copy the code 
     await flush();
     await el('tour-share').click();
     await flush();
-    assert.ok(copied[0].endsWith('?join=615204') && copied[0].includes('615 204'), copied[0]);
+    assert.equal(copied[0], 'https://sielerjm.github.io/flappy-poop/?join=615204', 'item 70, N1: the link alone');
     assert.equal(el('tour-status').textContent, t('en', 'onlineLinkCopied'));
     await el('tour-copy').click();
     await flush();

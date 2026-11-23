@@ -59,7 +59,7 @@ test('the 🌐 row: off and on read their own line; locked on (a phone) the swit
   assert.ok(text(on).includes(t('en', 'onlineSwitchOnSub')));
   const forced = netSwitch(ui, { on: true, forced: true }, (v) => flips.push(v));
   assert.equal(forced.find('tour-online').disabled, true);
-  assert.ok(text(forced).includes(t('en', 'onlineForced')));
+  assert.ok(text(forced).includes(t('en', 'onlineSwitchOnSub')), 'item 70, N4: forced on reads as on, with no line saying why');
 });
 
 test('home: you on row 1 (you), an empty opponent row, Join with code and Create room (primary), the safety line; the account notes and 📱 Devices from the panel', async () => {
@@ -196,12 +196,14 @@ test('no room on a dev host says which project this device is on, so a live / �
   assert.equal(busy.text, t('en', 'onlineErrBusy'));
 });
 
-test('the share text carries the grouped code and the game\'s link; zh-Hans reads its own', () => {
-  const en = shareText({ tr: (k) => t('en', k) }, '482913');
-  assert.ok(en.includes('482 913') && en.startsWith('Race me'));
-  assert.ok(en.endsWith(' https://sielerjm.github.io/flappy-poop/?join=482913'), `4.3: the link joins the room (${en})`);
-  const zh = shareText({ tr: (k) => t('zh-Hans', k) }, '482913');
-  assert.ok(zh.includes('482 913') && zh !== en);
+test('item 70, N1: the share text is the link that joins the room, alone, in every language', () => {
+  const link = 'https://sielerjm.github.io/flappy-poop/?join=482913';
+  assert.equal(shareText({ tr: (k) => t('en', k) }, '482913'), link, '4.3: the link joins the room; no line before it');
+  assert.equal(shareText({ tr: (k) => t('zh-Hans', k) }, '482913'), link);
+});
+
+test('item 70, N1 and N4: the share line and the too-narrow line are gone from both catalogs', () => {
+  for (const locale of ['en', 'zh-Hans']) for (const key of ['onlineShareText', 'onlineForced']) assert.equal(t(locale, key), key, `${locale}: no ${key}`);
 });
 
 test('every screen draws in zh-Hans with no key left showing', () => {

@@ -66,7 +66,7 @@ const el = (id) => body.find(id);
  * level runs); the rest are methods. The pad's two (onPadSelect / onPadBack) come through padTop's
  * 'versus' top, the join screen or the result panel.
  */
-const HOST_METHODS = ['anyLive', 'bothInBreak', 'claimLevelFinish', 'halfScene', 'isPaused', 'isReady', 'onJoinInput', 'onLevelReached', 'onLevelTap', 'onRunEnded', 'onShopChanged', 'openPeek', 'setPaused', 'togglePause'];
+const HOST_METHODS = ['anyLive', 'bothInBreak', 'claimLevelFinish', 'halfScene', 'isPaused', 'isReady', 'onJoinInput', 'onLevelReached', 'onLevelTap', 'onRunEnded', 'onShopChanged', 'openPeek', 'pauseOverBreak', 'setPaused', 'togglePause'];
 const HOST_FIELDS = ['levelStage'];
 const HOST_PAD = ['onPadSelect', 'onPadBack'];
 
@@ -279,4 +279,32 @@ test('split screen (1.7c): finalFirst goes to the first out of the final level, 
   halves[1].level = last;
   halves[1].onFinishCrossed();
   assert.deepEqual(match.slots.map((s) => [s.levelWins, Boolean(s.finalFirst)]), [[1, true], [1, false]], 'one finalFirst, the first out\'s');
+});
+
+test('item 70, N3: under an online race\'s pause overlay over a level break, the shop pill neither shows nor opens, and an open shop sells nothing', () => {
+  const calls = [];
+  const host = { pauseOverBreak: () => over, isReady: () => false, levelStage: 'break', isPaused: () => over, setPaused: () => {} };
+  let over = false;
+  const scene = { get: (k) => ({ OnlineRace: host })[k] ?? null };
+  const s = playScene({ match: { ...createMatch(1), hostKey: 'OnlineRace', status: 'playing' }, player: 1, scene, state: 'paused', levelBreak: true, shopOpen: false, superQHold: false });
+  assert.equal(s.shopButtonShown(), true, 'a level break with no pause: the 💰 pill');
+  over = true;
+  assert.equal(s.shopButtonShown(), false, 'the pause overlay up: no pill under it');
+  // The shop already open when the pause came: a tap on a row neither buys nor presses ✕.
+  const row = { id: 'fiber', x: 360, y: 700, width: 400, height: 90 };
+  s.shopOpen = true;
+  s.shopBoxes = { close: { x: 600, y: 400, width: 60, height: 60 }, rows: [row], panel: { x: 360, y: 700, width: 500, height: 600 } };
+  s.syncChrome = () => {};
+  s.chromeArgs = () => ({ overlay: null });
+  const doc = globalThis.document;
+  globalThis.document = { ...doc, addEventListener() {}, removeEventListener() {} }; // flap's audio unlock
+  s.shopBuy = (id) => calls.push(['buy', id]);
+  s.handleChrome = (input) => calls.push(['chrome', input]);
+  s.flap({ x: row.x, y: row.y });
+  assert.deepEqual(calls, [['chrome', 'tap']], 'the tap is the overlay\'s (Ready), not the row\'s');
+  over = false;
+  calls.length = 0;
+  s.flap({ x: row.x, y: row.y });
+  assert.deepEqual(calls, [['buy', 'fiber']], 'no pause: the row sells as before');
+  globalThis.document = doc;
 });

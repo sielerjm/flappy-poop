@@ -1562,7 +1562,9 @@ export class Play extends Phaser.Scene {
     // a pad's A) closes it through chromeIntent; it never continues the level. Closed: the 💰 opens it.
     if (this.shopOpen) {
       // An overlay over the shop (Settings from the tray) owns the tap: chromeIntent ignores it below.
-      if (pointer && !this.chromeArgs('tap').overlay) {
+      // So does an online race's pause overlay: no row sells and ✕ is not pressed under it (item 70, N3).
+      const pauseOver = Boolean(this.match && this.versusHost()?.pauseOverBreak?.());
+      if (pointer && !this.chromeArgs('tap').overlay && !pauseOver) {
         const hit = shopHit(pointer.x, pointer.y, this.shopBoxes);
         if (hit === 'close') {
           this.handleChrome('esc');
@@ -4412,9 +4414,10 @@ export class Play extends Phaser.Scene {
    */
   shopButtonShown() {
     if (!this.levelBreak || this.state !== 'paused' || this.shopOpen) return false;
-    // A match: no shop under the count, nor for a player who tapped ready (a second tap takes it back).
+    // A match: no shop under the count, nor for a player who tapped ready (a second tap takes it back),
+    // nor under an online race's pause overlay (item 70, N3).
     const host = this.match ? this.versusHost() : null;
-    return !(host && (host.levelStage === 'count' || host.isReady?.(this)));
+    return !(host && (host.levelStage === 'count' || host.isReady?.(this) || host.pauseOverBreak?.()));
   }
 
   /** The 🏅 Bracket pill shows in a tournament race's level break once both halves have reached the line (Versus.bothInBreak), the shop closed. */

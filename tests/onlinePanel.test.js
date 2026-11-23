@@ -66,7 +66,7 @@ test('over Play (no Versus): the 🌐 views at once, the switch locked on with i
   assert.equal(el('tour-title').textContent, t('en', 'onlineTitle'));
   assert.equal(el('tour-online').disabled, true);
   assert.equal(el('tour-online').getAttribute('aria-pressed'), 'true');
-  assert.ok(textOf(el('tour-net')).includes(t('en', 'onlineForced')));
+  assert.ok(textOf(el('tour-net')).includes(t('en', 'onlineSwitchOnSub')), 'item 70, N4: locked on, read as on');
   assert.equal(el('tour-start'), null, 'no local lobby: it has nowhere to race over Play');
   await flush();
   assert.deepEqual(k.net.calls.filter((c) => c[0] === 'warm'), [['warm']], 'pre-warm on entering 🌐 (item 16)');

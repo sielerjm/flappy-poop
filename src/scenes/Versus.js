@@ -387,6 +387,11 @@ export class Versus extends Phaser.Scene {
     return this.pausedHalves.size > 0;
   }
 
+  /** The online race's pause overlay over a break hides the shop (OnlineRace.pauseOverBreak); split screen has none (item 70, N3). */
+  pauseOverBreak() {
+    return false;
+  }
+
   /** A half is still in its run: playing or respawning (not paused, not in a level break, not finished). */
   anyLive() {
     return this.halves().some((half) => half?.state === 'playing' || half?.state === 'respawn');
