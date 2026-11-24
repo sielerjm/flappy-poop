@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.29.0',
+    date: '24 Nov 2026',
+    notes: {
+      en: [
+        'Your player screen is new: Create user to pick a username, or Sign in with your user code from another device. After Create user, a short note says what your user code is and how to use it.',
+        'Signed in, the screen is your player: your code with Copy, your profile and 📚, and ? to explain each part. Sign out asks first and shows your code, so you can copy it before you go.',
+        'Made two players by mistake? Merge players… shows both side by side: tap the one whose name stays, then Merge for good. Two players with usernames now join only this way, never by signing in.',
+      ],
+      'zh-Hans': [
+        '“你的玩家”界面焕然一新：点“创建用户”选一个用户名，或者用另一台设备上的用户码“登录”。创建用户后，会有一段简短说明，告诉你用户码是什么、怎么用。',
+        '登录后，这个界面就是你的玩家：你的用户码（可复制）、你的个人资料和 📚，点 ? 可以看每一部分的说明。“退出登录”会先询问并显示你的用户码，方便你离开前复制。',
+        '不小心建了两个玩家？“合并玩家…”会把两个并排显示：点选要保留名字的那一个，再点“永久合并”。现在两个有用户名的玩家只能这样合并，登录不会再合并。',
+      ],
+    },
+  },
+  {
     version: '0.28.0',
     date: '24 Nov 2026',
     notes: {
