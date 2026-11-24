@@ -2342,7 +2342,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${settings}.children.list.find((c) => c.type === 'Text' && c.text === '${await tx('testExit')}').emit('pointerdown'), true`);
         await sleep(500);
         const exited = await evaluate(`JSON.stringify({ test: ${play}.isTestMode(), run: ${play}.runIsTest, invincible: ${play}.testInvincible(), h: ${settings}.children.list.find((c) => c.type === 'Rectangle' && c.width === 600).height, active: __flappy.scene.isActive('Settings') })`).then(JSON.parse);
-        ok(!exited.test && exited.run && !exited.invincible && exited.h === 860 && exited.active, 'Exit test mode turns it off mid-run, redraws the plain 860 px Settings, and the run stays a test run');
+        ok(!exited.test && exited.run && !exited.invincible && exited.h === 1010 && exited.active, 'Exit test mode turns it off mid-run, redraws the plain 1010 px Settings (860 before plan 35, 4.2), and the run stays a test run');
         await closeTop('Settings');
         await sleep(400);
         const storesBefore = await stores();
