@@ -1,6 +1,7 @@
-// Clear and Load leave online play (plan 39, 1.6a; Preview B's B6, item 37): the save panel says so
-// and asks Play to unlink and forget the session, but only on a device that holds one, so a device
-// never online loads no client. Play builds the online account once, on its own save.
+// Sign out and a Sign in or Merge that brings another player's id leave online play (plan 39, 1.6a;
+// Preview B's B6, item 37; plan 44 renamed Clear and Load): the save panel says so and asks Play to
+// unlink and forget the session, but only on a device that holds one, so a device never online loads
+// no client. Play builds the online account once, on its own save.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { installDom } from './support/dom.js';
@@ -17,9 +18,9 @@ const ID = 'C'.repeat(22);
 const OTHER = 'D'.repeat(22);
 const tick = () => new Promise((r) => setTimeout(r, 5));
 
-function fakePlay({ held = false, id = ID } = {}) {
+function fakePlay({ held = false, id = ID, name = 'Clearer' } = {}) {
   const calls = [];
-  let save = { id, name: 'Clearer', top: [] };
+  let save = { id, name, top: [] };
   return {
     calls,
     getSaveState: () => save,
@@ -33,62 +34,79 @@ function fakePlay({ held = false, id = ID } = {}) {
     eduHasCards: () => false,
     syncLeaderboard: () => {},
     forgetRename: () => {},
+    forgetBoardCache: () => {},
+    noteRename: () => {},
+    queueMerge: () => true,
   };
 }
 
 const panel = () => body.find('save-panel') ?? body.children.find((c) => c.attrs?.role === 'dialog');
 
-async function clearTwice(play) {
+/** Sign out through its confirm (plan 44); returns the confirm's notes. */
+async function signOut(play) {
   globalThis.localStorage = fakeStorage();
   openSavePanel({ game: {}, play, locale: 'en' });
   const root = panel();
   await root.find('save-clear-btn').click();
-  const warning = root.find('save-status').textContent;
-  await root.find('save-clear-btn').click();
+  const notes = root.find('save-logout-notes').textContent;
+  await root.find('save-logout-confirm').click();
   await tick();
   closeSavePanel();
-  return warning;
+  return notes;
 }
 
-test("Clear's warning names online play only on a device holding a session", async () => {
-  assert.ok((await clearTwice(fakePlay({ held: true }))).includes(t('en', 'saveClearNoteOnline')));
-  assert.ok(!(await clearTwice(fakePlay({ held: false }))).includes(t('en', 'saveClearNoteOnline')));
+test("Sign out's confirm names online play only on a device holding a session", async () => {
+  assert.ok((await signOut(fakePlay({ held: true }))).includes(t('en', 'saveClearNoteOnline')));
+  assert.ok(!(await signOut(fakePlay({ held: false }))).includes(t('en', 'saveClearNoteOnline')));
 });
 
-test('the second Clear leaves online play (unlink, then forget), and only with a session', async () => {
+test('Sign out leaves online play (unlink, then forget), and only with a session', async () => {
   const held = fakePlay({ held: true });
-  await clearTwice(held);
+  await signOut(held);
   assert.deepEqual(held.calls.sort(), ['onlineLeave', 'signOut']);
   const never = fakePlay({ held: false });
-  await clearTwice(never);
+  await signOut(never);
   assert.deepEqual(never.calls, ['signOut']);
 });
 
+/**
+ * Bring `codeId`'s code in as today's Load did: signed out, Sign in; signed in, Merge with the code's
+ * player kept (a tap on its card). Returns the status line.
+ */
 async function load(play, codeId) {
   globalThis.localStorage = fakeStorage();
   const code = await exportCode({ id: codeId, name: 'Loader', top: [] }, { storage: globalThis.localStorage });
   openSavePanel({ game: {}, play, locale: 'en' });
   const root = panel();
-  root.find('save-load').value = code;
-  await root.find('save-load-btn').click();
+  const signedIn = Boolean(play.getSaveState().name);
+  await root.find(signedIn ? 'save-merge-btn' : 'save-have-btn').click();
+  const field = root.find(signedIn ? 'save-merge-input' : 'save-load');
+  field.value = code;
+  await field.fire('input');
+  if (signedIn) {
+    await root.find('save-card-code')?.click();
+    await root.find('save-merge-confirm').click();
+  } else await root.find('save-load-btn').click();
   await tick();
   const status = root.find('save-status').textContent;
   closeSavePanel();
   return status;
 }
 
-test("a Load of another player leaves online play and says so; reloading this player's own code does not", async () => {
-  const other = fakePlay({ held: true });
-  const status = await load(other, OTHER);
-  assert.ok(other.calls.includes('onlineLeave'));
-  assert.ok(status.endsWith(t('en', 'saveLoadedNoteOnline')), status);
-  const same = fakePlay({ held: true });
-  const again = await load(same, ID);
-  assert.ok(!same.calls.includes('onlineLeave'));
-  assert.ok(!again.includes(t('en', 'saveLoadedNoteOnline')));
-  const never = fakePlay({ held: false });
-  await load(never, OTHER);
-  assert.ok(!never.calls.includes('onlineLeave'));
+test("a Sign in or Merge that brings another player's id leaves online play and says so; this player's own code does not", async () => {
+  for (const name of ['', 'Clearer']) {
+    const other = fakePlay({ held: true, name });
+    const status = await load(other, OTHER);
+    assert.ok(other.calls.includes('onlineLeave'), `name "${name}"`);
+    assert.ok(status.endsWith(t('en', 'saveLoadedNoteOnline')), status);
+    const same = fakePlay({ held: true, name });
+    const again = await load(same, ID);
+    assert.ok(!same.calls.includes('onlineLeave'));
+    assert.ok(!again.includes(t('en', 'saveLoadedNoteOnline')));
+    const never = fakePlay({ held: false, name });
+    await load(never, OTHER);
+    assert.ok(!never.calls.includes('onlineLeave'));
+  }
 });
 
 test('Play.onlineSessionHeld reads the session key, in storage or in this page load when storage is blocked', () => {

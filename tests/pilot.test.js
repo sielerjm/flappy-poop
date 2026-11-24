@@ -65,12 +65,23 @@ const rows = async (db) => ({
 });
 const ageParticipants = (db) => db.query("update public.research_participants set updated_at = now() - interval '6 seconds'");
 
-/** The real save panel's Load on this device: paste `code`, click Load, wait for it; returns the status line. */
+/**
+ * The real save panel's Load on this device, as plan 44 has it: signed out, Sign in, paste `code`, Sign
+ * in; signed in, Merge players…, paste, keep the code's player (today's Load), Merge for good. Waits for
+ * it; returns the status line.
+ */
 async function loadInPanel(play, code) {
   openSavePanel({ game: {}, play, locale: 'en' });
   const root = body.find('save-panel') ?? body.children.find((c) => c.attrs?.role === 'dialog');
-  root.find('save-load').value = code;
-  await root.find('save-load-btn').click();
+  const signedIn = Boolean(play.save?.name);
+  await root.find(signedIn ? 'save-merge-btn' : 'save-have-btn').click();
+  const field = root.find(signedIn ? 'save-merge-input' : 'save-load');
+  field.value = code;
+  await field.fire('input');
+  if (signedIn) {
+    await root.find('save-card-code').click();
+    await root.find('save-merge-confirm').click();
+  } else await root.find('save-load-btn').click();
   const status = root.find('save-status').textContent;
   closeSavePanel();
   return status;
@@ -155,7 +166,7 @@ test('a tester with a username: Load merges, and Withdraw after the merge delete
     assert.equal((await phone.joinResearch(CODE, true)).status, 'ok');
     answer(phone);
     await phone.drainResearch();
-    assert.equal(await loadInPanel(phone, code), t('en', 'saveMerged').replace('{name}', 'Tester'));
+    assert.equal(await loadInPanel(phone, code), t('en', 'saveMergedInto').replace('{other}', 'Phoney').replace('{name}', 'Tester'), 'a Merge names both players (plan 44)');
     await phone.lastSync;
     assert.equal(phone.mergeStore.load().length, 0, 'the merge reached the server');
     assert.deepEqual((await rows(db)).parts.map((r) => r.player_id), ['LAPTOPCCCCCCCCCCCCCCCC']);
@@ -414,15 +425,15 @@ test("an invite link's code waits in memory until a share or a join: the nameles
   closeEduDataPanel();
 });
 
-test("Clear's warning names the pilot whenever this device holds a consent, an older notice's included (AUD-005)", async () => {
+test("Sign out's confirm names the pilot whenever this device holds a consent, an older notice's included (AUD-005)", async () => {
   globalThis.localStorage = fakeStorage();
   const play = device({ id: 'CLEARAAAAAAAAAAAAAAAAA', name: 'Tester', top: [], exportedAt: null }, fakeStorage());
   play.eduShareOn = () => false;
   play.consentStore.join({ version: 'pilot-0', phase: 'pilot', at: Date.now() });
   openSavePanel({ game: {}, play, locale: 'en' });
   const root = body.find('save-panel') ?? body.children.find((c) => c.attrs?.role === 'dialog');
-  await root.find('save-clear-btn').click(); // the first tap arms Clear and says what stays
-  const status = root.find('save-status').textContent;
+  await root.find('save-clear-btn').click(); // Sign out opens its confirm, which says what stays (plan 44)
+  const status = root.find('save-logout-notes').textContent;
   closeSavePanel();
   assert.ok(status.includes(t('en', 'saveClearNotePilot')), status);
 });

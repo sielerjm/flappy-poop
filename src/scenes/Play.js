@@ -1541,8 +1541,8 @@ export class Play extends Phaser.Scene {
           return;
         }
         if (hit === 'profile') {
-          // The user button always opens the save panel; unnamed, on the name field (it stays open after Save, so the code shows).
-          this.openSavePanel({ focusName: !this.save?.name });
+          // The user button opens the save panel: signed out on Sign in | Create user, signed in on the player's dashboard (plan 44).
+          this.openSavePanel();
           return;
         }
         // 'start' or empty space both start the run below.
@@ -1976,6 +1976,15 @@ export class Play extends Phaser.Scene {
    */
   forgetRename() {
     this.renameStore.clear();
+    this.forgetBoardCache();
+  }
+
+  /**
+   * What this page learned from the board for the player here: their bests (pulled once per page and id), the career
+   * base and the day streaks. A Merge that keeps this device's player (plan 44) calls it alone, so the folded player's
+   * bests, totals and days come with the sync it starts; forgetRename calls it after dropping the rename.
+   */
+  forgetBoardCache() {
     this.boardBestsFor = null;
     this.careerStore.clearBase(); // the device may now be another player: their totals come with the next sync
     this.streakStore?.clear?.();
@@ -5190,8 +5199,9 @@ export class Play extends Phaser.Scene {
    * Open a profile (plan 08): { name } for the player a board shows under that name, nothing for
    * this device's own player. From the save panel (own) or a tapped board name (anyone's).
    */
-  openStats(target = null) {
+  openStats(target = null, { onClose = null } = {}) {
     this.statsTarget = target?.name ? { name: target.name } : null;
+    this.statsOnClose = onClose; // the save panel's Profile button: closing the profile opens the panel again (plan 44)
     this.handleChrome('stats');
   }
 

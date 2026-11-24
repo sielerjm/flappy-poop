@@ -271,14 +271,14 @@ test("Play: backup text only with cards; restore only on the home screen (not in
   assert.deepEqual(playDevice().p.restoreEducation('nope'), { ok: false, error: 'unrecognised' });
 });
 
-test("Clear's warning says the cards go too, only when this device has cards", async () => {
+test("Sign out's confirm says the cards go too, only when this device has cards", async () => {
   const warn = async (hasCards) => {
     globalThis.localStorage = fakeStorage();
     const play = { getSaveState: () => ({ id: 'C'.repeat(22), name: 'Clearer', top: [] }), setSaveState() {}, educationAvailable: () => true, eduShareOn: () => false, researchConsent: () => null, eduHasCards: () => hasCards };
     openSavePanel({ game: {}, play, locale: 'en' });
     const root = body.find('save-panel') ?? body.children.find((c) => c.attrs?.role === 'dialog');
-    await root.find('save-clear-btn').click();
-    const status = root.find('save-status').textContent;
+    await root.find('save-clear-btn').click(); // Sign out's confirm carries Clear's notes (plan 44)
+    const status = root.find('save-logout-notes').textContent;
     closeSavePanel();
     return status;
   };
@@ -345,14 +345,14 @@ test('typing in the paste box reads no record: only Restore pasted text follows 
 // AUD-052 (the Checkpoint 3 audit): Clear's cards note points to 📚 Education data only where it opens
 // (the off switch hides it unless the device joined or shares), and zh-Hans joins its notes without a
 // space after full-width punctuation.
-test("AUD-052: Clear's cards note only where 📚 Education data opens; zh-Hans notes joined without a space", async () => {
+test("AUD-052: Sign out's cards note only where 📚 Education data opens; zh-Hans notes joined without a space", async () => {
   const warn = async ({ locale = 'en', reachable = true, sharing = false } = {}) => {
     globalThis.localStorage = fakeStorage();
     const play = { getSaveState: () => ({ id: 'C'.repeat(22), name: 'Clearer', top: [] }), setSaveState() {}, educationAvailable: () => reachable, eduDataReachable: () => reachable, eduShareOn: () => sharing, researchConsent: () => null, eduHasCards: () => true };
     openSavePanel({ game: {}, play, locale });
     const root = body.find('save-panel') ?? body.children.find((c) => c.attrs?.role === 'dialog');
-    await root.find('save-clear-btn').click();
-    const status = root.find('save-status').textContent;
+    await root.find('save-clear-btn').click(); // Sign out's confirm carries Clear's notes (plan 44)
+    const status = root.find('save-logout-notes').textContent;
     closeSavePanel();
     return status;
   };
@@ -360,7 +360,7 @@ test("AUD-052: Clear's cards note only where 📚 Education data opens; zh-Hans 
   const zh = await warn({ locale: 'zh-Hans', sharing: true });
   assert.ok(zh.includes(t('zh-Hans', 'saveClearNoteCards')), zh);
   assert.doesNotMatch(zh, /[。：，；！？] /, `no space after full-width punctuation: "${zh}"`);
-  assert.match(await warn({ sharing: true }), /\. Your 📚 cards/, 'English keeps its spaces');
+  assert.match(await warn({ sharing: true }), /\. Your shared grades/, 'English keeps its spaces');
 });
 
 // AUD-053 (the Checkpoint 3 audit): the panel opened again over itself (an invite link while the sheet is
