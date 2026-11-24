@@ -424,6 +424,58 @@ and the pad plugin reports a held button. Any error in the splash removes it and
 Held-key flaps stay in split screen and single player; an **online race drops a key's auto-repeat** (flap, Ready, P
 and Esc: Play's `onlineRepeat(event)`, plan 39 5.2b, AUD-149 / AUD-144), tests/raceRun.test.js, tests/runStamp.test.js.
 
+**Service worker** (plan 35, Stage 3, 0.29.0): `sw.js` at the root, scope the game's folder
+(`registration.scope`). It gives an offline launch, and a launch more than 10 minutes after the last
+(GitHub Pages' `max-age=600`) no longer revalidates every module and asset one by one; only index.html
+goes to the network. About 4.7 MB per build in Cache Storage. Its page side is `src/swClient.js`.
+- **Stamp.** `npm run push` writes `BUILD` and `FILES` into `sw.js` (`tools/sw_stamp.mjs`): `FILES` pairs
+  every URL exactly as the page asks for it with the SHA-256 of its bytes: index.html, every module
+  (`?h=<content hash>`, through the import map `index.html` also gets), art and sounds (`?v=<VERSION>`),
+  the vendored Phaser (`?v=4.2.1`) and supabase-js. Icons and the manifest stay out. An unstamped
+  `sw.js` (the committed one) answers nothing and clears its caches. A `?h=` URL's bytes never change,
+  so a cached copy is right for any build, and an unchanged module keeps its URL across pushes.
+- **Cache.** One build per `BUILD` in Cache Storage as `flappy-poop-<BUILD>`. Install stores every file
+  hash-checked, copying an identical entry from the previous build's cache instead of downloading it;
+  a mismatch (a stale HTTP or CDN copy) is retried once past the HTTP cache (`cache: 'reload'`), and a
+  second one fails the install: the old worker stays, the console logs "build … not installed", and the
+  next launch tries again. Activate keeps the previous build's cache (a page still running that build
+  gets its own files), deletes older ones and never deletes a cache it did not name (`flappy-poop-`
+  prefix only), then claims the open pages.
+- **What it answers.** index.html: network first (`cache: 'no-cache'`, 3 s), else this build's cached copy,
+  so a push shows on the next launch. A listed file: this build's cache, then the previous build's, then the
+  network; nothing is written at fetch time. A `cache: 'reload'`, `'no-cache'` or `'no-store'` request
+  (Reload) goes to the network first. It does **not** answer, and the browser fetches as if there were no
+  worker: anything cross-origin (Supabase REST and auth, the realtime `wss:`, the Phaser CDN), a non-GET, a
+  Range request, a path outside the scope, a `?nosw` navigation and any URL not in `FILES`. A cache fault
+  falls back to `fetch(request)`. Offline, the CDN tag fails at once and the trap loads the cached vendored
+  Phaser (on a stalled connection, after its 6 s wait, as before).
+- **Registration** (`registerWorker`, `swMode` in `src/logic.js`). Play registers it once per page load,
+  when its lazy sounds are in (`Play.loadLazyAudio`), so the install never competes with the cold load,
+  then calls `registration.update()` once: `register()` with an unchanged script checks nothing, Chrome
+  skipped its own navigation check in `tools/sw_check.mjs`, and Safari checks at each launch. An update
+  installs in the background and takes over at once, but the running page keeps its build; the next launch
+  runs the new one. There is no update prompt (Michael's call). Never on a local host (`localHost`,
+  shared with the debug handle: localhost, `*.localhost`, `*.local`, 127.x, `::1`, private ranges) unless
+  the URL has `?sw`; `main.js` (`stopWorkerIfAsked`) removes this scope's worker and our caches for `?nosw`
+  anywhere and on a local host without `?sw`.
+- **Reload** (`hardReloadGame`, Settings, the error card, the failed splash). When the page answers from the
+  network, it unregisters this scope's worker and deletes our caches, then navigates, so Reload is a clean
+  network load and a player's way out of a bad cache; the worker returns after Play's lazy sounds. When
+  the page does not answer, it keeps both and reloads through the cache, so Reload never strands a player
+  offline. All inside the existing 3 s budget.
+- **Kill switch.** Copy `tools/sw-off.js` over `sw.js` and push; the stamp leaves it alone (the
+  `FLAPPY_SW_OFF` marker). Browsers fetch `sw.js` past the old worker, so it reaches each online player at
+  their next launch even if the old fetch handler is broken. It never claims a page, so there is no reload
+  loop. Players can add `?nosw` themselves.
+- **Known behaviors.** Between pushes the committed `sw.js` and `index.html` are unstamped or carry the
+  last push's stamp; harmless, since `tools/serve.py` ignores queries and no worker runs on a local host.
+  Chrome holds an update check started offline for about a minute, and jobs behind it wait; harmless, since
+  an online launch runs the newest build from the network. Art changed under the same name still needs a
+  `VERSION` bump (art URLs carry `?v=`, not a hash). A browser without import maps (Safari before 16.4)
+  loads the bare modules from the network: nothing breaks, the module speed-up is lost.
+- Checked by `tests/sw.test.js`, `tests/swStamp.test.js`, `tests/swClient.test.js`, and in a real browser
+  by `node tools/sw_check.mjs`.
+
 **Education mode** (📚, 2026-11-13, v0.16.1, plan `.claude/plans/21-education.plan.md`: the tester
 build, its playtest polish and Stage 3, "tester-complete"; the old plans 22 and 23 are merged into
 it). **For everyone since plan 28 (0.19.0):** no unlock word; every device has the 📚 switch while
@@ -914,8 +966,15 @@ index.html                  Entry page. Viewport/touch CSS; the loading splash's
                             the splash says it could not load), then
                             <script type=module src=src/main.js>. Six
                             <link rel=modulepreload> tags (main, config, logic, i18n,
-                            Boot, Play; bare URLs, no ?v=) start those downloads at once
-                            (plan 35, 2.4; pinned by tests/html.test.js).
+                            Boot, Play) start those downloads at once (plan 35, 2.4). The
+                            main tag and the hrefs are bare in the tree; `npm run push`
+                            writes an import map (every module at its ?h= content hash)
+                            and the same ?h= into them (plan 35, 3.1; tools/sw_stamp.mjs),
+                            and a preload only helps when its href is exactly the URL
+                            the import uses. tests/html.test.js checks they agree with the map.
+sw.js                       The service worker, a classic script at the root (plan 35, 3.1;
+                            "Service worker"). BUILD and FILES are stamped by npm run push;
+                            committed unstamped. tests/sw.test.js.
 manifest.webmanifest        PWA "Add to Home Screen" metadata (fullscreen, portrait).
 package.json                `npm test`, `npm start`, `npm run push`; "license" is the SPDX id
                             PolyForm-Noncommercial-1.0.0 (MIT until plan 28); one devDependency,
@@ -947,6 +1006,10 @@ src/
                             import it first, so no `extends Phaser.Scene` or `new Phaser.Game`
                             runs before Phaser exists (a module waits on its imports' top-level
                             await). In Node it resolves at once. tests/phaserFallback.test.js.
+  swClient.js               The worker's page side (plan 35, 3.1): registerWorker (Play, once
+                            per page load, after the lazy sounds) and stopWorkerIfAsked (main.js,
+                            first thing). The decisions are in logic.js (swMode, localHost,
+                            workerScope, removeWorker). tests/swClient.test.js.
   supabaseLoader.js         loadSupabase(): appends one <script data-own-error> for
                             assets/vendor/supabase.js?v=<SUPABASE_JS_VERSION> on the first
                             call and resolves with window.supabase; an error, a stall (15 s)
@@ -2688,7 +2751,9 @@ src/
                             (hardReloadGame(): re-fetches loaded scripts with
                             cache: 'reload', then location.replace with a fresh r=
                             query; picks up a push at once, works on home-screen
-                            installs), About link, version. Tap outside the panel
+                            installs; when the page itself answers from the network it
+                            first removes this scope's service worker and our caches,
+                            else keeps both: see "Service worker"), About link, version. Tap outside the panel
                             closes (overlayOutsideHit), same as X. The panel is 860
                             px; in test mode 1240 px with the test section (start level ◀ ▶,
                             Invincible, TEST_POWERS buttons live only while a test run
@@ -3191,14 +3256,16 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   phaserFallback.test.js    Phaser's loader (plan 35, 1.2), the trap run on a fake window: CDN
                             ok, failed or stalled → vendored copy, neither → the splash's
                             failed state and a retry; the pin: one CDN tag and the vendored
-                            copy, both 4.2.1 and the same build
+                            copy, both 4.2.1 and the same build (the main tag may carry the push's ?h=)
   eachChild.test.js         eachChild (plan 35, 1.3): walks a copy, skips a child an earlier
                             turn destroyed; guards that Play walks its groups through it
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser;
                             the splash's parts, ‹ card › then Continue, no spinner,
                             no words in its markup, the inline import before
-                            Phaser, its colour tokens, the six modulepreload links by bare URL, none
-                            twice (plan 35, 2.4); poop.png's pixels, decoded,
+                            Phaser, its colour tokens, the six modulepreload links, none
+                            twice (plan 35, 2.4), and that the main tag and the preload hrefs
+                            agree with the import map (bare in the tree, ?h= after a push;
+                            the map comes before every script: plan 35, 3.1); poop.png's pixels, decoded,
                             stay 2 % inside the ring at both ends of the bob)
   splash.test.js            the splash's catalog (copy in every locale under the
                             100 / 50 character cap, one glyph per thing: badge glyphs,
@@ -3590,7 +3657,25 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             and pushes; failing tests, a first push with no fixture,
                             an interrupt that reaches only the push, a dry run and
                             --no-schema-check each leave the tree as they should
-                            (AUD-050)
+                            (AUD-050); the 'sw' step stamps index.html and sw.js after
+                            LAST_UPDATED, a BUILD for another VERSION refuses and puts the
+                            tree back, --dry writes nothing
+  sw.test.js                sw.js and tools/sw-off.js in node:vm with fake caches, fetch and
+                            clients (plan 35, 3.1): early returns (cross-origin, non-GET,
+                            Range, websocket, outside scope, ?nosw, unlisted), index.html
+                            network first then the cached copy (a failure, a 404 or 500, past
+                            3 s), a listed file from this build, then the previous build, then
+                            the network, install (hash check, copy from the previous build, one
+                            retry, a failed install), activate (keeps the previous build, never
+                            deletes a cache it did not name), a throwing cache, unstamped
+  swStamp.test.js           tools/sw_stamp.mjs on a temp copy of the tree: byte-identical
+                            output for the same tree, one changed module gives a new BUILD and
+                            only its own ?h=, a VERSION bump new ?v= URLs, every module in the
+                            map and FILES, every asset the code names listed with its query
+  swClient.test.js          src/swClient.js and logic.js's worker parts: localHost, swMode (?sw,
+                            ?nosw), workerScope, removeWorker (only this scope's worker, only
+                            flappy-poop-* caches), registerWorker (once per page, one update()),
+                            hardReloadGame with the network up, down and a hung unregister
   fsrs.test.js              src/fsrs.js against py-fsrs's test_review_card and
                             test_memo_state (on a harness with py-fsrs's learning
                             steps), the default weights, and properties over random
@@ -3859,12 +3944,33 @@ tools/
                             schema_check.mjs); a failed or interrupted test run (a
                             signal while npm test runs is remembered, then the run
                             fails: AUD-050) puts the stamp and the fixture back and
-                            exits. Then it commits both and pushes main. Refuses a
+                            exits. Right after the stamp, an 'sw' step (pushSteps) runs tools/sw_stamp.mjs
+                            (writeStamp, then checkStamp); a problem puts the tree back and exits.
+                            It commits src/logic.js, index.html and sw.js (and the fixture) and pushes main. Refuses a
                             dirty tree or a non-main branch; --dry skips commit +
                             push and puts the stamp and the fixture back (the tree as
                             it was); --no-schema-check skips the live check and leaves
                             the fixture. tests/push.test.js runs it in a temp copy
                             with stub git and npm and a local stamp server.
+  sw_stamp.mjs              The service worker's stamp (plan 35, 3.1), written by npm run push
+                            right after LAST_UPDATED: index.html's import map (every module at
+                            src/<path>.js?h=<first 10 hex of its SHA-256>, after the charset meta,
+                            before every script) and the ?h= on the main tag and the modulepreload
+                            hrefs; sw.js's BUILD (<VERSION>-<10 hex>) and FILES (URL as the page
+                            asks for it, SHA-256). checkStamp refuses a BUILD for another VERSION,
+                            a module or asset the code names but FILES lacks, and a stale hash.
+                            An sw.js holding FLAPPY_SW_OFF is left alone. node tools/sw_stamp.mjs
+                            [--check] [--root=DIR]. tests/swStamp.test.js.
+  sw-off.js                 The kill switch: copy it over sw.js and push (see "Service worker").
+                            Deletes flappy-poop-* caches, unregisters itself, reloads its pages.
+  sw_check.mjs              node tools/sw_check.mjs: the worker in a real browser, 50 checks. It
+                            stamps its own temp copy of the tree, serves it on 127.0.0.1:8036 (open
+                            with ?sw) and starts its own headless Chrome with the jsDelivr CDN and
+                            *.supabase.co unresolvable. Covers registration after the lazy sounds,
+                            an offline launch, a same-VERSION push, a VERSION bump, Reload online
+                            and offline, ?nosw, the kill switch, and that no cross-origin request
+                            passes through the worker. Run it, like the smoke, through smoke-runner
+                            after its pgrep wait for another headless_check.mjs.
   schema_check.mjs          npm run schema:check: which db/schema.sql the live database
                             last ran (its schema_version(), one read-only call): this
                             file, the fixture's (this file has changes to apply),
@@ -4212,7 +4318,8 @@ Claude outputs/             Michael's private hand-over notes (gitignored; never
 ```bash
 npm test          # every unit + audit test (~30 s); must pass before committing
 node --test tests/items.test.js   # one file while iterating
-npm run push      # check the live schema is db/schema.sql, stamp LAST_UPDATED = now, copy
+npm run push      # check the live schema is db/schema.sql, stamp LAST_UPDATED = now, stamp the
+                  # service worker (index.html's import map, sw.js's BUILD and FILES), copy
                   # the schema to the test fixture, run tests, commit, push main
                   # (always push this way so the About overlay's "Updated" is the push time)
 npm run schema:stamp   # after editing db/schema.sql (a test fails on a stale stamp)
@@ -4223,7 +4330,7 @@ npm run schema:check   # which db/schema.sql the live database has (one read-onl
 #   It exists on localhost, *.local and private-network addresses (the LAN URL below), not on
 #   the live site; a driver aimed elsewhere sets globalThis.__flappyDebug = true before the
 #   page's scripts run (Page.addScriptToEvaluateOnNewDocument), as the smoke does
-#   (debugHandleAllowed in src/logic.js).
+#   (debugHandleAllowed in src/logic.js, on the same localHost() rule the service worker uses).
 npm start         # tools/serve.py: http://localhost:8000 plus a printed
                   # http://<LAN-IP>:8000 for a phone on the same Wi-Fi
                   # (localhost on the phone is the phone, not the laptop; user
@@ -4239,6 +4346,7 @@ npm run smoke     # with npm start running: headless Chrome drives the real game
                   # (needs Google Chrome; CHROME=/path overrides), ~3 min.
 npm run smoke -- --list            # the sections and what each needs
 npm run smoke -- --only=wide,pad   # just those (plus what they need)
+node tools/sw_check.mjs   # the service worker in its own headless Chrome (see "Service worker")
 uv run --with pillow python3 tools/process_art.py   # rebuild poop set / items / bean from assets/src/
 uv run --with pillow python3 tools/make_placeholders.py   # pipe / villi / ceiling / ground; question.png only if missing
 ```
@@ -4261,6 +4369,20 @@ and audio; don't report those as tested. A subset is for iterating: it skips
 sections, so it never stands in for the full run.
 Never name a scene method after a Phaser.Scene property (`load`, `add`, `input`,
 `time`, `render`, …): `tests/scenes.test.js` enforces this.
+
+Before a push (the 2026-11-15-c audit's open item; `npm run push` does the stamping, you do the thinking):
+
+- Did client storage or a cache format change (a `flappyPoop.*` key, a save or backup shape, an
+  IndexedDB or Cache Storage name)? Then write down what a client on the old build does with the new
+  data, and what the new build does with the old, before you push. Players keep both for months.
+- The service worker is stamped by the push itself (`tools/sw_stamp.mjs`); never edit `BUILD`,
+  `FILES` or the import map by hand. A push that refuses says which file is missing or stale.
+- To pull the worker from every player: copy `tools/sw-off.js` over `sw.js` and push. To bring it
+  back, restore `sw.js` from git and push.
+- Art or a sound changed under an existing name needs a `VERSION` bump (their URLs carry `?v=`, not
+  a hash), or a cached page keeps the old file.
+- Run the full `npm run smoke` and `node tools/sw_check.mjs` (both through the smoke runner's
+  `pgrep` wait when another session may be running one), then `npm run push`.
 
 Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `tune`,
 `refactor`); a step of a plan adds `step n/N` to the scope. Keep it.
@@ -4456,6 +4578,10 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
 - Code, a knob, a string or a texture kept although nothing uses it (a test hook,
   say) → a one-line reason in the matching allowlist in `tests/orphans.test.js`;
   otherwise delete it. The audit fails on anything unused and unexplained.
+- A file the game loads that is new (a module under `src/`, art, a sound, a vendored script) → nothing
+  to list by hand: `tools/sw_stamp.mjs` finds modules and the assets the code names, and the push
+  refuses when one is missing from `FILES`. A new kind of loaded file the stamp cannot see → teach
+  `tools/sw_stamp.mjs` and add a case to `tests/swStamp.test.js`.
 - New smoke checks → inside the section they belong to in `tools/headless_check.mjs`.
   A new section → a `SECTIONS` entry (with `about`) and a `section()` call in the
   same order; leave `needs` out (it then runs after everything before it) until

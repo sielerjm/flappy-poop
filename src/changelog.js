@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.29.0',
+    date: '24 Nov 2026',
+    notes: {
+      en: [
+        '📶 Plays without a connection: once you have played on this device, the game opens and plays in airplane mode too. Your scores reach the leaderboards when you are back online.',
+        '⚡ Quicker to open: the game keeps its files on your device, so it no longer checks each one with the server every time.',
+        '🔄 Updates arrive at your next launch, and Settings › Reload game still fetches everything fresh.',
+      ],
+      'zh-Hans': [
+        '📶 没有网络也能玩：在这台设备上玩过之后，开着飞行模式也能打开游戏并照常游玩。重新联网后，你的分数会上传到排行榜。',
+        '⚡ 打开更快：游戏把文件存在你的设备上，不用每次都逐个向服务器确认。',
+        '🔄 更新会在下次打开游戏时生效；“设置”里的“刷新游戏”仍会重新下载全部内容。',
+      ],
+    },
+  },
+  {
     version: '0.28.1',
     date: '24 Nov 2026',
     notes: {
