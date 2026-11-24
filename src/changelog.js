@@ -13,9 +13,13 @@ export const CHANGELOG = [
     notes: {
       en: [
         '⚡ Faster loading: the game’s drawings now download at less than half the size, and look the same.',
+        '⚡ Opening the game again is quicker: when it is already on your device, the loading ring fills in about a third of a second.',
+        '⚡ Less to wait for before you play: the quiz, revive, challenge bubble and two-player sounds now load once the game is open, and some sounds are smaller files.',
       ],
       'zh-Hans': [
         '⚡ 加载更快：游戏里的图画下载大小不到原来的一半，看起来和以前一样。',
+        '⚡ 再次打开更快：游戏已经存在你的设备上时，加载圆环大约三分之一秒就转满了。',
+        '⚡ 开始前要等的更少：答题、复活、挑战泡泡和双人模式的音效会在游戏打开后再加载，有些音效文件也变小了。',
       ],
     },
   },

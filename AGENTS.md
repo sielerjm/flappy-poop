@@ -402,8 +402,10 @@ door on every load, phone and desktop. `index.html`'s `#splash` (cream, the bobb
 brown ring's track) paints at once; an inline `import('./src/splash.js')` placed **before** the Phaser
 tag starts `startSplash` while Phaser is still downloading, so the note cards show during that wait
 too. The ring **only fills**, every frame chasing `ringTarget` (a creep toward `splash.waitCap` during
-the download, then Boot's progress, then full) at `ringStep`'s capped speed, so even a cached load
-takes ~0.8 s and never jumps. A card (‹ card › in one row, Continue on the row below; every card's text
+the download, then Boot's progress, then full) at `ringStep`'s capped speed, so a slow load never jumps. A
+cached load (Boot ready within `TUNING.splash.ringCachedMs`, 1500, of the splash starting:
+`ringCachedLoad`) fills at `ringStep(..., fast)`'s flat `ringFastPerSec` (3.4 ring / s), empty to full in
+about 300 ms (plan 35, 2.5). A card (‹ card › in one row, Continue on the row below; every card's text
 stacked in one grid cell, so the card is as tall as the tallest and never jumps) is a hint or a major
 feature (`SPLASH_NOTES`: TIP or NEW, a picture, one line). The picture is the game's own sprite where
 there is one (`art`: Boot's exact URL via `splashArtUrl`, all preloaded at start; a strip's frame 0 or a
@@ -910,7 +912,10 @@ index.html                  Entry page. Viewport/touch CSS; the loading splash's
                             async <script> for Phaser from jsDelivr (after 6 s or on error
                             the trap loads assets/vendor/phaser.min.js instead; neither:
                             the splash says it could not load), then
-                            <script type=module src=src/main.js>.
+                            <script type=module src=src/main.js>. Six
+                            <link rel=modulepreload> tags (main, config, logic, i18n,
+                            Boot, Play; bare URLs, no ?v=) start those downloads at once
+                            (plan 35, 2.4; pinned by tests/html.test.js).
 manifest.webmanifest        PWA "Add to Home Screen" metadata (fullscreen, portrait).
 package.json                `npm test`, `npm start`, `npm run push`; "license" is the SPDX id
                             PolyForm-Noncommercial-1.0.0 (MIT until plan 28); one devDependency,
@@ -1032,7 +1037,8 @@ src/
                             loading splash (hintMs, slideMs, fadeMs, swipePx,
                             featureMax, storageKey; the ring: ringEaseMs,
                             ringMaxPerSec, ringMinPerSec, ringFrameCapMs, waitCap,
-                            waitHalfMs). TUNING.versus = the
+                            waitHalfMs; ringFastPerSec 3.4 and ringCachedMs 1500, the
+                            cached-load fill, plan 35, 2.5). TUNING.versus = the
                             two-player knobs: minViewportH (the gate), keys (the
                             two keyboard groups), countdownMs, ghostRangePx /
                             ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
@@ -1686,7 +1692,8 @@ src/
                             SPLASH_NOTES (id, kind 'feature' | 'hint', glyph, i18n
                             key, art { file, frames | crop } on the sprite cards;
                             features newest first), splashArtUrl (Boot's URL),
-                            ringTarget / ringStep (the ring), splashPool, nextNote (the
+                            ringTarget / ringStep (the ring; `fast` = a cached load) /
+                            ringCachedLoad (plan 35, 2.5), splashPool, nextNote (the
                             deck: unseen features first, every card once per cycle,
                             no repeat across a reshuffle, ids that left or joined
                             the pool handled), createBrowser (one load's history:
@@ -2110,16 +2117,24 @@ src/
                             lets the board and the profile reload when sharing
                             changed.
   scenes/
-    Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
-                            spritesheet; coin.png as a 106 px one) + the sfx MP3s (coin, coin-spend,
-                            shop, flush, and the education quiz's book-open / book-flip /
-                            book-close / sparkle, beside fart / fart-accelerate /
-                            level-up); create() makes the global
+    Boot.js                 preload() gameplay PNGs (mystery.png as a 192 px
+                            spritesheet; coin.png as a 106 px one) + the sfx MP3s every run
+                            needs (coin, coin-spend, shop, fart / fart-accelerate /
+                            level-up); book-open / book-flip / book-close, sparkle,
+                            bubble-pop and flush are not loaded here but by Play.loadLazyAudio
+                            (plan 35, 2.3); create() makes the global
                             'mystery-spin' (mystery.frameMs) and 'coin-spin' (coin.frameMs)
                             anims, then hands splashReady() the start of Play: Play
                             starts on the splash's Continue. The loader's progress
                             fills the splash's ring.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'
+                            (loadLazyAudio, once per create() on the scene's first 'render':
+                            loads the six sounds Boot skips that are still missing, with
+                            this.load.start(), one load at a time across Play and PlayB via
+                            the registry's 'lazyAudio', cleared on the loader's complete or
+                            the scene's shutdown; every use checks cache.audio.exists, so
+                            playSample falls back to its synth and the flush is guarded in
+                            Versus and OnlineRace; tests/lazyAudio.test.js)
                             (+ 'respawn' in a match, between a crash and its restart,
                             and in an education run, from a crash through its revive
                             quiz).
@@ -2867,12 +2882,16 @@ assets/                     Contract PNGs + README.md (the art contract).
   poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png coin.png
                             (coin.png: the golden corn kernel's spin, 12 frames of
                             106x106 side by side (1272x106), loaded as a spritesheet;
+                            the rest are 2x their drawn size (plan 35, 2.1): the poop
+                            set and the items 192 px, drawn at spriteDisplayScale 0.5
+                            (96 logical px); stink 358, falling 268, fart 438, speech
+                            510; question.png 230 (2x superQ.displayPx 115);
                             postbiotic.png: HUD icon only, never spawned;
                             the falling frames: scared face + sweat marks for a
                             long drop, with / without stink lines; the scared
                             frames: the near-miss face after a close call with a
                             pipe, with / without stink lines)
-  mystery.png               Mystery box spin: 8 frames of 384x384 side by side (3072x384),
+  mystery.png               Mystery box spin: 8 frames of 192x192 side by side (1536x192),
                             loaded as a spritesheet; mystery-icon.png is its static view
                             for the game-over summary and How to play (never spawned).
   pipe.png villi.png ceiling.png ground.png
@@ -2892,12 +2911,12 @@ assets/                     Contract PNGs + README.md (the art contract).
   sfx/Coin_Pickup.mp3       A coin picked up, or a box paying coins.
   sfx/Coin_Spend.mp3        A shop purchase.
   sfx/ShopOpenClose.mp3     The shop opening and closing.
-  sfx/ToiletFlush_Win.mp3   The toilet flush when GO appears in a two-player countdown.
-  sfx/Book_Open.mp3         An education quiz opening.
-  sfx/Book_PageTurn.mp3     Each next question of an education quiz.
-  sfx/Book_Close.mp3        An education quiz being left.
-  sfx/Sparkle_Restore.mp3   A revive's full streak winning everything back.
-  sfx/Bubble_Pop.mp3        The poop touching a challenge question's ❓ bubble (the offer opens on it, with no book sound).
+  sfx/ToiletFlush_Win.mp3   (lazy, plan 35, 2.3) The toilet flush when GO appears in a two-player countdown.
+  sfx/Book_Open.mp3         (lazy) An education quiz opening.
+  sfx/Book_PageTurn.mp3     (lazy) Each next question of an education quiz.
+  sfx/Book_Close.mp3        (lazy) An education quiz being left.
+  sfx/Sparkle_Restore.mp3   (lazy) A revive's full streak winning everything back.
+  sfx/Bubble_Pop.mp3        (lazy) The poop touching a challenge question's ❓ bubble (the offer opens on it, with no book sound).
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant
@@ -3178,19 +3197,21 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser;
                             the splash's parts, ‹ card › then Continue, no spinner,
                             no words in its markup, the inline import before
-                            Phaser, its colour tokens; poop.png's pixels, decoded,
+                            Phaser, its colour tokens, the six modulepreload links by bare URL, none
+                            twice (plan 35, 2.4); poop.png's pixels, decoded,
                             stay 2 % inside the ring at both ends of the bob)
   splash.test.js            the splash's catalog (copy in every locale under the
                             100 / 50 character cap, one glyph per thing: badge glyphs,
                             no borrowed ones), the sprites (files Boot loads by that
                             path, the coin's frames, crops inside the image), the
                             ring (creep, monotonic, capped per frame, 0.6–1.1 s
-                            empty to full), splashPool, the deck (features first and
+                            empty to full; ringFast and ringCachedLoad, ~300 ms), splashPool, the deck (features first and
                             NEW once, every card once per cycle, no repeat across a
                             reshuffle, pool changes), createBrowser, swipeIntent,
                             the store, the inert DOM part in Node
   assets.test.js            load.image / load.spritesheet / load.audio paths; README
-                            sizes; a spritesheet is a whole number of frames; sfx credits;
+                            sizes; the sprite art exported at 2x its drawn size (plan 35,
+                            2.1); a spritesheet is a whole number of frames; sfx credits;
                             the sound triangle: every tracked sfx file is loaded, every
                             credited one is tracked (git ls-files)
   logic.test.js             gap bounds, rng determinism, hasPassed, angle,
@@ -3313,7 +3334,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   testmode.test.js          isTestWord, testRunStart (levels, par score, clamping),
                             nextTestLevel wrap, TEST_POWERS, settingsLayout geometry
                             (incl. the hand row)
-  hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
+  hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x; the art's 2x
+                            scale (plan 35, 2.1)
   chromeShown.test.js       which chrome shows (plan 28, 4.3): chromeShown for one
                             player and a match, the ? / 🌞 row clear of the progress
                             bar, Play.syncChrome acting once per change
@@ -3363,6 +3385,9 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             seed, takes the pair number for the score gates, lets
                             beans spawn into a full bag, rolls moving pipes from
                             pipeMove.fromLevel
+  lazyAudio.test.js         plan 35, 2.3: Boot loads none of the six lazy sounds, Play
+                            loads the missing ones once per create() on the first render,
+                            one load at a time across Play and PlayB (registry 'lazyAudio')
   smoke.test.js             logic.js imports and exports VERSION
   save.test.js              save codes: spec rows 1-10 (round trip, tamper, relabel,
                             v2 migration, merge, name rules, wrapped paste, empty
@@ -3790,8 +3815,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
 
 tools/
   make_placeholders.py      Regenerates pipe / villi / ceiling / ground, and plan 34's
-                            question.png (the challenge bubble, a see-through
-                            placeholder) only while it is missing (icons
+                            question.png (the challenge bubble, 230 px, a see-through
+                            placeholder, line widths scaled from the 384 px look) only while it is missing (icons
                             moved to process_art.py); ceiling.png is the ground's
                             mirror (ceiling_strip), drawn by the game as its own
                             strip over the pipes; a cream backdrop from each
@@ -3801,8 +3826,10 @@ tools/
                             their lumen-side tips undulate (BACK_WAVE on the
                             fringes, FRONT_WAVE in the strips' TIP_ZONE). Must
                             not overwrite poop.png. Run only when you intend to.
-  process_art.py            Crops assets/src/ drawings into 384x384 contract PNGs
-                            (drawn at spriteDisplayScale 0.25 → 96 logical px);
+  process_art.py            Crops assets/src/ drawings into 192x192 contract PNGs (SIZE 192;
+                            drawn at spriteDisplayScale 0.5 → 96 logical px, art at 2x);
+                            runs oxipng -o 4 --strip safe after Pillow's optimized save
+                            when oxipng is installed;
                             the poop set (alive / dead / stink1 / stink2 / falling /
                             stink-falling1 / stink-falling2 / scared / stink-scared1 /
                             stink-scared2 / fart / speech) shares
@@ -3810,7 +3837,7 @@ tools/
                             speech on bigger squares; bean.png from Kidney_Bean.png,
                             postbiotic.png from Postbiotic.png, mystery-icon.png from
                             MysteryBox_Icon.png; process_sheet cuts MysteryBox.gif's
-                            frames on one shared square into the mystery.png strip
+                            frames on one shared square into the mystery.png strip (192 px frames)
                             and CornKernel.gif's into the coin.png strip (106 px frames);
                             process_icons cuts icon-192 / icon-512 (padded to the
                             maskable safe zone) and apple-touch-icon (full bleed)
@@ -3900,7 +3927,8 @@ tools/
                             overlay that does not open / close. Covers every overlay in
                             OVERLAYS (tests/tools.test.js keeps that list equal to
                             main.js), a run start, leaderboard mid-run pause, and a
-                            close-and-reopen race, plus the mystery box (level 3's
+                            close-and-reopen race, the six lazy sounds loading after Play's first frame
+                            (plan 35, 2.3), plus the mystery box (level 3's
                             still first box, a still rolled level-3 box, a bobbing
                             level-4 box, the spin pausing, forced draws,
                             the full-bag fallback, and a skip into level 4's break), coins
@@ -4005,7 +4033,7 @@ tools/
                             pill, answers by tap / key / pad, coins, every card's fit
                             both ways, the buttons and keys, the counts on the pill
                             and the card, the tally and its "This run" card, the 🚩,
-                            the sounds, the level's prices), education-revive (every
+                            the sounds, which wait up to 5 s for the lazy quiz sounds, the level's prices), education-revive (every
                             revive path: the pause, the refill under the card, Fly
                             on, a level's end, a wide field, a test run's quiz),
                             education-over (the tally, the bonus quiz, the badges
@@ -4073,7 +4101,7 @@ tools/
                             the wait, a no and Resend in the same room. Plan 39's online-join-link (4.3): the
                             real page opened at ?join= takes the code out of the address, opens 🌐, keeps it
                             through a failed sign-in, joins on Retry; a gone room says the link expired.
-                            Full smoke: 43 sections, 993 checks.
+                            Full smoke: 43 sections, 994 checks.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -4115,7 +4143,7 @@ Claude outputs/             Michael's private hand-over notes (gitignored; never
    If you add a feel-related constant, add it to `TUNING` with a short comment
    and units (px, px/s, ms).
 3. **Respect the art contract.** Asset file names and sizes are fixed by
-   `assets/README.md`. Change a size only if you update that table AND the scene
+   `assets/README.md` (art at 2x its drawn size since plan 35, 2.1; the audio re-encode recipe is there too). Change a size only if you update that table AND the scene
    code that positions the sprite. `npm test` fails otherwise. The pipe image has
    its cap at the top and is flipped vertically for the top pipe; `villi.png`,
    `ceiling.png` and `ground.png` must tile horizontally. Player/item redraws go through
