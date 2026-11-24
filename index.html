@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <!-- Phaser's CDN: the connection opens while the page parses (plan 35, 1.2). -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <!-- The module graph is four levels deep, and a browser only learns a level once the one above has arrived: these start the big first-run modules at once (plan 35, 2.4). The hrefs are exactly the URLs the imports use (bare, no ?v=), or the preload is wasted. -->
+  <!-- The module graph is four levels deep, and a browser only learns a level once the one above has arrived: these start the big first-run modules at once (plan 35, 2.4). The hrefs are exactly the URLs the imports use, or the preload is wasted: bare in the tree, and `npm run push` writes the import map's ?h= into them and into the main tag (tools/sw_stamp.mjs, plan 35, 3.1). -->
   <link rel="modulepreload" href="src/main.js">
   <link rel="modulepreload" href="src/config.js">
   <link rel="modulepreload" href="src/logic.js">

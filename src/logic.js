@@ -195,15 +195,75 @@ export function loadedScriptUrls(api = globalThis) {
  * page), then navigate to reloadUrl(). A hung fetch cannot block the reload:
  * the refetch races a timeoutMs timer. Returns the URL navigated to (null when
  * there is no location).
+ * Under the service worker (plan 35, 3.0 D4): when the page itself answers from the network (sw.js
+ * never answers a fetch of the page, only its navigation), this scope's worker and our caches are removed
+ * first, so the reload is a clean network load and a player's way out of a bad cache; the worker comes
+ * back after Play's lazy sounds. When it does not answer, both stay and the reload runs from the cache,
+ * so Reload never strands a player offline. All inside the same timeoutMs.
  */
 export async function hardReloadGame(api = globalThis, { timeoutMs = 3000 } = {}) {
   if (!api.location || typeof api.location.replace !== 'function') return null;
   if (typeof api.fetch === 'function') {
-    const refetch = Promise.allSettled(loadedScriptUrls(api).map((u) => api.fetch(u, { cache: 'reload' })));
+    const page = api.location.href.split('#')[0];
+    const refetch = loadedScriptUrls(api).map((u) => {
+      const got = api.fetch(u, { cache: 'reload' });
+      return u === page ? Promise.resolve(got).then((res) => (res?.ok ? removeWorker(api) : false)) : got;
+    });
     const timer = new Promise((resolve) => (api.setTimeout ?? setTimeout)(resolve, timeoutMs));
-    await Promise.race([refetch, timer]);
+    await Promise.race([Promise.allSettled(refetch), timer]);
   }
   return reloadGame(api);
+}
+
+// --- The service worker's page side (plan 35, Stage 3; sw.js, src/swClient.js) ---
+
+/** The prefix of every Cache Storage name sw.js uses (`flappy-poop-<BUILD>`); nothing else is ever deleted. */
+export const SW_CACHE_PREFIX = 'flappy-poop-';
+
+/** The page's worker scope: the folder the page is in (`…/flappy-poop/`), whatever its query or file name. */
+export function workerScope(href) {
+  return new URL('./', href).href;
+}
+
+/**
+ * 'register' or 'off' for this page (3.0 D3, D5). ?nosw is off anywhere (the player's kill switch); a
+ * local host (localHost: npm start, the smoke, plan 44's server, a phone on the Wi-Fi) is off unless ?sw
+ * opts in (tools/sw_check.mjs), so a worker never serves a dev tree's stale copies, and one a ?sw left
+ * behind is removed. Off means: remove this scope's worker and our caches, and register nothing.
+ * @param {{ hostname?: string, search?: string } | undefined} loc
+ */
+export function swMode(loc) {
+  if (!loc) return 'off';
+  const q = new URLSearchParams(loc.search ?? '');
+  if (q.has('nosw')) return 'off';
+  if (localHost(loc.hostname) && !q.has('sw')) return 'off';
+  return 'register';
+}
+
+/**
+ * Unregister this scope's worker (never one at another scope on the shared github.io origin) and delete
+ * the flappy-poop-* caches. Never rejects; true when it removed something. A page it controls stays
+ * controlled until it navigates; the navigation then goes to the network.
+ */
+export async function removeWorker(api = globalThis) {
+  let removed = false;
+  try {
+    const sw = api.navigator?.serviceWorker;
+    if (typeof sw?.getRegistrations === 'function' && api.location?.href) {
+      const scope = workerScope(api.location.href);
+      for (const reg of await sw.getRegistrations()) if (reg.scope === scope) removed = (await reg.unregister()) || removed;
+    }
+  } catch {
+    /* no worker API (an http LAN page), or it refused: nothing to remove */
+  }
+  try {
+    if (typeof api.caches?.keys === 'function') {
+      for (const name of await api.caches.keys()) if (name.startsWith(SW_CACHE_PREFIX)) removed = (await api.caches.delete(name)) || removed;
+    }
+  } catch {
+    /* Cache Storage refused (a private window): nothing of ours in it */
+  }
+  return removed;
 }
 
 /**
@@ -2509,13 +2569,11 @@ export function settingsLayout(width, height, t, { test = false } = {}) {
 // --- The debug / automation handle (globalThis.__flappy; src/main.js) ---
 
 /**
- * Whether the page sets globalThis.__flappy (plan 30): on this machine (localhost, a *.localhost name,
- * 127.x, ::1), a *.local name, or a private-network address (10/8, 172.16/12, 192.168/16: a phone on the
- * same Wi-Fi as tools/serve.py), or when a driver set globalThis.__flappyDebug = true before the page's
- * scripts ran (optIn; the smoke does, so it runs against any URL). Not on a public host.
+ * A host on this machine (localhost, a *.localhost name, 127.x, ::1), a *.local name, or a private-network
+ * address (10/8, 172.16/12, 192.168/16: a phone on the same Wi-Fi as tools/serve.py). The debug handle
+ * (plan 30) and the service worker (plan 35, 3.0 D3: never registered here) share this rule.
  */
-export function debugHandleAllowed(hostname, optIn = false) {
-  if (optIn === true) return true;
+export function localHost(hostname) {
   const h = String(hostname ?? '').toLowerCase().replace(/^\[|\]$/g, '');
   if (h === 'localhost' || h.endsWith('.localhost') || h === '::1' || /^[a-z0-9-]+(\.[a-z0-9-]+)*\.local$/.test(h)) return true;
   const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -2523,6 +2581,15 @@ export function debugHandleAllowed(hostname, optIn = false) {
   const [a, b, c, d] = m.slice(1).map(Number);
   if ([a, b, c, d].some((x) => x > 255)) return false;
   return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
+/**
+ * Whether the page sets globalThis.__flappy (plan 30): on a local host (localHost), or when a driver set
+ * globalThis.__flappyDebug = true before the page's scripts ran (optIn; the smoke does, so it runs
+ * against any URL). Not on a public host.
+ */
+export function debugHandleAllowed(hostname, optIn = false) {
+  return optIn === true || localHost(hostname);
 }
 
 // --- Frame meter (?perf; src/ui/perfMeter.js) ---

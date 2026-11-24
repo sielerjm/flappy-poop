@@ -139,8 +139,10 @@ export function pushDecision(s) {
  */
 export function pushSteps({ copyFixture = false, dry = false } = {}) {
   const fixture = copyFixture ? ['fixture'] : [];
-  if (dry) return ['stamp', ...fixture, 'test', 'restore'];
-  return ['stamp', ...fixture, 'test', 'commit', 'push'];
+  // 'sw' (plan 35, 3.1): index.html's import map and sw.js's build (tools/sw_stamp.mjs), right after the
+  // LAST_UPDATED stamp, so they hash the logic.js that is committed.
+  if (dry) return ['stamp', 'sw', ...fixture, 'test', 'restore'];
+  return ['stamp', 'sw', ...fixture, 'test', 'commit', 'push'];
 }
 
 const sqlList = (items) => `array[${items.map((s) => `'${s.replace(/'/g, "''")}'`).join(', ')}]::text[]`;

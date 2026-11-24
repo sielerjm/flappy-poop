@@ -147,6 +147,7 @@ import { openEduDataPanel, isEduDataPanelOpen } from '../ui/eduDataPanel.js';
 import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPadAction } from '../ui/eduIntroPanel.js';
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
+import { registerWorker } from '../swClient.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, matchHostKey, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
 import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, studyStreakNow, pickSuperCard, paidOn, buriedIdsOn, skipUntil, boardRecord, educationBackup, readEducationBackup, restoredSettings } from '../education.js';
 
@@ -4388,6 +4389,8 @@ export class Play extends Phaser.Scene {
    * and the two-player flush (about 240 KB). Every use checks cache.audio.exists, so until a key is in it
    * stays silent or plays its synth fallback (playSample). One load at a time across Play and PlayB
    * (registry 'lazyAudio'); a restart that cuts one short leaves the missing keys to the next create.
+   * Once they are in, the service worker registers (plan 35, 3.0 D3: once per page load, src/swClient.js),
+   * so its install never competes with the cold load and finds these files in the HTTP cache.
    */
   loadLazyAudio() {
     if (this.registry.get('lazyAudio')) return;
@@ -4399,15 +4402,21 @@ export class Play extends Phaser.Scene {
     if (!has('sparkle')) this.load.audio('sparkle', 'assets/sfx/Sparkle_Restore.mp3' + V); // a revive's streak wins everything back
     if (!has('bubble-pop')) this.load.audio('bubble-pop', 'assets/sfx/Bubble_Pop.mp3' + V); // the challenge question's bubble touched (plan 34)
     if (!has('flush')) this.load.audio('flush', 'assets/sfx/ToiletFlush_Win.mp3' + V); // a two-player GO
-    if (!this.load.list.size) return; // all in already
+    if (!this.load.list.size) {
+      registerWorker();
+      return; // all in already
+    }
     this.registry.set('lazyAudio', true);
-    const done = () => {
+    const done = (arrived) => {
       this.registry.set('lazyAudio', false);
-      this.load.off('complete', done);
-      this.events.off('shutdown', done);
+      this.load.off('complete', complete);
+      this.events.off('shutdown', cut);
+      if (arrived) registerWorker();
     };
-    this.load.once('complete', done);
-    this.events.once('shutdown', done); // the loader resets on shutdown, so a cut-short load never completes
+    const complete = () => done(true);
+    const cut = () => done(false);
+    this.load.once('complete', complete);
+    this.events.once('shutdown', cut); // the loader resets on shutdown, so a cut-short load never completes
     this.load.start();
   }
 

@@ -2,6 +2,10 @@
 // npm run push — stamp LAST_UPDATED with now, run the tests, commit the stamp,
 // and push main. The About overlay shows LAST_UPDATED, so this keeps it equal
 // to the time of the last push without a build step or a server.
+// Then the service worker's stamp (plan 35, 3.1; tools/sw_stamp.mjs): index.html's import map (every
+// module at its content hash) and sw.js's BUILD and FILES, checked (BUILD for this VERSION, every module
+// and every asset the code names listed) before the tests run; refused, nothing is committed. Both files
+// go in the stamp commit. An sw.js that is the kill switch (tools/sw-off.js) is left as it is.
 // First it asks the live database which db/schema.sql it has (tools/schema_check.mjs,
 // one read-only call): it pushes only when that is this file, since a client must not
 // go out before the functions it calls. Then tests/fixtures/schema-applied.sql, the
@@ -16,7 +20,9 @@
 //        npm run push -- --no-schema-check  (skip the live check; the fixture stays as it is)
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { liveSchemaState, pushDecision, pushSteps, SCHEMA_PATH, FIXTURE_PATH } from './schema_check.mjs';
+import { writeStamp, checkStamp } from './sw_stamp.mjs';
 
 const dry = process.argv.includes('--dry');
 const sh = (cmd) => execSync(cmd, { stdio: ['ignore', 'pipe', 'inherit'] }).toString().trim();
@@ -61,6 +67,10 @@ if (next === src) {
   console.error('push.mjs: LAST_UPDATED line not found in src/logic.js');
   process.exit(1);
 }
+// The service worker's two files as they were, put back with the stamp.
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const SW_FILES = ['index.html', 'sw.js'].map((p) => new URL(`../${p}`, import.meta.url));
+const swBefore = SW_FILES.map((f) => readFileSync(f));
 let fixtureBefore = null; // the fixture as it was (null: no file yet), put back on a failed test run or after a dry run
 try {
   fixtureBefore = readFileSync(FIXTURE_PATH);
@@ -75,9 +85,10 @@ function restoreFixture() {
   else rmSync(FIXTURE_PATH, { force: true });
 }
 
-/** Put back what this push changed: the stamp (src/logic.js) and the fixture. */
+/** Put back what this push changed: the stamp (src/logic.js), index.html and sw.js, and the fixture. */
 function restore() {
   writeFileSync(file, src);
+  SW_FILES.forEach((f, i) => writeFileSync(f, swBefore[i]));
   restoreFixture();
 }
 
@@ -86,6 +97,17 @@ for (const step of pushSteps({ copyFixture, dry })) {
   if (step === 'stamp') {
     writeFileSync(file, next);
     console.log(`stamped LAST_UPDATED = ${stamp()}`);
+  } else if (step === 'sw') {
+    try {
+      const plan = writeStamp(ROOT);
+      const problems = checkStamp(ROOT);
+      if (problems.length) throw new Error(problems.join('\n'));
+      console.log(plan.off ? 'sw_stamp: sw.js is the kill switch (tools/sw-off.js), left as it is; index.html stamped' : `sw_stamp: build ${plan.build}, ${plan.files.length} files`);
+    } catch (err) {
+      restore();
+      console.error(`push.mjs: sw_stamp refused, the tree is put back, nothing committed or pushed:\n${err.message}`);
+      process.exit(1);
+    }
   } else if (step === 'fixture') {
     // The live database has db/schema.sql: the upgrade test starts from it from now on, and the
     // tests below run on it.
@@ -118,8 +140,8 @@ for (const step of pushSteps({ copyFixture, dry })) {
     restore();
   } else if (step === 'commit') {
     if (copyFixture) sh('git add tests/fixtures/schema-applied.sql');
-    sh('git add src/logic.js');
-    if (sh('git status --porcelain src/logic.js tests/fixtures/schema-applied.sql')) {
+    sh('git add src/logic.js index.html sw.js');
+    if (sh('git status --porcelain src/logic.js index.html sw.js tests/fixtures/schema-applied.sql')) {
       const what = copyFixture ? 'stamp last updated and the applied schema for push' : 'stamp last updated for push';
       execSync(`git commit -q -m "chore: ${what}"`, { stdio: 'inherit' });
     }

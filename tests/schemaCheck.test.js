@@ -111,8 +111,9 @@ test('the comparison query, run on a database holding the fixture, gives the val
 test('pushSteps: the fixture is copied before npm test; a dry run puts the tree back; no fixture step without a copy', () => {
   const { pushSteps } = schemaCheck;
   assert.equal(typeof pushSteps, 'function', 'tools/schema_check.mjs exports pushSteps');
-  assert.deepEqual(pushSteps({ copyFixture: true, dry: false }), ['stamp', 'fixture', 'test', 'commit', 'push']);
-  assert.deepEqual(pushSteps({ copyFixture: false, dry: false }), ['stamp', 'test', 'commit', 'push']);
-  assert.deepEqual(pushSteps({ copyFixture: true, dry: true }), ['stamp', 'fixture', 'test', 'restore']);
-  assert.deepEqual(pushSteps({ copyFixture: false, dry: true }), ['stamp', 'test', 'restore']);
+  // 'sw' (plan 35, 3.1): the import map and sw.js's build, stamped after LAST_UPDATED so they hash the logic.js that is committed.
+  assert.deepEqual(pushSteps({ copyFixture: true, dry: false }), ['stamp', 'sw', 'fixture', 'test', 'commit', 'push']);
+  assert.deepEqual(pushSteps({ copyFixture: false, dry: false }), ['stamp', 'sw', 'test', 'commit', 'push']);
+  assert.deepEqual(pushSteps({ copyFixture: true, dry: true }), ['stamp', 'sw', 'fixture', 'test', 'restore']);
+  assert.deepEqual(pushSteps({ copyFixture: false, dry: true }), ['stamp', 'sw', 'test', 'restore']);
 });

@@ -19,6 +19,11 @@ import { Leaderboard } from './scenes/Leaderboard.js';
 import { Daily } from './scenes/Daily.js';
 import { Stats } from './scenes/Stats.js';
 import { Quiz } from './scenes/Quiz.js';
+import { stopWorkerIfAsked } from './swClient.js';
+
+// The service worker (plan 35, Stage 3): ?nosw, or a local host without ?sw, removes it and its caches
+// first thing; Play registers it once its lazy sounds are in (src/swClient.js).
+stopWorkerIfAsked(globalThis);
 
 // ?perf shows the frame meter (src/ui/perfMeter.js); ?perf=var also lets Arcade step by each
 // frame's delta instead of its fixed 60 Hz, to A/B the physics step on a phone. Debug only.
