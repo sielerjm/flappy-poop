@@ -771,6 +771,7 @@ export class Play extends Phaser.Scene {
     this.openPendingInvite(); // an invite link (plan 28, 2.4)
     this.openPendingJoin(); // a race's share link (plan 39, 4.3)
     this.openPendingRace(); // a race this page left by a reload or a relaunch (plan 39, 2.3, 2.3b)
+    this.events.once('render', () => this.loadLazyAudio()); // plan 35, 2.3: after this scene's first frame
   }
 
   /**
@@ -4379,6 +4380,35 @@ export class Play extends Phaser.Scene {
   playSample(key, volume, fallback = null) {
     if (this.cache.audio.exists(key)) this.sound.play(key, { volume });
     else fallback?.();
+  }
+
+  /**
+   * Plan 35, 2.3: the sounds no run needs in its first seconds load here, after Play's first frame, instead
+   * of holding the splash: the quiz's book sounds (ACC-010), the revive's sparkle, the challenge bubble's pop
+   * and the two-player flush (about 240 KB). Every use checks cache.audio.exists, so until a key is in it
+   * stays silent or plays its synth fallback (playSample). One load at a time across Play and PlayB
+   * (registry 'lazyAudio'); a restart that cuts one short leaves the missing keys to the next create.
+   */
+  loadLazyAudio() {
+    if (this.registry.get('lazyAudio')) return;
+    const has = (key) => this.cache.audio.exists(key);
+    const V = `?v=${APP_VERSION}`;
+    if (!has('book-open')) this.load.audio('book-open', 'assets/sfx/Book_Open.mp3' + V);
+    if (!has('book-flip')) this.load.audio('book-flip', 'assets/sfx/Book_PageTurn.mp3' + V);
+    if (!has('book-close')) this.load.audio('book-close', 'assets/sfx/Book_Close.mp3' + V);
+    if (!has('sparkle')) this.load.audio('sparkle', 'assets/sfx/Sparkle_Restore.mp3' + V); // a revive's streak wins everything back
+    if (!has('bubble-pop')) this.load.audio('bubble-pop', 'assets/sfx/Bubble_Pop.mp3' + V); // the challenge question's bubble touched (plan 34)
+    if (!has('flush')) this.load.audio('flush', 'assets/sfx/ToiletFlush_Win.mp3' + V); // a two-player GO
+    if (!this.load.list.size) return; // all in already
+    this.registry.set('lazyAudio', true);
+    const done = () => {
+      this.registry.set('lazyAudio', false);
+      this.load.off('complete', done);
+      this.events.off('shutdown', done);
+    };
+    this.load.once('complete', done);
+    this.events.once('shutdown', done); // the loader resets on shutdown, so a cut-short load never completes
+    this.load.start();
   }
 
   /**

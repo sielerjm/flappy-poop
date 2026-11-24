@@ -993,6 +993,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       }
     });
     await section('run', async () => {
+      // Plan 35, 2.3: the sounds no run needs at once (the quiz's books, the sparkle, the bubble's pop, the
+      // two-player flush) load after Play's first frame instead of holding the splash; they are in within 5 s.
+      {
+        const lazy = await evaluate(`new Promise((res) => { const keys = ['book-open', 'book-flip', 'book-close', 'sparkle', 'bubble-pop', 'flush']; const t0 = Date.now(); const tick = () => { const v = keys.map((k) => __flappy.cache.audio.exists(k)); if (v.every(Boolean) || Date.now() - t0 > 5000) res(JSON.stringify(v)); else setTimeout(tick, 50); }; tick(); })`).then(JSON.parse);
+        ok(lazy.every(Boolean), `the six lazy sounds load after Play's first frame (${lazy.join(', ')})`);
+      }
       // A run: tap starts it; opening the board mid-run pauses; closing leaves it paused.
       await evaluate(`__flappy.scene.getScene('Play').flap(), true`);
       await sleep(1000);
@@ -4795,8 +4801,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // pays a coin and makes the coin's sound alone (plan 21, E1: the ding no longer plays with it;
         // a revive's and the bonus quiz's right answers, which pay nothing, still ding).
         const { listen, heard, unlisten } = quizSounds;
-        const loaded = await evaluate(`JSON.stringify(['book-open', 'book-flip', 'book-close', 'sparkle'].map((k) => __flappy.cache.audio.exists(k)))`).then(JSON.parse);
-        ok(loaded.every(Boolean), `Boot loaded the four quiz sounds (${loaded.join(', ')})`);
+        // Plan 35, 2.3: these load after Play's first frame, not in Boot; wait for them (at most 5 s).
+        const loaded = await evaluate(`new Promise((res) => { const keys = ['book-open', 'book-flip', 'book-close', 'sparkle']; const t0 = Date.now(); const tick = () => { const v = keys.map((k) => __flappy.cache.audio.exists(k)); if (v.every(Boolean) || Date.now() - t0 > 5000) res(JSON.stringify(v)); else setTimeout(tick, 50); }; tick(); })`).then(JSON.parse);
+        ok(loaded.every(Boolean), `Play's lazy load brought the four quiz sounds in (${loaded.join(', ')})`);
         await listen();
         await reopen();
         const sOpen = await heard();
