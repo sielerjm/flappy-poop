@@ -2952,6 +2952,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await finish(P2, 9);
         ok(await until(`${VS}.match.status === 'over'`), 'P2 crosses the rectum\'s finish line and the match is over');
         await sleep(100);
+        // Both out (plan 35, 4.3): no "Waiting for P…" on either half, "Made it out!" on both until the panel.
+        const outBanners = await evaluate(`JSON.stringify([${P1}, ${P2}].map((p) => ({ title: p.levelTitle.visible ? p.levelTitle.text : null, hint: p.levelHint.visible ? p.levelHint.text : null })))`).then(JSON.parse);
+        ok(outBanners.every((b) => b.title === 'Made it out!' && b.hint === null), `once both are out, both halves read only "Made it out!" (${JSON.stringify(outBanners)})`);
         const ended = await evaluate(`JSON.stringify({ status: ${VS}.match.status, a: ${P1}.state, b: ${P2}.state, scores: ${VS}.match.slots.map((s) => s.score), won: ${VS}.match.slots.map((s) => s.won), ended: ${VS}.match.slots.map((s) => s.ended), over: __flappy.scene.isActive('Over'), panel: ${VS}.resultShown, faces: [${P1}.poop.texture.key, ${P2}.poop.texture.key] })`).then(JSON.parse);
         ok(ended.status === 'over' && ended.a === 'dead' && ended.b === 'dead' && ended.scores[0] === 5 + want.bonus && ended.scores[1] === 9 && ended.won[0] && ended.won[1] && ended.ended[0] && ended.ended[1] && !ended.over && !ended.panel && ended.faces.every((f) => f === 'poop'), `both out (${ended.scores.join(' / ')}), no Over, the panel waits for the delay`);
         // The beat before the panel: Esc / B (onPadBack), A (primary) and Bracket (home) hand nothing on;

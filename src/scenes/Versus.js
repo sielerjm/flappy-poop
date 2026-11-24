@@ -417,6 +417,7 @@ export class Versus extends Phaser.Scene {
     this.pausedHalves.clear();
     this.pauseText.setVisible(false);
     this.pauseHint.setVisible(false);
+    for (const half of this.halves()) half?.showEscapedBanner?.(); // no "Waiting for P1…" once both are out (plan 35, 4.3)
     this.time.delayedCall(T.deathToOverMs, () => this.showResult());
   }
 

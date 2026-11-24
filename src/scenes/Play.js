@@ -1296,12 +1296,14 @@ export class Play extends Phaser.Scene {
 
   /**
    * The finished half of a match while the other plays on: "Made it out!" over "Waiting for
-   * P2…" (the level banner's texts, no shade). It stays until the result panel covers it.
+   * P2…" (the level banner's texts, no shade). Once both are out (the match over), the waiting
+   * line goes and "Made it out!" stays until the result panel covers it (plan 35, 4.3).
    */
   showEscapedBanner() {
     if (!this.match || !this.won) return;
+    const over = this.match.status === 'over';
     this.levelTitle?.setText(t(this.locale, 'versusEscaped')).setVisible(true);
-    this.levelHint?.setText(t(this.locale, 'versusWaiting').replace('{name}', versusName(this.locale, this.match, this.player === 1 ? 1 : 0))).setVisible(true);
+    this.levelHint?.setText(over ? '' : t(this.locale, 'versusWaiting').replace('{name}', versusName(this.locale, this.match, this.player === 1 ? 1 : 0))).setVisible(!over);
   }
 
   refreshLevelBanner() {
