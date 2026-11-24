@@ -490,11 +490,13 @@ export const TUNING = {
     storageKey: 'flappyPoop.splash', // localStorage key: the deck and the features already shown
     // The ring only ever fills, chasing a target (ringTarget) at a speed (ringStep) of the gap ÷
     // ringEaseMs, held between ringMinPerSec and ringMaxPerSec (shares of the ring per second): the top
-    // speed is its viscosity (a cached load still takes ~0.8 s to fill), the floor makes it finish.
+    // speed is its viscosity, the floor makes it finish; a cached load (ready within ringCachedMs) fills at ringFastPerSec.
     ringEaseMs: 200, // ms: the chase's time constant
-    ringMaxPerSec: 1.6, // ring / s at most
+    ringMaxPerSec: 1.6, // ring / s at most (a cached load uses ringFastPerSec)
     ringMinPerSec: 0.6, // ring / s at least, while behind its target
     ringFrameCapMs: 50, // ms: a longer frame (Phaser compiling) pauses the ring instead of jumping it
+    ringFastPerSec: 3.4, // ring / s on a cached load (plan 35, 2.5): empty to full in about 300 ms, not 600 to 1100
+    ringCachedMs: 1500, // ms: Boot ready this soon after the splash started counts as a cached load (a Slow 4G revalidate takes ~3.7 s, a warm one ~0.4 s)
     waitCap: 0.2, // 0–1: the share the ring creeps to during the Phaser download, before Boot reports
     waitHalfMs: 3000, // ms: the creep is half of waitCap after this long (and still moving at 30 s)
   },
