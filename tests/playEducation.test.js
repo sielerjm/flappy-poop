@@ -886,7 +886,7 @@ test('Quit at a break (plan 25, B8; plan 26, A2): two taps; caught up with answe
     });
     s.breakQuitTap();
     assert.deepEqual(calls, [], 'the first tap only arms it');
-    now += 500;
+    now += T.education.explainMinMs; // past the hold (plan 35, 4.6), inside the confirm time
     s.breakQuitTap();
     return { calls, gaveUp: s.breakGaveUp, lb: s.levelBreak };
   };
@@ -906,9 +906,44 @@ test('Quit at a break (plan 25, B8; plan 26, A2): two taps; caught up with answe
     endRun: () => calls.push('endRun'), showOver: () => calls.push('showOver'), refreshShopButton() {},
   });
   tm.breakQuitTap();
-  now += 500;
+  now += T.education.explainMinMs;
   tm.breakQuitTap();
   assert.deepEqual([calls, tm.breakGaveUp], [['endRun', 'showOver'], false], 'test mode on: no gate, so a normal end');
+});
+
+test('the armed Quit is held for explainMinMs (plan 35, 4.6, as the revive\'s Quit): a quick second tap does nothing, so a double tap never passes the warning; after the hold, inside the confirm time, it ends the run', () => {
+  assert.ok(T.education.explainMinMs < T.saveClearConfirmMs, 'the hold ends inside the confirm time');
+  const calls = [];
+  const delays = [];
+  let now = 1000;
+  const s = playScene({
+    levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false, quizButton: {}, breakQuitArmedAt: null, registry: registry(),
+    runQuiz: { ...newTally(), answered: 3, right: 3 },
+    time: { get now() { return now; }, delayedCall: (ms) => delays.push(ms) },
+    quizCounts: () => ({ new: 0, missed: 0, review: 0 }),
+    endRun: () => calls.push('endRun'), showOver: () => calls.push('showOver'), refreshShopButton: () => calls.push('refresh'),
+  });
+  assert.equal(s.breakQuitHeld(), false, 'not armed: not held');
+  s.breakQuitTap();
+  assert.deepEqual([s.breakQuitArmed(), s.breakQuitHeld(), calls], [true, true, ['refresh']], 'the first tap arms it, held');
+  assert.ok(delays.includes(T.education.explainMinMs + 20), 'a redraw when the hold lifts');
+  assert.ok(delays.includes(T.saveClearConfirmMs + 50), 'and when the confirm time runs out, as before');
+  now += 300;
+  s.breakQuitTap(); // a double tap
+  assert.deepEqual([calls, s.breakQuitArmed(), s.levelBreak], [['refresh'], true, true], 'a second tap inside the hold does nothing; Quit stays armed');
+  now = 1000 + T.education.explainMinMs - 1;
+  s.breakQuitTap();
+  assert.equal(calls.includes('endRun'), false, 'still held a millisecond before the end');
+  now = 1000 + T.education.explainMinMs;
+  assert.equal(s.breakQuitHeld(), false, 'the hold is over');
+  s.breakQuitTap();
+  assert.deepEqual([calls.filter((c) => c !== 'refresh'), s.levelBreak], [['endRun', 'showOver'], false], 'the second tap after the hold ends the run');
+  // Past the confirm time a tap arms it again, held again.
+  const late = playScene({ levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false, quizButton: {}, breakQuitArmedAt: 1000, registry: registry(), time: { get now() { return now; }, delayedCall() {} }, quizCounts: () => ({ new: 0, missed: 0, review: 0 }), refreshShopButton() {} });
+  now = 1000 + T.saveClearConfirmMs + 10;
+  assert.deepEqual([late.breakQuitArmed(), late.breakQuitHeld()], [false, false]);
+  late.breakQuitTap();
+  assert.deepEqual([late.breakQuitArmedAt, late.breakQuitHeld()], [now, true], 're-armed, held');
 });
 
 test('an armed Quit does not carry into the next break (plan 27: a hunch of the 2026-11-15 audit): endLevelBreak and startLevelBreak disarm it, so one tap at the next break only arms it', () => {
@@ -994,15 +1029,20 @@ test("the break's poop (plan 28, 1.1: Michael's 15 Nov note): an education break
 
 test("the break's Quit label (plan 26, A2): Quit; armed it asks for a second tap, and says the run ends ungraded while cards are due", () => {
   const label = (due, armed) => {
-    const quit = { text: null, setText(v) { this.text = v; return this; }, setVisible() { return this; } };
+    const quit = { text: null, alpha: null, setText(v) { this.text = v; return this; }, setVisible() { return this; }, setAlpha(a) { this.alpha = a; return this; } };
     const s = playScene({
       locale: 'en', levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false,
       quizButton: absorb(), quizCountLine: absorb(), breakQuitButton: quit, breakQuitArmedAt: armed ? 900 : null, time: { now: 1000 }, registry: registry(),
       quizCounts: () => ({ new: due === 'new' ? 4 : 0, missed: due === true ? 2 : 0, review: 0 }), eduStore: { load: () => ({ unlockedLevel: 1 }) }, level: 2,
     });
     s.refreshQuizButton();
+    shownAlpha = quit.alpha;
     return quit.text;
   };
+  let shownAlpha = null;
+  assert.deepEqual([label(false, false), shownAlpha], ['Quit', 1], 'full brightness, not armed');
+  label(false, true);
+  assert.equal(shownAlpha, 0.4, 'armed 100 ms ago: held, dimmed (plan 35, 4.6)');
   assert.deepEqual([label(false, false), label(true, false)], ['Quit', 'Quit'], 'one word, cards due or not');
   assert.equal(label(false, true), 'Quit? Tap again');
   assert.equal(label(true, true), 'Quit ungraded? Tap again', 'with cards due the armed label says what the second tap costs');

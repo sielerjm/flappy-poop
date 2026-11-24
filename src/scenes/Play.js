@@ -4513,6 +4513,7 @@ export class Play extends Phaser.Scene {
       const armed = this.breakQuitArmed();
       // One word, Quit, cards due or not (plan 26, A2); armed, it says when the second tap ends the run ungraded.
       this.breakQuitButton.setText(t(this.locale, armed ? (due ? 'breakQuitDueSure' : 'breakQuitSure') : 'breakQuit')).setVisible(shown);
+      this.breakQuitButton.setAlpha(this.breakQuitHeld() ? 0.4 : 1); // held: dimmed, as Quiz's hold
     }
     if (this.breakLevelPick != null && !this.levelPickOffered()) this.dropLevelPick(); // the gate came back, or test mode turned on
     this.refreshLevelPickUi();
@@ -4607,6 +4608,14 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * Is the armed Quit still held (plan 35, 4.6)? For explainMinMs after the first tap it is dimmed and
+   * a second tap does nothing, the same hold the revive's Quit has (Quiz.giveUp's holdFor).
+   */
+  breakQuitHeld() {
+    return this.breakQuitArmed() && this.time.now - this.breakQuitArmedAt < T.education.explainMinMs;
+  }
+
+  /**
    * Quit at an education break (plan 25, B8): the first tap arms it, a second inside the confirm time
    * ends the run. With the gate open, it ends as a normal run, graded on its answers; while the gate
    * holds (new cards included since plan 28, Stage 3b) it counts as quitting the run (breakGaveUp: no
@@ -4619,9 +4628,11 @@ export class Play extends Phaser.Scene {
     if (!this.breakQuitArmed()) {
       this.breakQuitArmedAt = this.time.now;
       this.refreshShopButton();
+      this.time.delayedCall(T.education.explainMinMs + 20, () => this.refreshShopButton()); // the hold lifts
       this.time.delayedCall(T.saveClearConfirmMs + 50, () => this.refreshShopButton());
       return;
     }
+    if (this.breakQuitHeld()) return; // the warning is read first: a double tap never passes it (plan 35, 4.6)
     const counts = this.quizCounts({ mode: 'break' });
     const due = this.breakGated(counts); // the gate holds, new cards included (plan 28, Stage 3b: Michael's call 1); none with test mode on
     this.breakGaveUp = due || !((this.runQuiz?.answered ?? 0) > 0);

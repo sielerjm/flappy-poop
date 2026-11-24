@@ -4390,6 +4390,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(quitBox.x, quitBox.y);
         await sleep(200);
         const armed = await sideNow();
+        // The hold (plan 35, 4.6): a second tap inside explainMinMs does nothing, the button dimmed.
+        await tapAt(quitBox.x, quitBox.y);
+        await sleep(150);
+        const held = await evaluate(`JSON.stringify({ held: ${play}.breakQuitHeld(), state: ${play}.state, lb: ${play}.levelBreak, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
+        ok(held.held && held.state === 'paused' && held.lb && !held.over, `a quick second tap on the armed Quit does nothing while it is held (${JSON.stringify(held)})`);
+        for (let i = 0; i < 40 && (await evaluate(`${play}.breakQuitHeld()`)); i += 1) await sleep(100);
         await tapAt(quitBox.x, quitBox.y);
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Over')`)); i += 1) await sleep(100);
         const quitOver = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), state: ${play}.state, gaveUp: ${play}.breakGaveUp })`).then(JSON.parse);
