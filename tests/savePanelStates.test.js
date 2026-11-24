@@ -305,16 +305,58 @@ test("Create user stores the name and opens the popup on the user code; Got it o
   closeSavePanel();
 });
 
-test('the (?) button opens "What\'s on this page" over the dashboard; Got it closes it', async () => {
+// Michael's playtest (24 Nov, after 44.5): the help card reflowed the centred card, so the (?) moved and a
+// second tap where it had been could land on the backdrop and close the panel; from Sign out it also dropped
+// the confirm. Now the help is a layer over the card: what is under it stays exactly as it was.
+test('the (?) opens "What\'s on this page" as a layer over the dashboard, which stays as it is under it; (?) again or Got it closes it', async () => {
+  globalThis.localStorage = fakeStorage();
+  open(fakePlay({ save: { id: ME, name: 'Mike', top: [], exportedAt: null } }));
+  await tick();
+  const card = el('save-help-btn').parent;
+  const before = card.children.map((c) => c.id || c.className);
+  await el('save-help-btn').click();
+  assert.ok(shown('save-help') && shown('save-help-ok'));
+  assert.ok(el('save-help').classList.contains('over'), 'a layer over the card');
+  assert.equal(card.children.at(-1), el('save-help'), 'last in the card, over everything else');
+  assert.deepEqual(card.children.filter((c) => c !== el('save-help')).map((c) => c.id || c.className), before, 'nothing else in the card moved');
+  for (const id of ['save-who', 'save-code', 'save-clear-btn', 'save-merge-btn', 'save-profile-btn']) assert.ok(shown(id), `${id} still in place under the layer`);
+  assert.equal(document.activeElement, el('save-help-ok'));
+  await el('save-help-btn').click();
+  assert.equal(shown('save-help'), false, '(?) again closes it');
+  assert.equal(document.activeElement, el('save-help-btn'));
+  await el('save-help-btn').click();
+  await el('save-help-ok').click();
+  assert.ok(!shown('save-help') && shown('save-code') && shown('save-help-btn'), 'Got it closes it too');
+  closeSavePanel();
+});
+
+test('the (?) over the Sign out confirm keeps the confirm: closing the help goes back to it, nothing signed out', async () => {
+  globalThis.localStorage = fakeStorage();
+  const play = fakePlay({ save: { id: ME, name: 'Mike', top: [], exportedAt: null } });
+  open(play);
+  await tick();
+  await el('save-clear-btn').click();
+  assert.ok(shown('save-logout'));
+  await el('save-help-btn').click();
+  assert.ok(shown('save-help'));
+  assert.ok(shown('save-logout'), 'the confirm waits under the layer');
+  await el('save-help-ok').click();
+  assert.ok(!shown('save-help') && shown('save-logout') && shown('save-logout-confirm'), 'back on the Sign out confirm');
+  await el('save-help-btn').click();
+  await el('save-help-btn').click();
+  assert.ok(shown('save-logout'), '(?) twice: still on the confirm');
+  assert.deepEqual(play.calls, [], 'nothing signed out');
+  closeSavePanel();
+});
+
+test('Escape with the help open closes the help, not the panel; a second Escape closes the panel', async () => {
   globalThis.localStorage = fakeStorage();
   open(fakePlay({ save: { id: ME, name: 'Mike', top: [], exportedAt: null } }));
   await el('save-help-btn').click();
-  assert.ok(shown('save-help'));
-  assert.equal(el('save-help').find('save-help-ok') != null, true);
-  assert.equal(shown('save-code'), false, 'the dashboard steps aside');
-  await el('save-help-ok').click();
-  assert.ok(!shown('save-help') && shown('save-code'));
-  closeSavePanel();
+  await root().fire('keydown', { key: 'Escape' });
+  assert.ok(root().hidden === false && !shown('save-help') && shown('save-code'), 'the help closes, the dashboard stays');
+  await root().fire('keydown', { key: 'Escape' });
+  assert.equal(root().hidden, true);
 });
 
 test('📚 Education data shows signed out only when education is off for everyone and this device still needs it (AUD-037)', () => {

@@ -530,6 +530,23 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${play}.flap({ x: ${play}.readyBoxes.profile.x, y: ${play}.readyBoxes.profile.y }), true`);
         await sleep(200);
         const reopened = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, field: document.getElementById('save-name').value, focused: document.activeElement?.id === 'save-name', dashboard: ${shownIn('save-code')} && ${shownIn('save-clear-btn')} && ${shownIn('save-merge-btn')} })`).then(JSON.parse);
+        // The (?) is a layer over the card (Michael's playtest, 24 Nov): it does not move when the help opens, so a
+        // second click where it was closes the help and the panel stays, over the dashboard and over Sign out's confirm.
+        for (const over of ['dashboard', 'sign out']) {
+          if (over === 'sign out') await evaluate(`document.getElementById('save-clear-btn').click(), true`);
+          const at = await evaluate(`JSON.stringify(document.getElementById('save-help-btn').getBoundingClientRect())`).then(JSON.parse);
+          const press = async () => {
+            for (const type of ['mousePressed', 'mouseReleased']) await cdp.send('Input.dispatchMouseEvent', { type, x: at.x + at.width / 2, y: at.y + at.height / 2, button: 'left', clickCount: 1 });
+            await sleep(200);
+          };
+          const seen = () => evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, help: Boolean(document.getElementById('save-help')?.isConnected), y: document.getElementById('save-help-btn').getBoundingClientRect().y, logout: Boolean(document.getElementById('save-logout')?.isConnected) })`).then(JSON.parse);
+          await press();
+          const opened = await seen();
+          await press();
+          const closed = await seen();
+          ok(opened.open && opened.help && opened.y === at.y && closed.open && !closed.help && closed.logout === (over === 'sign out'), `over the ${over}, the (?) stays put (y ${at.y} → ${opened.y}); a second click on the same spot closes the help and the panel stays${over === 'sign out' ? ', still on the confirm' : ''}`);
+          if (over === 'sign out') await evaluate(`document.getElementById('save-logout-cancel').click(), true`);
+        }
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         ok(reopened.open && reopened.field === 'Smoke' && !reopened.focused && reopened.dashboard && (await playState()) === 'ready', `tapping "${line}" opens the save panel on the player's dashboard (no keyboard raised) without starting a run`);
       }

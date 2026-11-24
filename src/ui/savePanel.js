@@ -40,6 +40,10 @@ ${panelFrameCss(PANEL_ID, { width: 420 })}
 #${PANEL_ID} .help { position: absolute; top: 8px; left: 8px; width: 40px; height: 40px; padding: 0; font-size: 18px;
   color: #f8a0c8; background: transparent; border: 2px solid #e85e96; border-radius: 50%; }
 #${PANEL_ID} .help.open { color: #1a0b14; background: #f8a0c8; }
+#${PANEL_ID} .help, #${PANEL_ID} .close { z-index: 3; }
+#${PANEL_ID} .helpcard.over { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; margin: 0;
+  padding: 56px 16px 14px; border-radius: 12px; overflow: hidden; }
+#${PANEL_ID} .helpcard.over dl { flex: 1 1 auto; min-height: 0; max-height: none; scrollbar-color: #e85e96 transparent; }
 #${PANEL_ID} .helpcard dl { margin: 0; padding-right: 6px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   max-height: max(140px, calc(100vh - 300px)); max-height: max(140px, calc(100dvh - 300px)); }
 #${PANEL_ID} .helpcard dt { margin: 8px 0 0; font-size: 15px; font-weight: bold; color: #f8a0c8; }
@@ -196,7 +200,9 @@ function build() {
   const helpTitle = h('h3');
   const helpList = h('dl');
   const helpOk = h('button', { type: 'button', id: 'save-help-ok' });
-  const helpBlock = h('div', { class: 'confirm explain helpcard', id: 'save-help' }, helpTitle, helpList, h('div', { class: 'row buttons' }, helpOk));
+  // A layer over the card, not a block in it (Michael's playtest, 24 Nov): the card keeps its size, so the (?)
+  // stays where it was, and whatever is under it (the dashboard, an open Sign out or Merge) waits as it is.
+  const helpBlock = h('div', { class: 'confirm explain helpcard over', id: 'save-help', role: 'dialog' }, helpTitle, helpList, h('div', { class: 'row buttons' }, helpOk));
 
   const doors = h('div', { class: 'doors' });
   const card = h('div', { class: 'card' }, close, helpBtn, title, intro, doors, who, whoBest, profileRow, accountRow, status);
@@ -208,23 +214,22 @@ function build() {
     if (e.target === root) closeSavePanel();
   });
   root.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeSavePanel();
+    if (e.key === 'Escape') {
+      if (help) closeHelp(); // the help first: back to what was under it
+      else closeSavePanel();
+    }
     e.stopPropagation();
   });
   newBtn.addEventListener('click', () => openFlow('newPlayer', true));
   haveBtn.addEventListener('click', () => openFlow('haveCode', true));
   back.addEventListener('click', () => openFlow(null));
   helpBtn.addEventListener('click', () => {
-    help = !help;
-    if (help) openFlow(null);
-    else render();
-    if (help) helpOk.focus();
-  });
-  helpOk.addEventListener('click', () => {
-    help = false;
+    if (help) return closeHelp();
+    help = true;
     render();
-    helpBtn.focus();
+    helpOk.focus();
   });
+  helpOk.addEventListener('click', () => closeHelp());
   explainCopy.addEventListener('click', () => onCopy(explainCopy, explainCode, 'saveCopyCode'));
   explainOk.addEventListener('click', () => {
     explain = false;
@@ -345,6 +350,13 @@ function onEduData() {
   play?.openEduData?.({ onClose: () => play.openSavePanel?.() }); // closing it comes back here (Michael, A2)
 }
 
+/** Close the (?) layer: back to what was under it, as it was, the focus on the (?). */
+function closeHelp() {
+  help = false;
+  render();
+  dom.helpBtn.focus();
+}
+
 /** Is a player signed in on this device? A stored username (plan 44). */
 function loggedIn() {
   return Boolean(getState().name);
@@ -361,8 +373,8 @@ function render() {
   if (inside && (flow === 'newPlayer' || flow === 'haveCode')) flow = null;
   if (!inside && (flow === 'logout' || flow === 'merge')) flow = null;
   if (!inside) explain = false;
-  if (!inside || explain || flow) help = false;
-  const aside = explain || help; // a card over the dashboard: the popup after Create user, or the (?) card
+  if (!inside || explain) help = false;
+  const aside = explain; // the popup after Create user stands in for the dashboard (the (?) card is a layer over it)
   const { locale } = ctx;
   const focused = inside && (flow === 'logout' || flow === 'merge'); // a confirm open: the dashboard steps aside
   // Signed out: the intro and the two doors, or one door's own screen under ‹ Back.
@@ -403,6 +415,7 @@ function render() {
   dom.accountRow.hidden = !inside || aside;
   dom.helpBtn.hidden = !inside || explain;
   dom.helpBtn.classList.toggle('open', help);
+  dom.helpBtn.setAttribute('aria-expanded', help ? 'true' : 'false');
   dom.clearBtn.classList.toggle('open', flow === 'logout');
   dom.mergeBtn.classList.toggle('open', flow === 'merge');
   if (inside && flow === 'logout') dom.accountRow.after(dom.logoutBlock);
@@ -411,8 +424,10 @@ function render() {
   else dom.mergeBlock.remove();
   if (inside && explain) dom.title.after(dom.explainBlock);
   else dom.explainBlock.remove();
-  if (inside && help) dom.title.after(dom.helpBlock);
+  if (inside && help) dom.card.append(dom.helpBlock); // last: over everything in the card but ✕ and (?)
   else dom.helpBlock.remove();
+  // Under the layer nothing takes a tap or the Tab key.
+  for (const el of dom.card.children) if (el !== dom.helpBlock && el !== dom.helpBtn && !el.classList?.contains('close')) el.inert = Boolean(inside && help);
   renderPending();
 }
 
