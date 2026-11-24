@@ -2272,7 +2272,9 @@ src/
                             best"; either way it opens the save panel, on the name
                             field while unnamed); any other tap starts); launch() swaps to the
                             plain poop frame and slides it to poopX over
-                            launchSlideMs, then start(); extra taps during the
+                            launchSlideMs (700), or againSlideMs (350) on Over's
+                            Play again (launch({ solo }); plan 35, 4.1), then
+                            start(); extra taps during the
                             slide are ignored (launching flag). Toilet mode:
                             this.toilet from the registry (session-only), toggle
                             under tap to flap, 🚽 HUD left of the score while
@@ -3319,6 +3321,7 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             mergeDayStreak, the store's merge with its floor,
                             Play.pullPlayDays, a late merge asking again
   store.test.js             best-score store incl. throwing/missing storage
+  playAgain.test.js         plan 35, 4.1: TUNING.againSlideMs is 350 and launchSlideMs 700; only Play.launch({ solo }) (Over's Play again) slides over againSlideMs
   versusEnd.test.js         plan 35, 4.3: the second finisher's half never reads "Waiting for P1…" once the match is over; both halves redrawn
   settings.test.js          settings store (incl. skipSplash, plan 35 4.2; incl. hand; a set() storage refused kept
                             for the page load and shared by the stores over it,
@@ -4073,7 +4076,9 @@ tools/
                             (no save hint, the 1080x1350 share card and its pixels:
                             dark fill, pink frame, tan poop frame with the poop; a
                             real tap on Share through a stubbed
-                            navigator.share, cancel, download fallback, Home), and
+                            navigator.share, cancel, download fallback, Home; a real
+                            click on Play again reaches 'playing' in at least
+                            againSlideMs and under launchSlideMs, plan 35, 4.1), and
                             the controller through Play.padDown / padNav (plugin
                             wiring, A / Menu / B / RT / Y, an overlay under A and B,
                             the save panel, the tray ring, the game-over ring and
@@ -4221,7 +4226,7 @@ tools/
                             the wait, a no and Resend in the same room. Plan 39's online-join-link (4.3): the
                             real page opened at ?join= takes the code out of the address, opens 🌐, keeps it
                             through a failed sign-in, joins on Retry; a gone room says the link expired.
-                            Full smoke: 44 sections, 1001 checks.
+                            Full smoke: 44 sections, 1002 checks.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
