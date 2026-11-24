@@ -9,53 +9,21 @@ import { LOCALES } from './i18n.js';
 export const CHANGELOG = [
   {
     version: '0.28.0',
-    date: '22 Nov 2026',
+    date: '24 Nov 2026',
     notes: {
       en: [
-        '🌐 Invite a friend: in 🤝 Friends, tap Invite next to a friend who is online. They see ✉️ by your name, with a ring that empties over 2 minutes; one tap puts them in your room, ready to race. ✕ turns it down.',
-        'While you wait, your room shows the time left. If the invite runs out or your friend can\'t play, tap Resend. A ✉️ count on 🤝 Friends shows invites waiting for you, and only while you are in 🌐 online.',
-        '🌐 Share now sends a link with your room\'s code: a friend who opens it lands in the online window and joins your room once signed in. A link to a room that has closed says so.',
+        '🌐 Online races now ride out real life: a dropped connection, a call or another app pauses both games until you both tap Ready, and a reload or a reopened app rejoins the race at the start of the current level. Leave asks twice, since it ends the race for both of you.',
+        '🌐 Online races are saved: the winner gets gold and the other player silver on the 🏅 board, both scores go to the 🏆 board, and 🏁 Recent races shows your last races and your biggest online rival, for your eyes only. Split-screen two-player tournaments now count on 🏅 and 🏆 too.',
+        '🤝 Friends: after a race you finished together, add the other player as a friend. See who is online, accept or decline requests, remove or block a player. Only your friends see your status, and only while you are in 🌐 online. Pair a device in 📱 Devices to see 🤝 Friends.',
+        '✉️ Invite a friend who is online from 🤝 Friends: one tap puts them in your room, ready to race. Or tap Share to send a link to your room: a friend who opens it joins once signed in.',
+        'Tap ? in the 🌐 window to learn how online races work. Online races are new, so you may hit a bug: tap 💬 to report it. Also, a held key counts as one tap online, a new race can start a minute after the last one began, and the online pause and the join keypad are easier to tap.',
       ],
       'zh-Hans': [
-        '🌐 邀请好友：在 🤝 好友里，点在线好友旁边的“邀请”。对方会在你的名字旁看到 ✉️，外圈在2分钟里慢慢变空；点一下就进入你的房间，准备比赛。点 ✕ 可以拒绝。',
-        '等待时，你的房间会显示剩下的时间。如果邀请过期或好友现在不能玩，点“再次邀请”。🤝 好友上的 ✉️ 数字是等你回应的邀请，而且只在你打开 🌐 在线时显示。',
-        '🌐 “分享”现在会发送带房间码的链接：朋友打开后会进入在线窗口，登录后就加入你的房间。如果房间已经关闭，链接会提示过期。',
-      ],
-    },
-  },
-  {
-    version: '0.27.0',
-    date: '22 Nov 2026',
-    notes: {
-      en: [
-        '🌐 Friends: after a saved online race, add the other player as a friend from the results screen or from Recent opponents in 🤝 Friends. Friends come only from races you finished together: there is no search.',
-        '🤝 Friends shows who is online, in a game or offline, with a dot and a word. Only your friends see your status, and only while you are in 🌐 online. A badge on the button counts friend requests waiting for you.',
-        'Accept or decline requests, take back your own, remove a friend, or block a player: blocking ends the friendship, stops their requests, and takes your races out of each other\'s lists. You can unblock under Blocked.',
-        'A device that is not paired yet now races and has its races saved like any other. Pair it in 📱 Devices to see 🤝 Friends and 🏁 Recent races; only a race between two paired devices lets you add each other as friends.',
-      ],
-      'zh-Hans': [
-        '🌐 好友：一场在线比赛保存后，可以在结果画面，或在 🤝 好友的“最近的对手”里，把对方加为好友。好友只能来自你们一起完成的比赛：没有搜索功能。',
-        '🤝 好友会用圆点加文字显示谁在线、在比赛中或离线。只有你的好友能看到你的状态，而且只在你打开 🌐 在线时。按钮上的数字是等你回复的好友请求。',
-        '可以接受或拒绝请求、撤回自己的请求、删除好友，或屏蔽玩家：屏蔽会结束好友关系、阻止对方再发请求，并把你们的比赛从彼此的列表中移除。在“已屏蔽”里可以取消屏蔽。',
-        '还没配对的设备现在也能比赛，比赛也会像其他设备一样保存。在 📱 设备里配对后，才能看到 🤝 好友和 🏁 最近比赛；只有两台已配对设备之间的比赛，才能让你们互加好友。',
-      ],
-    },
-  },
-  {
-    version: '0.26.0',
-    date: '21 Nov 2026',
-    notes: {
-      en: [
-        '🌐 A dropped connection, a call or a switch to another app no longer ends an online race: both games pause, say who is away, and fly on together after a 3-2-1 once you both tap Ready. Leave asks twice, because it ends the race for both of you. The screen stays on while you race.',
-        '🌐 Reload the page or reopen the app in the middle of a race and you rejoin it: you both restart the current level from its first pipe, with the score and coins you had there. A second window of the game never takes your race over.',
-        '🌐 Online races are saved: the winner gets gold and the other player silver on the 🏅 board, and both scores go to the 🏆 board. Both games must agree on the result, and the device must be paired. 🏁 Recent races in the 🌐 window shows your last races and your biggest online rival, for your eyes only.',
-        'Split screen: two-player tournaments now go to the 🏅 board too (gold and silver), and every racer with a username posts their race score to the 🏆 board.',
-      ],
-      'zh-Hans': [
-        '🌐 网络断开、来电或切到别的应用，不会再让在线比赛结束：两边的游戏一起暂停，显示谁离开了，等你们都点“准备”后，倒数3-2-1一起继续飞。“离开”要点两次，因为它会让双方的比赛都结束。比赛时屏幕会保持常亮。',
-        '🌐 比赛中途刷新页面或重新打开应用，会回到这场比赛：你们俩都从当前关卡的第一根管子重新开始，分数和金币和当时一样。游戏的第二个窗口不会抢走你的比赛。',
-        '🌐 在线比赛会保存：赢家在 🏅 榜上得金牌，另一位得银牌，双方的分数都会记到 🏆 榜上。两边的游戏必须对结果一致，而且这台设备要已配对。🌐 窗口里的 🏁 最近比赛会显示你最近的比赛和在线最大对手，只有你能看到。',
-        '分屏：双人锦标赛现在也会记到 🏅 榜上（金牌和银牌），每位有用户名的玩家，比赛分数都会记到 🏆 榜上。',
+        '🌐 在线比赛更经得起意外了：网络断开、来电或切到别的应用时，两边的游戏一起暂停，等你们都点“准备”再继续；比赛中途刷新页面或重新打开应用，会从当前关卡的开头回到比赛。“离开”要点两次，因为它会让双方的比赛都结束。',
+        '🌐 在线比赛会保存：赢家在 🏅 榜上得金牌，另一位得银牌，双方的分数都会记到 🏆 榜上；🏁 最近比赛会显示你最近的比赛和在线最大对手，只有你能看到。分屏的双人锦标赛现在也会记到 🏅 和 🏆 榜上。',
+        '🤝 好友：和对方一起完成一场比赛后，可以把对方加为好友。可以看到谁在线，接受或拒绝请求，删除或屏蔽玩家。只有你的好友能看到你的状态，而且只在你打开 🌐 在线时。在 📱 设备里配对后，才能看到 🤝 好友。',
+        '✉️ 在 🤝 好友里邀请在线的好友：对方点一下就进入你的房间，准备比赛。也可以点“分享”发送房间链接：朋友打开后，登录就会加入你的房间。',
+        '在 🌐 窗口里点 ? 可以看在线比赛怎么玩。在线比赛是新功能，可能会有问题：点 💬 告诉我们。另外，在线时按住按键只算一次点击，新的一场要在上一场开始一分钟后才能开始，暂停画面和输入房间码的键盘也更好点了。',
       ],
     },
   },
