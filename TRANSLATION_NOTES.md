@@ -521,6 +521,16 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 每场比赛比平常短。得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多，最后看谁先冲过最后一条终点线。两人都在终点线等候时，点 🏅 赛程 可查看对阵。
 胜者登上领奖台 🥇 🥈（3 名或以上玩家时还有 🥉）。3 名或以上玩家时，用用户码加入的玩家，奖牌会记到 🏅 榜上；访客不会保存。 |
 | tournamentGotIt | Got it | 知道了 |
+| onlineHowTitle | How online races work (plan 39: the ? page's title while 🌐 is on) | 在线比赛怎么玩 |
+| onlineHowBody | Race one friend on the same course, each on your own phone or computer. Only your username is shared.
+To invite a friend: tap Create room, then send them the 6-digit code, or tap Share to send a link. When they ask to race, tap Let in. A friend in 🤝 Friends can get an Invite instead: they join straight in.
+To join a friend: tap Join with code and type their code, or open their link. Then you both tap Ready, and the race starts after 3, 2, 1.
+The race follows tournament rules: the higher score wins; a tie goes to fewer crashes, then more finish lines crossed first. Saved races go on the 🏅 and 🏆 boards. Rematch races again.
+Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on this screen, knockout style, for the podium 🥇 🥈 🥉. (plan 39: one paragraph per line; the button words match onlineCreate, onlineShare, onlineLetIn, onlineJoin, friendInvite, onlineReady, onlineRematch) | 和一位朋友在同一条赛道上比赛，各用自己的手机或电脑。只会显示你的用户名。
+邀请朋友：点“创建房间”，把 6 位数房间码发给对方，或点“分享”发送链接。对方想和你比赛时，点“让对方进来”。🤝 好友 里的朋友也可以直接点“邀请”：对方会直接加入。
+加入朋友：点“输入房间码加入”并输入对方的房间码，或打开对方的链接。然后两人都点“准备”，倒数 3、2、1 后开始比赛。
+比赛规则和锦标赛一样：得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多。保存的比赛会记到 🏅 和 🏆 榜上。点“再来一局”可以再比一次。
+锦标赛：关掉 🌐（宽屏才有），2 到 8 名玩家在这台设备上两两比赛，淘汰制，争夺领奖台 🥇 🥈 🥉。 |
 | dailyTitle | 🌞 DAILY DUMP | 🌞 每日一拉 |
 | dailyToday | Today's course: {level} | 今日赛道：{level} |
 | dailyBody | One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the 🌞 leaderboard; a new course starts every day at midnight UTC. | 每天只有一次机会。
@@ -674,6 +684,7 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineCreate | Create room | 创建房间 |
 | onlineJoin | Join with code | 输入房间码加入 |
 | onlineNote | Only your username is shared. No chat, no strangers: only someone with your code can join. | 只会显示你的用户名。没有聊天，也不会匹配陌生人：只有拿到你房间码的人才能加入。 |
+| onlineBetaNote | Online races are new, so you may hit a bug. Tap 💬 to report it. (plan 39: yellow, the last line of the online home; 💬 is the tray's Feedback button) | 在线比赛是新功能，可能会有问题。点 💬 告诉我们。 |
 | onlineCodeLead | Give your friend this code | 把这个房间码告诉朋友 |
 | onlineCodeExpires | Code works for {time} | 房间码有效时间：{time} |
 | onlineCodeExpired | That code expired. Here is a new one. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这个房间码过期了，这是新的房间码。 |
@@ -874,6 +885,7 @@ Inspired by Flappy Bird
 | splashSuperQ | Challenge questions: a ❓ bubble once a level in 📚 runs. Right pays 10 to 22 🌽, wrong costs up to 5. (plan 34: a NEW card on the loading splash, at most 100 characters; plan 36: once a level, 10 to 22) | 挑战题：📚 模式每关一个 ❓ 泡泡。答对得 10 到 22 🌽，答错最多扣 5。 |
 | splashStreaks | Streaks: play days in a row. Your streaks show on 🌞 and 📚, and on every player's profile. (plan 36: a NEW card again, id streaksAll, glyph 📅🔥; streaks show on every profile since 34.14) | 连续天数：连续几天玩。你的连续天数显示在 🌞 和 📚 上，也显示在每位玩家的个人资料里。 |
 | splashDaily | Daily Dump: one try a day on the same course as everyone. | 每日一拉：每天一次机会，和所有人飞同一条赛道。 |
+| splashOnline | Online races are here! Turn on 👥 and tap to start. With 🌐 on, race a friend on their own phone. (plan 39: a NEW card on the loading splash, dealt first; at most 100 characters) | 在线比赛来了！打开 👥 并点击开始。打开 🌐，就能和朋友各用自己的手机比赛。 |
 | splashTournament | Tournaments: up to 8 players, one bracket, one device. | 锦标赛：最多 8 名玩家，一张对阵表，一台设备。 |
 | splashShop | Spend corn kernels in the shop between levels. | 关卡之间可以在商店花掉玉米粒。 |
 | splashFiber | Fiber is worth +3. Grab it between pipes. | 纤维 +3 分，在管道之间吃到它。 |
@@ -888,7 +900,7 @@ Inspired by Flappy Bird
 | splashToilet | Playing on the toilet? Turn on Toilet mode. The leaderboard keeps your best on and off the toilet. | 在马桶上玩？打开“如厕模式”。排行榜会分别记录你如厕和不如厕时的最高分。 |
 | splashRectum | Level 7 is the rectum. Cross the finish line to 'make it out'. | 第 7 关是直肠。冲过终点线，就能“成功脱出”。 |
 | splashLeaderboard | The leaderboard pages through all players, 25 a page. Tabs: 🌞 Daily Dump, 🏅 medals and 📚. (plan 36: pages of 25 and a fourth 📚 tab; “分页” = tabs here, as on the board) | 排行榜分页显示所有玩家，每页 25 名。分页：🌞 每日一拉、🏅 奖牌和 📚。 |
-| splashTwoPlayer | On a wide screen, toggle 👥 to race friends two at a time, up to 8 players. | 在宽屏上打开 👥，和朋友两人一组比赛，最多 8 名玩家。 |
+| splashTwoPlayer | Toggle 👥 to race friends: up to 8 on one wide screen, or one friend online. (plan 39: 👥 shows on phones too, where it opens 🌐) | 打开 👥 和朋友比赛：宽屏上最多 8 名玩家，或在线和一位朋友比赛。 |
 | splashUserCode | Your user code moves your name, scores, profile and streaks to another device. | 用户码能把你的名字、分数、个人资料和连续天数带到另一台设备。 |
 | splashController | You can play with a game controller: A flaps, RT farts, Menu pauses. (plan 36: A / RT / Menu as in How to play; 起飞 = flap, the game’s word) | 可以用游戏手柄来玩：A 起飞，RT 放屁，Menu 暂停。 |
 | splashLowPower | Battery saver mode or low power mode can impact game performance. (plan 28, 4.7: a loading-screen tip for every device; Michael's words, general on purpose: Apple's name and Android's both) | 省电模式或低电量模式可能会影响游戏性能。 |

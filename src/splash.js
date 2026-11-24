@@ -33,6 +33,9 @@ const badge = (id) => achievementById(id)?.glyph ?? '';
  * their own. A feature worth keeping for good gets reworded as a hint.
  */
 export const SPLASH_NOTES = [
+  // plan 39 (Michael, 24 Nov, before the push): online races, NEW first on every device. featureMax keeps the
+  // newest 4 features, so 👤 profile ages out of the deck (its hint lives on in the 🏆 card).
+  { id: 'online', kind: 'feature', glyph: '🌐', key: 'splashOnline' },
   // plan 36 (Michael: "show as NEW again"): the streak card, reworded for streaks on every profile (34.14), under
   // a new id so every device deals it first as NEW once more; it was 'streaks' (plan 34). Its glyph pairs 📅 with
   // 🔥, the game's streak sign (Michael at Preview A, 18 Nov); 🔥 alone stays the score_250 badge's.

@@ -26,6 +26,7 @@ export function lobbyCss(id) {
 #${id} .ttl.low { color: #ff8da8; }
 #${id} .slot .mark { font-size: 14px; color: #c9b8dc; white-space: nowrap; }
 #${id} .slot .mark.ok { color: #9be89b; font-weight: bold; }
+#${id} .note + .share { margin-top: 8px; } /* the home's note no longer sits on Recent races | Devices */
 `;
 }
 
@@ -207,6 +208,8 @@ export function lobbyBody(ui, lobby) {
         friends,
         h('p', { class: 'note' }, tr('onlineNote')),
         devices,
+        // Michael, 24 Nov (before the push): online is new, so a yellow line under everything points at 💬 Feedback.
+        h('p', { class: 'note warn', id: 'tour-beta' }, tr('onlineBetaNote')),
       ].filter(Boolean);
     }
   }

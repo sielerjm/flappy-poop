@@ -561,3 +561,37 @@ test("2.3b Create while another page races: item 46's leave is skipped (it would
     delete globalThis.localStorage;
   }
 });
+
+test('Michael 24 Nov: the online home shows ?, which opens "How online races work" (invite first, then joining, the rules, tournaments); Got it goes back; a room hides ?', async () => {
+  const k = setup();
+  k.open();
+  await flush();
+  assert.equal(el('tour-help-btn').hidden, false, 'the online home offers ?');
+  await el('tour-help-btn').click();
+  assert.equal(el('tour-title').textContent, t('en', 'onlineHowTitle'));
+  const paras = el('tour-help').children;
+  assert.equal(paras.length, 5);
+  assert.ok(textOf(paras[1]).includes('Create room') && textOf(paras[2]).includes('Join with code'), 'how to invite, then how to join');
+  assert.ok(textOf(paras[4]).startsWith('Tournaments'), 'a line on tournaments last');
+  await el('tour-help-ok').click();
+  assert.ok(el('tour-create'), 'back on the online home');
+  await el('tour-create').click();
+  await flush();
+  assert.ok(el('tour-code'));
+  assert.equal(el('tour-help-btn').hidden, true, 'no ? in a room: the help would hold its knock and Ready');
+  closeTournamentPanel();
+});
+
+test('Michael 24 Nov: over a running Versus, ? with 🌐 off is the tournament help; with 🌐 on, the online help', async () => {
+  const k = setup({ versus: { leave: () => {} }, active: true });
+  k.open();
+  await el('tour-help-btn').click();
+  assert.equal(el('tour-title').textContent, t('en', 'tournamentHowTitle'));
+  assert.equal(el('tour-help').children.length, t('en', 'tournamentHowBody').split('\n').length);
+  await el('tour-help-ok').click();
+  await el('tour-online').click();
+  await flush();
+  await el('tour-help-btn').click();
+  assert.equal(el('tour-title').textContent, t('en', 'onlineHowTitle'));
+  closeTournamentPanel();
+});

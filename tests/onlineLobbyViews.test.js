@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { El, installDom } from './support/dom.js';
 import { t } from '../src/i18n.js';
 import { TUNING as T } from '../src/config.js';
-import { lobbyBody, lobbyMessage, lobbyTick, netSwitch, shareText } from '../src/ui/onlineLobbyViews.js';
+import { lobbyBody, lobbyCss, lobbyMessage, lobbyTick, netSwitch, shareText } from '../src/ui/onlineLobbyViews.js';
 
 installDom();
 
@@ -212,4 +212,21 @@ test('every screen draws in zh-Hans with no key left showing', () => {
     assert.ok(!/online[A-Z]|tournament[A-Z]/.test(text(k.root)), `${screen}: ${text(k.root)}`);
   }
   assert.ok(T.online.codeTtlMs > 0);
+});
+
+test('home, Michael 24 Nov: the last line is a yellow note that online is new and 💬 reports a bug (en and zh-Hans); the safety note sits clear of Recent races | Devices', () => {
+  for (const loc of ['en', 'zh-Hans']) {
+    const k = harness(fakeLobby(), loc);
+    k.ui.homeExtras = () => ({ notes: [], devices: Object.assign(new El('div'), { id: 'dev-x', className: 'share' }) });
+    k.ui.rerender();
+    const beta = k.find('tour-beta');
+    assert.ok(beta, `${loc}: the line is there`);
+    assert.equal(beta.className, 'note warn');
+    assert.equal(text(beta), t(loc, 'onlineBetaNote'));
+    assert.ok(text(beta).includes('💬'));
+    assert.equal(k.root.children.at(-1), beta, 'under everything, Devices included');
+  }
+  assert.ok(lobbyCss('p').includes('#p .note + .share { margin-top: 8px; }'));
+  const room = harness(fakeLobby({ screen: 'host', room: { phase: 'open', role: 'host', code: '482913' } }), 'en');
+  assert.equal(room.find('tour-beta'), null, 'the home only');
 });

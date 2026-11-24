@@ -670,9 +670,11 @@ function showHelp() {
   view = 'help';
   pasting = -1;
   setStatus('');
+  // 🌐 on (plan 39, Michael 24 Nov): how to invite and join first, then a line on tournaments; 🌐 off: the tournament's own.
+  const [titleKey, bodyKey] = online?.on ? ['onlineHowTitle', 'onlineHowBody'] : ['tournamentHowTitle', 'tournamentHowBody']; // named whole: tests/orphans.test.js reads them
   const ok = h('button', { type: 'button', id: 'tour-help-ok', 'data-primary': '' }, tr('tournamentGotIt'));
   ok.addEventListener('click', () => leaveHelp());
-  show(tr('tournamentHowTitle'), { close: true }, h('div', { class: 'help', id: 'tour-help' }, ...tr('tournamentHowBody').split('\n').map((line) => h('p', {}, line))), h('div', { class: 'actions' }, ok));
+  show(tr(titleKey), { close: true }, h('div', { class: 'help', id: 'tour-help' }, ...tr(bodyKey).split('\n').map((line) => h('p', {}, line))), h('div', { class: 'actions' }, ok));
 }
 
 function leaveHelp() {
@@ -867,7 +869,8 @@ function renderOnline() {
   const title = `${tr('onlineTitle')}${ctx.play?.onlineTestProject?.() ? ' 🧪' : ''}`; // 🧪: a dev host on the test project (item 38)
   const sw = netSwitch({ tr }, online, toggleOnline);
   if (st.view === 'home' && online.lobby) {
-    show(title, { close: true }, sw, ...lobbyBody(lobbyUi(), online.lobby));
+    // ? only on the online home (no room yet): the help view holds the poll's re-render, so a room's knock or Ready must not wait behind it.
+    show(title, { close: true, help: online.lobby.state?.screen === 'home' }, sw, ...lobbyBody(lobbyUi(), online.lobby));
     return;
   }
   if (st.view === 'friends' && online.friends) {
