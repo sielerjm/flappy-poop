@@ -1792,11 +1792,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`import('./src/save.js').then((m) => { const p = ${play}; p.setSaveState(m.saveLocal({ ...p.save, top: [{ score: 5, toilet: false, level: 1 }] })); localStorage.setItem(${JSON.stringify(TT.bestKey)}, '5'); return true; })`);
         const beat = await runAndDie(9, `${play}.flap(), true`);
         ok(beat.texts.includes(pb) && !beat.card.includes(pb) && beat.again, `a run that beats the best (9 > 5) shows "${pb}" on the panel, not on the card; Play again is offered`);
+        // Plan 35, 4.1: the page notes the frame Play reaches 'playing' after the click (Play again's slide is againSlideMs, not launchSlideMs).
+        await evaluate(`(() => { window.__againAt = performance.now(); window.__againPlaying = null; const tick = () => { if (${play}.state === 'playing' && !__flappy.scene.isActive('Over')) { window.__againPlaying = performance.now(); return; } requestAnimationFrame(tick); }; requestAnimationFrame(tick); return true; })()`);
         await tapAt(beat.again.x, beat.again.y);
         const restarted = await waitUntil(`!__flappy.scene.isActive('Over') && ${play}.state === 'playing'`);
+        const slideMs = await evaluate(`window.__againPlaying == null ? null : Math.round(window.__againPlaying - window.__againAt)`);
         const flag = await evaluate(`__flappy.registry.get('playAgain')`);
         const lower = await runAndDie(3);
         ok(restarted && flag === false && !lower.texts.includes(pb), `a real click on Play again starts a new run at once (flag cleared: ${flag}); a lower score shows no best line`);
+        ok(slideMs != null && slideMs >= TT.againSlideMs && slideMs < TT.launchSlideMs, `Play again's slide is the quick one: click to flying ${slideMs} ms (at least againSlideMs ${TT.againSlideMs}, under launchSlideMs ${TT.launchSlideMs})`);
         // Wide, 👥 on: Play again still starts a one-player run, and Home after it stays home.
         await evaluate(`(__flappy.scene.stop('Over'), __flappy.registry.set('versus', true), ${play}.scene.restart(), true)`);
         await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });

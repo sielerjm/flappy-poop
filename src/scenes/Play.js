@@ -811,7 +811,8 @@ export class Play extends Phaser.Scene {
    * from the ready screen (a tap, Space, ↑, the pad's A: all arrive here with no options) opens the
    * 📚 popup instead and nothing starts (plan 26, A2: Michael asked); its Play starts the run
    * (startFromEduIntro: `intro` false). Play again (`solo`), a Daily Dump and a match half go
-   * straight in, and a popup that cannot open never blocks the run.
+   * straight in, and a popup that cannot open never blocks the run. Play again's slide takes
+   * againSlideMs (350 ms), every other start launchSlideMs (700 ms).
    */
   launch({ hold = false, daily = false, solo = false, intro = true } = {}) {
     if (this.launching || this.state !== 'ready') return;
@@ -839,7 +840,7 @@ export class Play extends Phaser.Scene {
       x: this.poopX,
       y: GAME_HEIGHT / 2,
       scale: T.spriteDisplayScale,
-      duration: T.launchSlideMs,
+      duration: solo ? T.againSlideMs : T.launchSlideMs, // Play again's is the quicker one (plan 35, 4.1)
       ease: 'Sine.easeInOut',
       onComplete: () => {
         this.launchTween = null;

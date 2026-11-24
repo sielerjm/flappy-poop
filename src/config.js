@@ -66,6 +66,7 @@ export const TUNING = {
   streakMarkPx: { dx: 30, dy: 30, eduDy: 24, fontPx: 24, color: '#ffb347' }, // the streak subscripts on the 🌞 and 📚 (plan 34): offset from the glyph's centre (the 📚's mirrors its gold due count at −24), size and colour
   saveClearConfirmMs: 4000, // ms a first tap on the save panel's Clear stays armed: a second tap inside it signs this device out
   launchSlideMs: 700, // ms the poop slides from its ready spot to poopX() on the start tap
+  againSlideMs: 350, // ms the same slide takes on Over's Play again (plan 35, 4.1: Michael's pick from preview E, 24 Nov); a start from home keeps launchSlideMs
   readyTitlePx: 72, // px font size of the FLAPPY POOP title on the ready screen
   readyPoopScale: 1.5, // × spriteDisplayScale for the speech-bubble poop on the ready screen (shrinks back during the slide)
   toiletOffColor: 0x6a6a6a, // toggle track when off (grey)
