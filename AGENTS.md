@@ -230,7 +230,7 @@ count (− / +, new rows rolled as Guests, so Start is one tap) and a row per pl
 save is never read or written; one row per player id), a **Guest** (`rollGuestName`: AdjectiveNoun###,
 ≤ 16 code points, clean words) or **Use my player** (`claimHost`, once, needs a username); a player with a username opens the lobby already
 as row 1 (`tournamentPanel.js` makes it as that button does), else two Guests; the card's **?**
-opens the help card (`view: 'help'`, Got it back to the lobby), its ✕ / Esc / the pad's B leaves for
+opens the help card (`view: 'help'`, Got it back to the lobby; with 🌐 on it reads `onlineHowTitle` / `onlineHowBody`, how to invite and join first, then a line on tournaments, else `tournamentHowTitle` / `tournamentHowBody`; the online home shows **?** too, a room screen does not, since the help view holds the poll's re-render), its ✕ / Esc / the pad's B leaves for
 single player (a paste field closes first). The lobby rows outlive the panel (module state), so the next
 👥 session starts with the last players. **Start** draws a seeded World Cup bracket (`createTournament`
 → `buildBracket(players, order)`: 2, 4 or 8 slots, byes at most one per first-round pair on a fixed
@@ -411,7 +411,7 @@ square `crop`; the emoji if it fails), else the emoji; a note about something th
 that badge's glyph via `achievementById` (the hints include 🔋 battery saver / low power mode, for every
 device: plan 28, 4.7). Cards are dealt from a shuffled deck kept in `flappyPoop.splash`
 (`nextNote`: a feature this device never showed comes first; every card once per cycle; a reshuffle
-never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features; the newest are 📅🔥 day streaks (plan 36: reworded for streaks on every profile and dealt as NEW again under the id `streaksAll`, it was `streaks`), ❓ challenge questions, plan 34, then 📚 education, plan 28; the ❓ card leaves the pool with education). The player
+never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features; the newest are 🌐 online races (plan 39, `online`, 24 Nov: dealt first as NEW; it aged 👤 profile out), 📅🔥 day streaks (plan 36: reworded for streaks on every profile and dealt as NEW again under the id `streaksAll`, it was `streaks`), ❓ challenge questions, plan 34, then 📚 education, plan 28; the ❓ card leaves the pool with education). The player
 browses at any time (swipe or mouse drag, ‹ ›, ← →, the d-pad by its own `getGamepads` poll, since
 Phaser's pad plugin is bound only in Play); the first browse stops the `hintMs` auto-advance. Boot
 drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` hands
@@ -1998,7 +1998,10 @@ src/
                             Share sends joinLink(code) alone, no line before it (item 70, N1);
                             Copy copies the code alone. The 🌐 row locked on (a screen too
                             narrow to split) reads onlineSwitchOnSub, with no line saying why
-                            (item 70, N4). tests/onlineLobbyViews.test.js.
+                            (item 70, N4). The home ends with a yellow onlineBetaNote
+                            (#tour-beta, `note warn`: online is new, 💬 reports a bug; 24 Nov);
+                            `.note + .share` spaces the safety note off Recent races | Devices.
+                            tests/onlineLobbyViews.test.js.
     onlineFriendsViews.js   Online race (🌐, plan 39, 3.3, Preview G) the 🤝 Friends button
                             with its badge (requests waiting; online mode only) and the
                             Friends screen: requests (Accept | Decline), friends with a
