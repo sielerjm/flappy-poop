@@ -767,9 +767,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => {
           globalThis.__fetchPg = globalThis.fetch;
           globalThis.__pageAsks = [];
-          const N = 60;
+          globalThis.__pgN = 60; // the board's size (plan 35, 4.5 sets 50 below)
+          const N = () => globalThis.__pgN;
           const name = (p) => (p === 40 || p === 52 ? 'PageTester' : 'Pg' + p);
-          const pagePlaces = (b) => { const off = b.p_offset ?? 0; const lim = b.p_limit ?? 25; return Array.from({ length: Math.max(0, Math.min(lim, N - off)) }, (_, k) => off + k + 1); };
+          const pagePlaces = (b) => { const off = b.p_offset ?? 0; const lim = b.p_limit ?? 25; return Array.from({ length: Math.max(0, Math.min(lim, N() - off)) }, (_, k) => off + k + 1); };
           const withMe = (places, mk) => (places.includes(40) ? places.map(mk) : [...places.map(mk), mk(40)]).sort((a, b) => a.rank - b.rank);
           globalThis.fetch = async (url, init) => {
             const u = String(url);
@@ -779,10 +780,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
             if (['score_board', 'daily_board', 'tournament_board', 'education_board'].includes(fn)) globalThis.__pageAsks.push([fn, 'p_offset' in b ? b.p_offset : null]);
             const places = pagePlaces(b);
             if (fn === 'score_board') return json(places.map((p) => ({ name: name(p), score: 700 - 5 * p, toilet: p === 52, level: 3 })));
-            if (fn === 'player_rank') return json(b.p_toilet ? { rank: 52, total: N, score: 440, toilet: true, level: 3 } : { rank: 40, total: N, score: 500, toilet: false, level: 3 });
-            if (fn === 'daily_board') return json(withMe(places, (p) => ({ rank: p, name: name(p), score: 900 - p, level: 5, pipes: 10, me: p === 40, total: N })));
+            if (fn === 'player_rank') return json(b.p_toilet ? { rank: 52, total: N(), score: 440, toilet: true, level: 3 } : { rank: 40, total: N(), score: 500, toilet: false, level: 3 });
+            if (fn === 'daily_board') return json(withMe(places, (p) => ({ rank: p, name: name(p), score: 900 - p, level: 5, pipes: 10, me: p === 40, total: N() })));
             if (fn === 'tournament_board') return json(withMe(places, (p) => ({ rank: p, name: name(p), best_score: 10, gold: 100 - p, silver: 0, bronze: 0, events: 3, me: p === 40 })));
-            if (fn === 'education_board') return json(places.map((p) => ({ rank: p, name: 'Pg' + p, grade: 90 - p / 10, runs: 4, me: false, total: N })));
+            if (fn === 'education_board') return json(places.map((p) => ({ rank: p, name: 'Pg' + p, grade: 90 - p / 10, runs: 4, me: false, total: N() })));
             return new Response('{"message":"stub"}', { status: 503 });
           };
           return import('./src/config.js').then((m) => { globalThis.__apiPg = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; });
@@ -896,6 +897,24 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const am = await asks();
         ok(m1.tab === 'medals' && m1.label === '1-25' && m1.footer.includes('#40') && m2.label === '26-50' && m2.first === '26.' && m2.pink === 1 && m2.footer.includes('#40'), `🏅 pages too: "${m1.label}" then "${m2.label}", the player's place in the footer on both ("${m2.footer}")`);
         ok(e1.tab === 'education' && e1.label === '1-25' && e2.label === '26-50' && e2.first === '26.' && e2.last === '50.' && am.some(([fn, o]) => fn === 'tournament_board' && o === 25) && am.some(([fn, o]) => fn === 'education_board' && o === null) && am.some(([fn, o]) => fn === 'education_board' && o === 25), `📚 pages too: "${e1.label}" then "${e2.label}" (${JSON.stringify(am)})`);
+        // A board of exactly 50 (plan 35, 4.5): page 2 is the last, › greyed, on 🏆 (no total) and 🏅 (no
+        // total) alike: the page asked one row past it (p_limit 26) and none came back.
+        await evaluate(`(globalThis.__pgN = 50, globalThis.__pageLimits = [], true)`);
+        await evaluate(`(() => { const f = globalThis.fetch; globalThis.__fetchPg50 = f; globalThis.fetch = (url, init) => { if (init?.body) { const b = JSON.parse(init.body); if ('p_limit' in b) globalThis.__pageLimits.push(b.p_limit); } return f(url, init); }; return true; })()`);
+        await pgTab(0);
+        const f1 = await pgView();
+        await pgTap(1);
+        const f2 = await pgView();
+        await pgTab(2);
+        const g1 = await pgView();
+        await pgTap(1);
+        const g2 = await pgView();
+        await pgTap(1);
+        const g3 = await pgView();
+        await asks();
+        const limits = await evaluate(`JSON.stringify(globalThis.__pageLimits)`).then(JSON.parse);
+        await evaluate(`(globalThis.fetch = globalThis.__fetchPg50, globalThis.__pgN = 60, true)`);
+        ok(f1.label === '1-25' && f1.next && f2.label === '26-50' && f2.n === 25 && !f2.next && g1.label === '1-25' && g1.next && g2.label === '26-50' && !g2.next && g3.label === '26-50' && limits.length > 0 && limits.every((l) => l === 26), `a board of exactly 50: 🏆 and 🏅 stop at "${f2.label}" / "${g2.label}" with › greyed, no empty page (asked p_limit ${[...new Set(limits)].join(', ')})`);
         await closeTop('Leaderboard');
         await sleep(300);
         await evaluate(`(globalThis.fetch = globalThis.__fetchPg, __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__apiPg; return import('./src/save.js'); }).then((m) => (${P}.setSaveState(m.saveLocal(${saved})), true)))`);
