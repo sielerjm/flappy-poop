@@ -53,6 +53,8 @@ Audio files live in `assets/sfx/`. Every file there must be named in `CREDITS.md
 | `sfx/ShopOpenClose.mp3` | The level-break shop opening and closing. Via Pixabay. See `CREDITS.md`. |
 | `sfx/ToiletFlush_Win.mp3` | The toilet flush when GO appears in a two-player countdown. "Toilet Flush 1" by FreeSounds-4U via Pixabay. See `CREDITS.md`. |
 
+Re-encodes (plan 35, 2.2): `ToiletFlush_Win.mp3` (mono, 80 kbps, 48 kHz) and `fart_accelerate.mp3` (mono, 48 kbps, 24 kHz), both CBR with `ffmpeg -i <original> -map_metadata -1 -ac 1 -c:a libmp3lame -b:a <rate>`, accepted by ear. Keep a clip's duration when re-encoding: a super fart lasts exactly `fart_accelerate`'s length (`TUNING.beans.powerMs`, 4344 ms). `NewLevel.mp3` stays the original stereo 256 kbps encode: a mono or 96 kbps joint-stereo version lost the A/B.
+
 ## Background layers (art contract)
 
 The background is a **solid colour per level** (`LEVEL_COLORS` in `src/config.js`, cycling, softened by `levels.whiteBlend`, crossfaded between levels at the break) with one or more **transparent PNG overlay layers** on top. Each layer is a `tileSprite` listed in `BACKGROUND.layers` (`key`, `parallax`) and scrolls at its own fraction of the pipe speed (villi 0.25). Pipes, items, the poop and the two strips draw above all layers; the ceiling strip (top 128 px) and the ground strip (bottom 128 px) are separate tileSprites in front of the pipes at full pipe speed (`ceilingHeight` / `groundHeight`), and each hides that part of every layer. The poop dies at either strip's edge and the pipe gap keeps `gapMargin` inside both.
