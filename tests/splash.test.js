@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { SPLASH_NOTES, splashPool, nextNote, createBrowser, swipeIntent, createSplashStore, splashReady, setSplashProgress, startSplash, ringTarget, ringStep, ringCachedLoad, splashArtUrl } from '../src/splash.js';
+import { SPLASH_NOTES, splashPool, nextNote, createBrowser, swipeIntent, createSplashStore, splashReady, setSplashProgress, startSplash, ringTarget, ringStep, ringCachedLoad, splashArtUrl, skipWanted } from '../src/splash.js';
 import { ACHIEVEMENTS } from '../src/achievements.js';
 import { LOCALES, catalogFor } from '../src/i18n.js';
 import { createRng, VERSION } from '../src/logic.js';
@@ -389,4 +389,26 @@ test('ringStep fast: empty to full in about 300 ms at any frame rate, monotone, 
   assert.equal(ringStep(0.5, 0.3, 16, T, true), 0.5, 'a lower target does not pull it back');
   assert.equal(ringStep(0.2, 1, 5000, T, true), ringStep(0.2, 1, S.ringFrameCapMs, T, true), 'a long frame still counts as ringFrameCapMs');
   assert.equal(ringStep(0, 1, 16), ringStep(0, 1, 16, T, false), 'fast is off unless asked for');
+});
+
+test('skipWanted (plan 35, 4.2): Settings\' Skip to home when loaded, read from the settings store; off by default, and storage that cannot be read keeps the splash', () => {
+  const store = (raw) => {
+    const m = new Map(raw === undefined ? [] : [[T.settingsKey, raw]]);
+    return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) };
+  };
+  assert.equal(skipWanted(store()), false, 'nothing stored: the splash waits for Continue');
+  assert.equal(skipWanted(store(JSON.stringify({ skipSplash: true }))), true);
+  assert.equal(skipWanted(store(JSON.stringify({ skipSplash: false, sound: false }))), false);
+  assert.equal(skipWanted(store(JSON.stringify({ skipSplash: 'yes' }))), false, 'junk is off');
+  assert.equal(skipWanted(store('{not json')), false, 'corrupt is off');
+  assert.equal(skipWanted({ getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } }), false, 'blocked storage is off');
+  assert.equal(skipWanted(null), false, 'no storage is off');
+});
+
+test('the skip (plan 35, 4.2): Continue lighting presses itself when skipWanted, so the full ring shows and the failed state (retry) never skips', () => {
+  const src = readFileSync(new URL('../src/splash.js', import.meta.url), 'utf8');
+  const light = src.slice(src.indexOf('const light = () => {'), src.indexOf('const progress = (p) => {'));
+  assert.match(light, /if \(removed \|\| isReady \|\| failedState\) return;/, 'light never runs on a failed splash');
+  assert.match(light, /if \(skipWanted\(\)\) press\(\);/, 'light presses Continue itself');
+  assert.ok(light.indexOf('isReady = true') < light.indexOf('skipWanted()'), 'after isReady, so press() goes on');
 });

@@ -94,6 +94,7 @@ export const SECTIONS = [
   { name: 'online-friends', needs: [], about: "friends and online status (plan 39, 3.3, Preview G), on a stand-in transport under Play (no network): the 🌐 window beats once linked; the online home's 🤝 Friends with its badge; the Friends screen's order (a request, friends online → in a game → offline with dot and word, a request sent, a recent opponent, Blocked closed); Accept, Add friend, ⋯ Block asked twice, Back with the badge read again; ✕ out of 🌐 says offline once" },
   { name: 'online-invites', needs: [], about: "invites, the ✉️ (plan 39, 4.2, Preview I), on a stand-in transport under Play (no network) on a 320 phone: invite_list once linked and the topic it names; ✉️ 1 on 🤝 Friends; the inviting 🟢 friend first with the ✉️ and its time, the buttons inside the row under a 16-character name (Michael's ask); a topic invite adds one; the ✉️ tapped: the ready screen as the guest; Invite on a 🟢 friend: the room screen waiting, their no with Resend, Resend in the same room" },
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
+  { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -7871,6 +7872,57 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await evaluate(`(globalThis.__jl.gone = true, __flappy.scene.getScene('Play').openVersusWindow({ join: '730155' }), true)`);
       ok(await until(`(document.getElementById('tour-status')?.textContent ?? '') === 'This invite has expired. Ask your friend for a new one.' && Boolean(document.getElementById('tour-keys'))`), 'a gone room: "This invite has expired", on the join screen');
       await evaluate(`(document.getElementById('tour-close')?.click(), document.getElementById('tour-close')?.click(), true)`);
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+    });
+
+    await section('skip-splash', async () => {
+      // Skip to home when loaded (plan 35, 4.2). The live board blocked at the browser, as blocked-storage does.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const ex0 = exceptions.length;
+      const play = `__flappy.scene.getScene('Play')`;
+      const SETTINGS = `__flappy.scene.getScene('Settings')`;
+      await chrome('settings');
+      for (let i = 0; i < 20 && !(await active('Settings')); i += 1) await sleep(100);
+      const row0 = await evaluate(`JSON.stringify({ text: ${SETTINGS}.splashLabel.text, stored: ${play}.settings.load().skipSplash, scale: ${SETTINGS}.splashLabel.scaleX, right: ${SETTINGS}.splashLabel.getBounds().right, panelRight: ${SETTINGS}.cameras.main.width / 2 + 300 })`).then(JSON.parse);
+      await evaluate(`${SETTINGS}.splashLabel.emit('pointerdown'), true`);
+      const row1 = await evaluate(`JSON.stringify({ text: ${SETTINGS}.splashLabel.text, stored: ${play}.settings.load().skipSplash })`).then(JSON.parse);
+      await closeTop('Settings');
+      await sleep(TT.pauseResumeLockoutMs + 100);
+      ok(row0.text === 'Skip to home when loaded   OFF' && row0.stored === false && row0.scale <= 1 && row0.right < row0.panelRight && row1.text === 'Skip to home when loaded   ON' && row1.stored === true, `Settings' Skip to home when loaded: off by default, inside the panel (scale ${row0.scale.toFixed(2)}), a tap turns it on and stores it (${JSON.stringify({ row0, row1 })})`);
+      // A reload with it on: nothing pressed, the splash goes once Continue lights and Play reaches its ready screen.
+      const boot = async ({ press }) => {
+        await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+        let sp = null;
+        let lit = false;
+        for (let i = 0; i < 120; i += 1) {
+          await sleep(250);
+          sp = await splashNow().catch(() => null);
+          if (sp?.enabled) lit = true;
+          if (sp?.play || (sp && !sp.present && i > 4)) break;
+          if (press && sp?.enabled) break;
+        }
+        const waited = { present: Boolean(sp?.present), enabled: Boolean(sp?.enabled), play: Boolean(sp?.play) };
+        if (press && sp?.enabled) {
+          await sleep(1500); // lit and left alone: it must still wait
+          const still = await splashNow().catch(() => null);
+          waited.stillWaiting = Boolean(still?.present && still?.enabled && !still?.play);
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        let st = null;
+        for (let i = 0; i < 120 && st !== 'ready'; i += 1) {
+          await sleep(250);
+          st = await playState().catch(() => null);
+        }
+        const gone = await evaluate(`!document.getElementById('splash')`).catch(() => false);
+        return { ...waited, lit, state: st, gone };
+      };
+      const skipped = await boot({ press: false });
+      ok(skipped.state === 'ready' && skipped.gone && !skipped.stillWaiting, `with it on, a reload goes from the splash to the ready screen with no Continue press (${JSON.stringify(skipped)})`);
+      await evaluate(`${play}.settings.set({ skipSplash: false }), true`);
+      const waits = await boot({ press: true });
+      ok(waits.stillWaiting && waits.state === 'ready' && waits.gone, `with it off, Continue lit still waits for a press, then Play starts (${JSON.stringify(waits)})`);
       ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
     });
 

@@ -78,14 +78,14 @@ test('TEST_POWERS are mystery draws plus fiber and the 🏁 skip, each once (pla
   for (const p of TEST_POWERS) assert.ok(p === 'fiber' || p === 'skip' || MYSTERY_DRAWS.includes(p), `${p} is a draw openMystery knows`);
 });
 
-test('settingsLayout without test mode is the 600x860 panel', () => {
+test('settingsLayout without test mode is the 600x1010 panel (860 until plan 35, 4.2 added Skip to home when loaded and its hint)', () => {
   const L = settingsLayout(GAME_WIDTH, GAME_HEIGHT, T);
-  assert.deepEqual(L.panel, { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 860 });
-  assert.deepEqual(L.close, { x: GAME_WIDTH / 2 + 256, y: GAME_HEIGHT / 2 - 376 });
-  assert.deepEqual(L.rows, { title: 280, sound: 420, haptics: 540, hint: 596, hand: 680, handHint: 736, reload: 830, about: 920, version: 1010 });
+  assert.deepEqual(L.panel, { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 1010 });
+  assert.deepEqual(L.close, { x: GAME_WIDTH / 2 + 256, y: GAME_HEIGHT / 2 - 451 });
+  assert.deepEqual(L.rows, { title: 205, sound: 345, haptics: 465, hint: 521, hand: 605, handHint: 661, splash: 755, splashHint: 811, reload: 905, about: 995, version: 1085 });
   assert.equal(L.test, null);
   // The hand row: a pill between 👈 and 👉 on the row's line, the hit box the whole row.
-  assert.deepEqual(L.hand, { track: { x: 360, y: 680, width: 120, height: 56 }, emojiX: 470, leftX: 250, y: 680, width: 360, height: 88 });
+  assert.deepEqual(L.hand, { track: { x: 360, y: 605, width: 120, height: 56 }, emojiX: 470, leftX: 250, y: 605, width: 360, height: 88 });
   assert.ok(L.hand.leftX - 24 > L.panel.x - L.panel.width / 2 && L.hand.emojiX + 24 < L.panel.x + L.panel.width / 2, 'both glyphs inside the panel');
 });
 
@@ -101,8 +101,9 @@ for (const mode of [false, true]) {
     const ys = Object.entries(L.rows);
     for (const [id, y] of ys) assert.ok(y > p.top + 40 && y < p.bottom - 40, `${id} inside the panel`);
     for (let i = 1; i < ys.length; i += 1) assert.ok(ys[i][1] > ys[i - 1][1], `${ys[i][0]} below ${ys[i - 1][0]}`);
-    // Tappable rows (all but the hints under the haptics and hand toggles) sit at least 80 px apart.
-    const tappable = ys.filter(([id]) => id !== 'hint' && id !== 'handHint');
+    // Tappable rows (all but the hints under the haptics, hand and skip toggles) sit at least 80 px apart.
+    const tappable = ys.filter(([id]) => id !== 'hint' && id !== 'handHint' && id !== 'splashHint');
+    assert.ok(['splash', 'splashHint'].every((id) => id in L.rows), 'the Skip to home when loaded row and its hint (plan 35, 4.2)');
     for (let i = 1; i < tappable.length; i += 1) assert.ok(tappable[i][1] - tappable[i - 1][1] >= 80, `${tappable[i][0]} clear of ${tappable[i - 1][0]}`);
     assert.ok(L.close.y > p.top && L.close.x < p.right, 'close inside the panel');
   });

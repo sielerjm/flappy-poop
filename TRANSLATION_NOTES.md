@@ -167,6 +167,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | off | OFF | 关 |
 | hapticsHint | Android only — iPhone has no vibrate | 仅限 Android——iPhone 不支持震动 |
 | handHint | Bean button side in landscape | 横屏时豆子按钮的位置 |
+| skipSplash | Skip to home when loaded | 加载后直接进入主页 |
+| skipSplashHint | No Continue tap on the loading screen | 加载页无需点“继续” |
 | reloadGame | Reload game | 刷新游戏 |
 | aboutLink | About | 关于 |
 | testTitle | 🧪 TEST MODE | 🧪 测试模式 |
@@ -222,7 +224,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemLeaderboardName | Leaderboard | 排行榜 |
 | itemLeaderboardDetail | The top 25 scores. Its 🌞 tab has today's Daily Dump, its 🏅 tab the tournament medals. Tap a name to see that player's profile. Key: T. | 前25名的成绩。🌞页是今天的每日一拉，🏅页是锦标赛奖牌榜。点名字可查看该玩家的资料。按键：T。 |
 | itemSettingsName | Settings | 设置 |
-| itemSettingsDetail | Sound, haptics (Android only), the bean button's side in landscape, and Reload game to fetch the newest version. Key: S. | 音效、震动（仅限Android）、横屏时豆子按钮的位置，以及“刷新游戏”获取最新版本。按键：S。 |
+| itemSettingsDetail | Sound, haptics (Android only), the bean button's side in landscape, skipping to home once the game has loaded, and Reload game to fetch the newest version. Key: S. | 音效、震动（仅限Android）、横屏时豆子按钮的位置、加载后直接进入主页，以及“刷新游戏”获取最新版本。按键：S。 |
 | itemSoundName | Sound | 声音 |
 | itemSoundDetail | Mute or unmute the game. Key: M. On iPhone, Silent mode mutes the game - turn it off to hear sound. | 静音或取消静音。按键：M。 iPhone需关闭静音模式才有声音。 |
 | itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather before the next level. Clear the rectum and you win! The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿再进入下一关。通过直肠就赢了！顶部的进度条显示你走到了哪里。 |

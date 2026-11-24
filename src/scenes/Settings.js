@@ -1,6 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel } from '../logic.js';
+import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel, fitScale } from '../logic.js';
 import { t, toggleLabel, metaFontSize, levelLabel } from '../i18n.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
@@ -77,6 +77,28 @@ export class Settings extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    // Skip to home when loaded (plan 35, 4.2): once the game has loaded, the splash goes by itself, no
+    // Continue tap. The long label shrinks to the panel's text width.
+    const splashText = (on) => {
+      this.splashLabel.setScale(1).setText(toggleLabel(this.locale, 'skipSplash', on));
+      this.splashLabel.setScale(fitScale(this.splashLabel.width, 520));
+    };
+    this.splashLabel = this.addToggle(cx, rows.splash, '', () => {
+      const next = !this.settings.load().skipSplash;
+      this.settings.set({ skipSplash: next });
+      splashText(next);
+    });
+    splashText(cur.skipSplash);
+    this.add
+      .text(cx, rows.splashHint, t(locale, 'skipSplashHint'), {
+        ...STYLE,
+        fontSize: metaFontSize(locale),
+        color: '#c9b8dc',
+        fontStyle: 'normal',
+        wordWrap: { width: 520, useAdvancedWrap: true },
+      })
+      .setOrigin(0.5);
+
     // Reload: a home-screen app has no address bar, so this is the only way to pull a new build.
     const reload = this.add
       .text(cx, rows.reload, t(locale, 'reloadGame'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
@@ -109,7 +131,7 @@ export class Settings extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => this.close());
     // Controller focus ring: ✕, then the rows top to bottom; A is each row's own pointerdown.
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close), pressable('sound', this.soundLabel), pressable('haptics', this.hapticsLabel), pressable('hand', handZone), pressable('reload', reload), pressable('about', about), ...this.testItems, pressable('changelog', version)],
+      items: [pressable('close', close), pressable('sound', this.soundLabel), pressable('haptics', this.hapticsLabel), pressable('hand', handZone), pressable('splash', this.splashLabel), pressable('reload', reload), pressable('about', about), ...this.testItems, pressable('changelog', version)],
     });
     this.focus.show(); // only under a controller (registry padMode)
   }

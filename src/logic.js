@@ -621,7 +621,7 @@ export const HANDS = ['left', 'right'];
 // ones (plan 26; education.js NEW_ORDERS); eduNewPerLevel: the new cards a level break asks a visit, 3, 5
 // or 'all' (plan 28, Stage 3b; EDU_NEW_PER_LEVEL). (reviveGiveUpWarned, plan 26's "warned once on this device",
 // is gone since plan 26's A2: a revive's Quit warns on every card. A stored value is ignored.)
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: TUNING.education.newPerLevelDefault, eduShowHow: false, eduShowChoices: false };
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, skipSplash: false, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: TUNING.education.newPerLevelDefault, eduShowHow: false, eduShowChoices: false };
 const EDU_NEW_ORDERS = ['after', 'mixed', 'before']; // education.js NEW_ORDERS (logic.js does not import education.js)
 /** The 📚 popup's choices for new cards a level break asks a visit (plan 28, Stage 3b): a number, or 'all'. */
 export const EDU_NEW_PER_LEVEL = TUNING.education.newPerLevelChoices;
@@ -645,7 +645,7 @@ export function storedLocale(storage, key) {
 function normalizeSettings(raw) {
   const out = { ...SETTINGS_DEFAULTS };
   if (!raw || typeof raw !== 'object') return out;
-  for (const key of ['sound', 'music', 'haptics', 'education', 'eduInvited']) {
+  for (const key of ['sound', 'music', 'haptics', 'skipSplash', 'education', 'eduInvited']) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key];
   }
   // Settings from before plan 28 carry eduUnlocked: a device that was locked (or never unlocked) had no
@@ -2526,7 +2526,7 @@ export function statsLayout(cx, cy) {
 /**
  * Settings overlay geometry: the panel rect, the ✕, each row's centre y and the
  * hand row's box (👈 pill 👉, the whole row tappable). Without test mode it is a
- * 600 × 860 panel; with it the panel grows to 1240 px (20 px clear of the field's
+ * 600 × 1010 panel (860 until plan 35, 4.2 added Skip to home when loaded and its hint); with it the panel grows to 1240 px (20 px clear of the field's
  * top and bottom) and adds the test section: title, start level (◀ / ▶ hit
  * boxes), Invincible, a row of TEST_POWERS icon buttons, and Exit. Hit boxes are
  * at least trayHitMin.
@@ -2534,36 +2534,38 @@ export function statsLayout(cx, cy) {
 export function settingsLayout(width, height, t, { test = false } = {}) {
   const cx = width / 2;
   const cy = height / 2;
-  const panel = { x: cx, y: cy, width: 600, height: test ? 1240 : 860 };
+  const panel = { x: cx, y: cy, width: 600, height: test ? 1240 : 1010 };
   const top = cy - panel.height / 2;
   const bottom = cy + panel.height / 2;
   const close = { x: cx + 256, y: top + 54 };
   // The 👈 👉 hand row: a toilet-style pill between the two glyphs, its hit box the whole row.
   const handRow = (y) => ({ track: { x: cx, y, width: 120, height: 56 }, emojiX: cx + 110, leftX: cx - 110, y, width: 360, height: 88 });
   if (!test) {
-    const rows = { title: top + 70, sound: top + 210, haptics: top + 330, hint: top + 386, hand: top + 470, handHint: top + 526, reload: top + 620, about: top + 710, version: bottom - 60 };
+    const rows = { title: top + 70, sound: top + 210, haptics: top + 330, hint: top + 386, hand: top + 470, handHint: top + 526, splash: top + 620, splashHint: top + 676, reload: top + 770, about: top + 860, version: bottom - 60 };
     return { panel, close, rows, hand: handRow(rows.hand), test: null };
   }
   const rows = {
     title: top + 70,
-    sound: top + 170,
-    haptics: top + 270,
-    hint: top + 326,
-    hand: top + 400,
-    handHint: top + 456,
-    reload: top + 540,
-    about: top + 630,
-    testTitle: top + 730,
-    startLevel: top + 820,
-    invincible: top + 910,
-    powers: top + 1000,
-    exit: top + 1090,
+    sound: top + 155,
+    haptics: top + 240,
+    hint: top + 292,
+    hand: top + 360,
+    handHint: top + 412,
+    splash: top + 475,
+    splashHint: top + 525,
+    reload: top + 592,
+    about: top + 672,
+    testTitle: top + 762,
+    startLevel: top + 847,
+    invincible: top + 930,
+    powers: top + 1012,
+    exit: top + 1095,
     version: bottom - 60,
   };
   const hit = Math.max(88, t.trayHitMin);
   const arrow = (dx) => ({ x: cx + dx, y: rows.startLevel, width: hit, height: hit });
   const powers = TEST_POWERS.map((draw, i) => ({ id: draw, x: cx + (i - (TEST_POWERS.length - 1) / 2) * 96, y: rows.powers, width: hit, height: hit, icon: 72 }));
-  return { panel, close, rows, hand: handRow(rows.hand), test: { divider: top + 680, levelDown: arrow(-230), levelUp: arrow(230), powers } };
+  return { panel, close, rows, hand: handRow(rows.hand), test: { divider: top + 718, levelDown: arrow(-230), levelUp: arrow(230), powers } };
 }
 
 // --- The debug / automation handle (globalThis.__flappy; src/main.js) ---
