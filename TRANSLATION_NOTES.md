@@ -481,7 +481,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | versusGo | GO! | 出发！ |
 | versusWins | {name} WINS! | {name} 获胜！ |
 | versusDraw | DRAW | 平局 |
-| versusNotSaved | Races are not saved to the 🏆 board | 比赛分数不会记到 🏆 榜上 |
+| versusBoardLine | Named players' scores go to the 🏆 board (plan 39, 2.5: the split-screen results panel; a racer with a username, their own or a pasted save code, posts their race score to the 🏆 board, guests do not) | 有用户名的玩家，分数记到 🏆 榜上 |
 | versusEscaped | Made it out! | 顺利排出！ |
 | versusWaiting | Waiting for {name}… | 等待{name}… |
 | versusTapReady | Tap when ready | 准备好了就点一下 |
@@ -521,6 +521,16 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 每场比赛比平常短。得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多，最后看谁先冲过最后一条终点线。两人都在终点线等候时，点 🏅 赛程 可查看对阵。
 胜者登上领奖台 🥇 🥈（3 名或以上玩家时还有 🥉）。3 名或以上玩家时，用用户码加入的玩家，奖牌会记到 🏅 榜上；访客不会保存。 |
 | tournamentGotIt | Got it | 知道了 |
+| onlineHowTitle | How online races work (plan 39: the ? page's title while 🌐 is on) | 在线比赛怎么玩 |
+| onlineHowBody | Race one friend on the same course, each on your own phone or computer. Only your username is shared.
+To invite a friend: tap Create room, then send them the 6-digit code, or tap Share to send a link. When they ask to race, tap Let in. A friend in 🤝 Friends can get an Invite instead: they join straight in.
+To join a friend: tap Join with code and type their code, or open their link. Then you both tap Ready, and the race starts after 3, 2, 1.
+The race follows tournament rules: the higher score wins; a tie goes to fewer crashes, then more finish lines crossed first. Saved races go on the 🏅 and 🏆 boards. Rematch races again.
+Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on this screen, knockout style, for the podium 🥇 🥈 🥉. (plan 39: one paragraph per line; the button words match onlineCreate, onlineShare, onlineLetIn, onlineJoin, friendInvite, onlineReady, onlineRematch) | 和一位朋友在同一条赛道上比赛，各用自己的手机或电脑。只会显示你的用户名。
+邀请朋友：点“创建房间”，把 6 位数房间码发给对方，或点“分享”发送链接。对方想和你比赛时，点“让对方进来”。🤝 好友 里的朋友也可以直接点“邀请”：对方会直接加入。
+加入朋友：点“输入房间码加入”并输入对方的房间码，或打开对方的链接。然后两人都点“准备”，倒数 3、2、1 后开始比赛。
+比赛规则和锦标赛一样：得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多。保存的比赛会记到 🏅 和 🏆 榜上。点“再来一局”可以再比一次。
+锦标赛：关掉 🌐（宽屏才有），2 到 8 名玩家在这台设备上两两比赛，淘汰制，争夺领奖台 🥇 🥈 🥉。 |
 | dailyTitle | 🌞 DAILY DUMP | 🌞 每日一拉 |
 | dailyToday | Today's course: {level} | 今日赛道：{level} |
 | dailyBody | One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the 🌞 leaderboard; a new course starts every day at midnight UTC. | 每天只有一次机会。
@@ -560,7 +570,6 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | tournamentBye | bye: goes straight through | 轮空：直接晋级 |
 | tournamentBack | Back to the race | 回到比赛 |
 | tournamentBracketPill | 🏅 Bracket | 🏅 赛程 |
-| tournamentSaveTwo | Two-player tournaments aren't saved to the 🏅 board | 双人锦标赛不会记到 🏅 榜上 |
 | onlineLoadFailed | Couldn't load online play. Check your connection and try again. (plan 39, 0.2: shown in the tournament window when the 🌐 switch cannot load the online client, assets/vendor/supabase.js; play on this device still works) | 无法加载在线比赛。请检查网络后重试。 |
 | onlineBack | Back (plan 39: back to the 🌐 window's first screen) | 返回 |
 | onlineErrOffline | You're offline. Check your connection and try again. (plan 39: online play's status line, in the 🌐 window of the tournament window) | 你已离线，请检查网络后再试。 |
@@ -570,11 +579,71 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineNameTaken | That username belongs to another player. Pick another, or if it's yours, load your user code in the save panel first. | 这个用户名属于另一位玩家。请换一个；如果是你的，请先在存档面板里载入你的用户码。 |
 | onlineConnecting | Connecting | 正在连接 |
 | onlineSignInLimited | Too many new online players on this network right now (schools and phone networks share one). Try again in an hour. | 这个网络上的新在线玩家太多了（学校和手机网络常常共用一个）。请一小时后再试。 |
+| onlineLinkLimited | This device has switched players too many times this hour. Try again in an hour. (plan 39, 5.2b: the server paces one device linking new players, 10 an hour) | 这台设备这一小时里换玩家的次数太多了。请一小时后再试。 |
 | onlineDisabled | Online races are switched off right now. Try again later. | 在线比赛暂时关闭，请稍后再试。 |
-| onlineTooManyWaiting | Your player already has 3 devices waiting to be paired. Remove one from a paired device, then try again. | 你的玩家已有3台设备在等待配对。请在已配对的设备上移除一台，然后再试。 |
+| onlineTooManyWaiting | Your player already has 3 devices waiting to be paired, and all 3 are in a race. Try again once a race ends. (plan 39, 2.5: since 2.4e a fourth waiting device replaces the oldest, so this only comes when all three are racing) | 你的玩家已有3台设备在等待配对，而且都在比赛中。请等一场比赛结束后再试。 |
 | onlineStorageBlocked | This browser blocks storage, so online play only lasts until you close this page. | 这个浏览器禁止存储，所以在线游戏只能持续到你关闭本页面。 |
-| onlinePendingHome | This device isn't paired with your other devices yet. You can race by code; pair it in Devices. | 这台设备还没有和你的其他设备配对。你仍可以用房间码比赛；请在“设备”里配对。 |
 | onlineDevices | 📱 Devices | 📱 设备 |
+| onlineRaces | 🏁 Recent races (plan 39, 2.5: the 🌐 window's button beside 📱 Devices; your own saved online races) | 🏁 最近比赛 |
+| onlineRacesLead | Your last online races (the Recent races view's heading) | 你最近的在线比赛 |
+| onlineRacesNone | No saved races yet. Race a friend to start your list. | 还没有保存的比赛。和朋友比一场吧。 |
+| onlineRacesPending | Pair this device to see your races. (a device waiting to be paired cannot read its player's race history) | 配对这台设备后，才能看到你的比赛。 |
+| onlineRacesNote | Only you can see this list. (online pairings are private: they never show on the public profile) | 只有你能看到这个列表。 |
+| onlineRival | Biggest online rival (the player you lost to most in online races; the line under it reuses statsRivalLine) | 在线最大对手 |
+| onlineRaceWon | Won (a Recent races row: "Won 412–377", your score first) | 赢 |
+| onlineRaceLost | Lost (a Recent races row) | 输 |
+| onlineRaceDraw | Draw (a Recent races row: both scored the same, and every tiebreak too) | 平 |
+| friendsButton | 🤝 Friends (the 🤝 Friends button on the 🌐 online home (a yellow badge beside it counts friend requests waiting for an answer, online mode only)) | 🤝 好友 |
+| friendsLead | Players you raced and added (the Friends screen's lead line) | 和你比过赛、加了好友的玩家 |
+| friendsList | Friends ({n}) (the Friends section heading; {n} is how many friends) | 好友（{n}） |
+| friendsNone | No friends yet. Finish a saved race with someone, then add them below or on the results screen. (no friends yet (a friend can only come from a saved online race together: no search, by design)) | 还没有好友。和别人完成一场已保存的比赛，然后在下面或结果画面加对方为好友。 |
+| friendsAskedYou | Asked to be your friend (section heading: players who asked to be your friend (Accept / Decline)) | 想加你为好友 |
+| friendsYouAsked | Waiting for an answer (section heading: friend requests you sent that are not answered yet) | 等待对方回复 |
+| friendsOpponents | Recent opponents (section heading: recent online opponents you could add) | 最近的对手 |
+| friendsBlocked | Blocked ({n}) (the blocked list's toggle; {n} is how many players you blocked) | 已屏蔽（{n}） |
+| friendsPending | Pair this device to see your friends. (a device that is not paired yet (📱 Devices) cannot see friends) | 配对这台设备后才能看到好友。 |
+| friendsNote | Only your friends see whether you're online, and only while you're in 🌐 online. (the privacy line at the bottom of the Friends screen) | 只有你的好友能看到你是否在线，而且只在你打开 🌐 在线时。 |
+| friendOnline | Online (a friend's state beside 🟢: in online mode, available) | 在线 |
+| friendInGame | In a game (a friend's state beside 🟡: in an online race) | 比赛中 |
+| friendOffline | Offline (a friend's state beside ⚪: anything else) | 离线 |
+| friendAskedWhen | asked {when} (under a request's name; {when} is today / yesterday / N days ago) | {when}发来 |
+| friendSentWhen | sent {when} (under a sent request; {when} as above) | {when}发出 |
+| friendRacedWhen | raced {when} (under a recent opponent; {when} as above) | {when}比过 |
+| friendAccept | Accept (button: accept a friend request) | 接受 |
+| friendDecline | Decline (button: turn a friend request down) | 拒绝 |
+| friendTakeBack | Take back (button: withdraw a friend request you sent) | 撤回 |
+| friendAdd | Add friend (button: send a friend request to a recent opponent) | 加好友 |
+| friendRemove | Remove (button: end a friendship (asks twice)) | 删除 |
+| friendBlock | Block (button: block a player (asks twice)) | 屏蔽 |
+| friendUnblock | Unblock (button: lift your own block) | 取消屏蔽 |
+| friendRemoveConfirm | Tap Remove again to remove {name} from your friends (the first tap on Remove; {name} is the friend) | 再点一次“删除”，把 {name} 从好友中删除 |
+| friendBlockConfirm | Tap Block again: {name} can't add you, and your races leave each other's lists (the first tap on Block; {name} is the player) | 再点一次“屏蔽”：{name} 不能再加你，你们的比赛也会从彼此的列表中消失 |
+| friendAddedSent | Friend request sent to {name} (after Add friend; {name} is the player) | 已向 {name} 发送好友请求 |
+| friendNowFriends | You and {name} are friends now (after Accept, or an Add that met their own request; {name} is the player) | 你和 {name} 成为好友了 |
+| friendDeclined | You turned down {name}'s request (after Decline; {name} is the player) | 你拒绝了 {name} 的请求 |
+| friendTookBack | Request to {name} taken back (after Take back; {name} is the player) | 已撤回给 {name} 的请求 |
+| friendRemoved | {name} is no longer your friend (after Remove; {name} is the former friend) | {name} 已不再是你的好友 |
+| friendBlocked | {name} is blocked (after Block; {name} is the player) | 已屏蔽 {name} |
+| friendUnblocked | {name} is unblocked (after Unblock; {name} is the player) | 已取消屏蔽 {name} |
+| friendNotEligible | You can only add players you've finished a saved race with. (the server refused a request (no saved race together, or a block: deliberately the same words)) | 只能加和你完成过已保存比赛的玩家。 |
+| friendRateLimited | That's a lot of friend requests. Try again tomorrow. (too many requests in a day, or to one player in a week) | 好友请求太多了，明天再试吧。 |
+| friendNoRequest | That request is no longer there. (the request was taken back or answered elsewhere) | 这个请求已经不在了。 |
+| friendNoPeer | That player can't be found any more. (the player is gone (their device was removed, or two of their players were merged)) | 找不到这位玩家了。 |
+| friendResultAdd | Add {name} as a friend (button on the online results panel after a saved race; {name} is the opponent) | 加 {name} 为好友 |
+| friendResultIsFriend | {name} is your friend (the results panel when the opponent is already a friend; {name} is the opponent) | {name} 是你的好友 |
+| friendResultPair | Pair this device to add friends from your next races (the results panel's friend line on a device waiting to pair: its race is saved, but only a race between two paired devices lets the players become friends, so pairing helps the next races, not this one) | 配对这台设备后，可以从之后的比赛中加好友 |
+| friendInvite | Invite (the button on a 🟢 online friend's row on the Friends screen: sends them an invite to race (it lasts 2 minutes)) | 邀请 |
+| inviteFromSub | ✉️ invites you to race (under a friend's name on the Friends screen while their invite is live (replaces the Online word)) | ✉️ 邀请你比赛 |
+| inviteJoinLabel | Join {name}'s race (screen-reader label of the ✉️ button (a ring of the time left and m:ss); tapping it joins the friend's room; {name} is the friend) | 加入 {name} 的比赛 |
+| inviteDeclineLabel | Turn down {name}'s invite (screen-reader label of the ✕ beside the ✉️; {name} is the friend) | 拒绝 {name} 的邀请 |
+| inviteCodeLead | Invite sent. You can also give someone this code (the host's code screen after inviting a friend (the room code shows under it)) | 邀请已发出。你也可以把这个代码给别人 |
+| inviteWaiting | Waiting for {name} to answer (the host's code screen while the invite is live (the friend's row above shows ✉️ and the time left); {name} is the friend) | 等待 {name} 回应 |
+| inviteExpired | Your invite to {name} ran out. (the host's code screen once the 2 minutes are up; a Resend button follows) | 给 {name} 的邀请已过期。 |
+| inviteDeclined | {name} can't play right now. (the host's code screen when the friend turned the invite down (worded softly on purpose); a Resend button follows) | {name} 现在不能玩。 |
+| inviteResend | Resend (button on the host's code screen after an invite ran out or was turned down: sends it again in the same room) | 再次邀请 |
+| inviteUnavailable | {name} can't be invited right now. (status line when the server refuses an invite (the friend left online mode, started a race, or is no longer a friend: deliberately one message for all)) | 现在不能邀请 {name}。 |
+| inviteRateLimited | That's a lot of invites. Try again in a few minutes. (status line past the invite limits (5 a minute, 10 an hour to one friend, 100 a day)) | 邀请太多了，请过几分钟再试。 |
+| inviteGone | That invite has ended. (status line on the Friends screen when tapping a friend's ✉️ fails because the invite ran out or was taken back) | 这个邀请已经结束了。 |
 | onlineDevicesLead | Devices that use your player online | 在线使用你玩家的设备 |
 | onlineThisDevice | This device | 这台设备 |
 | onlineOtherDevice | Device {n} | 设备 {n} |
@@ -584,6 +653,7 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineLinked | added {when} | 添加于：{when} |
 | onlineToday | today | 今天 |
 | onlineDaysAgo | {n} days ago | {n}天前 |
+| onlineYesterday | yesterday (plan 39, 2.5: one day ago, in 📱 Devices and 🏁 Recent races, instead of "1 days ago") | 昨天 |
 | onlineRemove | Remove | 移除 |
 | onlineRemoveConfirm | Tap Remove again: that device leaves online play and has to be paired again. | 再点一次“移除”：那台设备会退出在线游戏，需要重新配对。 |
 | onlineRemoved | Device removed | 设备已移除 |
@@ -609,18 +679,20 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineSwitch | 🌐 Online | 🌐 在线 |
 | onlineSwitchOffSub | Off: everyone plays on this screen | 关：大家在这块屏幕上一起玩 |
 | onlineSwitchOnSub | On: race a friend on their own phone | 开：和朋友各用自己的手机比赛 |
-| onlineForced | This screen is too narrow to split, so races here are online | 屏幕太窄无法分屏，只能在线比赛 |
 | onlineLead | Race one friend on their own phone or computer | 和一位朋友比赛，对方用自己的手机或电脑 |
 | onlineOpponentNone | Opponent | 对手 |
 | onlineCreate | Create room | 创建房间 |
 | onlineJoin | Join with code | 输入房间码加入 |
 | onlineNote | Only your username is shared. No chat, no strangers: only someone with your code can join. | 只会显示你的用户名。没有聊天，也不会匹配陌生人：只有拿到你房间码的人才能加入。 |
+| onlineBetaNote | Online races are new, so you may hit a bug. Tap 💬 to report it. (plan 39: yellow, the last line of the online home; 💬 is the tray's Feedback button) | 在线比赛是新功能，可能会有问题。点 💬 告诉我们。 |
 | onlineCodeLead | Give your friend this code | 把这个房间码告诉朋友 |
 | onlineCodeExpires | Code works for {time} | 房间码有效时间：{time} |
 | onlineCodeExpired | That code expired. Here is a new one. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这个房间码过期了，这是新的房间码。 |
 | onlineShare | Share | 分享 |
 | onlineCopy | Copy | 复制 |
 | onlineCopied | Code copied | 房间码已复制 |
+| onlineLinkExpired | This invite has expired. Ask your friend for a new one. (the join screen's status line when a race's share link (?join=) names a room that no longer takes a guest (the room was closed, ran out or is full)) | 这个邀请已过期，请朋友再发一个。 |
+| onlineLinkCopied | Link copied (status line after Share on a device with no share sheet: the share text with the link that joins the room was copied) | 链接已复制 |
 | onlineHostTag | (host) | （房主） |
 | onlineWaitingOpponent | Waiting for opponent | 等待对手 |
 | onlineCancel | Cancel | 取消 |
@@ -649,17 +721,44 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlinePeerLeft | {name} left (plan 39, 1.8: the online results panel's line once the other player left; Rematch is greyed) | {name} 已离开 |
 | onlineYouWin | YOU WIN! (plan 39, 1.6d / 1.8: the online results panel's headline on the winner's phone; capitals like versusWins) | 你赢了！ |
 | onlineRematch | Rematch (plan 39, 1.6d / 1.8: the online results panel's button to race the same friend again; "Rematch ✓" once tapped) | 再来一局 |
+| onlinePausedBy | {name} paused (plan 39, 2.2: the online pause overlay's title when the other player pressed pause or opened a menu; {name} is their username) | {name} 暂停了 |
+| onlinePausedAway | {name} switched away (plan 39, 2.2: the pause overlay's title when the other player's app went to the background) | {name} 切出了游戏 |
+| onlinePausedLost | {name} lost connection (plan 39, 2.2: the pause overlay's title when nothing arrives from the other player, or they are offline) | {name} 断线了 |
+| onlinePausedOffline | You're offline (plan 39, 2.2: the pause overlay's title when this phone has no network) | 你的网络断开了 |
+| onlinePausedLink | Reconnecting… (plan 39, 2.2: the pause overlay's title while this phone's link to the race drops and comes back) | 正在重新连接… |
+| onlinePausedBusy | Server busy (plan 39, 2.2: the pause overlay's title when the online server refuses messages for a moment) | 服务器繁忙 |
+| onlinePauseTap | Tap Ready when you are set (plan 39, 2.2: the line under the pause overlay's title; the race goes on after both tap Ready and a 3-2-1) | 准备好了就点“准备” |
+| onlinePauseWaitNet | Waiting for your connection… (plan 39, 2.2: the line under the title while this phone is offline or reconnecting) | 等待网络恢复… |
+| onlineLeaveSure | Leave? (plan 39, 2.2: the pause overlay's Leave button after one tap; a second tap leaves) | 确定离开？ |
+| onlineLeaveWarn | Tap again to leave. The race ends for both of you, with no winner. (plan 39, 2.2: under the pause overlay's buttons after the first tap on Leave) | 再点一次就离开：比赛结束，双方都没有胜者。 |
+| onlineNoWinner | No winner (plan 39, 2.2: the online results panel's headline when the other player left mid-race; the line under it is onlinePeerLeft) | 没有胜者 |
+| onlineHudPaused | paused (plan 39, 2.2: under the opponent's name in the race's pill while they paused; lower case, like onlineHudSlow) | 已暂停 |
+| onlineRewindTitle | Back to {level} (plan 39, 2.3: the pause overlay's title after a reload mid-race put both players back at the start of the level they were on; {level} is levelShort, "Level 3") | 回到{level} |
+| onlineRewindTap | A reload put you both back at the start of this level. Tap Ready when you are set. (plan 39, 2.3: the line under onlineRewindTitle until this player taps Ready; then "Waiting for {name}…") | 页面重新载入，你们俩都回到本关开头。准备好了就点“准备”。 |
+| onlineRejoining | Rejoining your race… (plan 39, 2.3: the 🌐 window's status line while a reloaded page asks the server for the race it was in) | 正在重新加入比赛… |
+| onlineRaceOver | That race is over. (plan 39, 2.3: the 🌐 window's status line when a reloaded page's race has ended, or the server no longer seats this device in it) | 那场比赛已经结束了。 |
+| onlineRaceElsewhere | Your race is running in another window. (plan 39, 2.3b: the 🌐 window's status line when another page of the game on this device is racing: a second tab, the game open in Safari and as the home-screen app at once, or this page after the other one took its race over; "window" means a tab or the app) | 你的比赛正在另一个窗口中进行。 |
 | onlineErrBadCode | That's not a room code: codes are 6 digits and never start with 0 (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这不是房间码：房间码是6位数字，第一位不是0 |
 | onlineErrNoRoom | No room has that code. Check it with your friend. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 没有这个房间码的房间，请和朋友核对一下。 |
 | onlineErrInRace | This device is still in another race. Leave it there first, then try again. (plan 39, 1.8, item 46: Create or Join refused because this device is still seated in a race that never ended, for example in another tab) | 这台设备还在另一场比赛中，请先在那里离开，再试一次。 |
+| onlineClosed | Online races are switched off for now. Try again later. (plan 39, 2.5: the server's off switch is on; Create, Join and a rematch say this) | 在线比赛暂时关闭了，请稍后再试。 |
+| onlineSaving | Saving the race… (plan 39, 2.5: the online results panel, while this game reports the race to the server) | 正在保存比赛… |
+| onlineSaveWaiting | Saving: waiting for {name}'s game… ({name}: the other player; both games report, and the first waits for the second) | 正在保存：等待{name}的游戏… |
+| onlineSaved | Saved to the 🏅 and 🏆 boards (both games agreed: gold or silver on 🏅, each score on 🏆) | 已记到 🏅 和 🏆 榜上 |
+| onlineSavedNotCounted | Saved to Recent races. Not on the boards: today's race limit is reached. (10 counted races a day per pair, 20 per player) | 已记入最近比赛。今天的上榜次数已满，不上榜。 |
+| onlineSaveDisputed | Not saved: your two games saw different results | 未保存：两边的游戏看到的结果不一样 |
+| onlineSaveRefused | Not saved: this race could not be checked (too short, or a score too high for its time) | 未保存：这场比赛无法核对 |
+| onlineSaveLate | Not saved: {name}'s game did not report the race (after 30 s of waiting; a device that is not paired never reports) | 未保存：{name}的游戏没有提交这场比赛 |
+| onlineSaveFailed | Couldn't save the race. Check your connection. (every resend lost, about a minute) | 比赛没能保存，请检查网络。 |
+| onlineSaveLeft | Not saved: the race was left before the end (someone left mid-race: no winner, nothing saved) | 未保存：比赛没打完就有人离开了 |
 | onlineDevOnLive | (Dev: this device is on the live project. A 🧪 test device cannot see its rooms.) (plan 39, item 43: added after onlineErrNoRoom on a developer's own machine only; players never see it) | （开发：本设备连接的是正式项目，🧪 测试设备看不到这里的房间。） |
 | onlineDevOnTest | (Dev: this device is on the 🧪 test project. The other device must be on it too.) (plan 39, item 43: as onlineDevOnLive) | （开发：本设备连接的是 🧪 测试项目，另一台设备也必须连接测试项目。） |
-| onlineErrRateLimited | Too many wrong codes. Wait a few minutes, then try again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 输错的房间码太多了，请等几分钟再试。 |
+| onlineErrRateLimited | Too many tries. Wait a few minutes, then try again. (plan 39: the 🌐 lobby's status line, for any of the room limits: wrong codes, too many joins, a room made or a guest declined too fast; 5.3) | 尝试次数太多了，请等几分钟再试。 |
+| onlineErrTooSoon | A new race can start a minute after the last one began. Wait a moment, then try again. (plan 39, 5.2b: the 🌐 lobby's status line when the server refuses a Start; one race a minute from a host device) | 上一场比赛开始一分钟后才能开始新的比赛。请稍等，再试一次。 |
 | onlineErrBusy | Online races are busy right now. Try again in a minute. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 在线比赛现在太忙，请一分钟后再试。 |
 | onlineUpdateYou | {name} has a newer version of the game. Reload this page to update, then join again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 的游戏版本更新。请刷新本页面更新，然后重新加入。 |
 | onlineUpdateThem | {name} needs to update: ask them to reload the page, then join again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 需要更新：请对方刷新页面，然后重新加入。 |
 | onlineDeclinedGuest | {name} didn't let you in. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 没有让你进来。 |
-| onlineShareText | Race me in Flappy Poop: code {code} (plan 39, 1.6c: the share sheet's text from the host's Share button, followed by the game's link; {code} is the room code grouped, 482 913) | 来 Flappy Poop 和我比赛：房间码 {code} |
 | onlineLeftGuest | {name} left the room. (plan 39, 1.6c: the guest's status line when the host left; {name} is the host's username) | {name} 离开了房间。 |
 | onlineRoomClosed | The room closed. Ask your friend for a new code. (plan 39, 1.6c: the guest's status line when the room ran out or closed) | 房间已关闭。请向朋友要一个新的房间码。 |
 | onlineUpdateBoth | Your games don't match. Both of you reload the page, then join again. (plan 39, 1.6c: the same app version with different race rules, so both reload) | 你们的游戏版本不一致。请双方都刷新页面，然后重新加入。 |
@@ -786,6 +885,7 @@ Inspired by Flappy Bird
 | splashSuperQ | Challenge questions: a ❓ bubble once a level in 📚 runs. Right pays 10 to 22 🌽, wrong costs up to 5. (plan 34: a NEW card on the loading splash, at most 100 characters; plan 36: once a level, 10 to 22) | 挑战题：📚 模式每关一个 ❓ 泡泡。答对得 10 到 22 🌽，答错最多扣 5。 |
 | splashStreaks | Streaks: play days in a row. Your streaks show on 🌞 and 📚, and on every player's profile. (plan 36: a NEW card again, id streaksAll, glyph 📅🔥; streaks show on every profile since 34.14) | 连续天数：连续几天玩。你的连续天数显示在 🌞 和 📚 上，也显示在每位玩家的个人资料里。 |
 | splashDaily | Daily Dump: one try a day on the same course as everyone. | 每日一拉：每天一次机会，和所有人飞同一条赛道。 |
+| splashOnline | Online races are here! Turn on 👥 and tap to start. With 🌐 on, race a friend on their own phone. (plan 39: a NEW card on the loading splash, dealt first; at most 100 characters) | 在线比赛来了！打开 👥 并点击开始。打开 🌐，就能和朋友各用自己的手机比赛。 |
 | splashTournament | Tournaments: up to 8 players, one bracket, one device. | 锦标赛：最多 8 名玩家，一张对阵表，一台设备。 |
 | splashShop | Spend corn kernels in the shop between levels. | 关卡之间可以在商店花掉玉米粒。 |
 | splashFiber | Fiber is worth +3. Grab it between pipes. | 纤维 +3 分，在管道之间吃到它。 |
@@ -800,7 +900,7 @@ Inspired by Flappy Bird
 | splashToilet | Playing on the toilet? Turn on Toilet mode. The leaderboard keeps your best on and off the toilet. | 在马桶上玩？打开“如厕模式”。排行榜会分别记录你如厕和不如厕时的最高分。 |
 | splashRectum | Level 7 is the rectum. Cross the finish line to 'make it out'. | 第 7 关是直肠。冲过终点线，就能“成功脱出”。 |
 | splashLeaderboard | The leaderboard pages through all players, 25 a page. Tabs: 🌞 Daily Dump, 🏅 medals and 📚. (plan 36: pages of 25 and a fourth 📚 tab; “分页” = tabs here, as on the board) | 排行榜分页显示所有玩家，每页 25 名。分页：🌞 每日一拉、🏅 奖牌和 📚。 |
-| splashTwoPlayer | On a wide screen, toggle 👥 to race friends two at a time, up to 8 players. | 在宽屏上打开 👥，和朋友两人一组比赛，最多 8 名玩家。 |
+| splashTwoPlayer | Toggle 👥 to race friends: up to 8 on one wide screen, or one friend online. (plan 39: 👥 shows on phones too, where it opens 🌐) | 打开 👥 和朋友比赛：宽屏上最多 8 名玩家，或在线和一位朋友比赛。 |
 | splashUserCode | Your user code moves your name, scores, profile and streaks to another device. | 用户码能把你的名字、分数、个人资料和连续天数带到另一台设备。 |
 | splashController | You can play with a game controller: A flaps, RT farts, Menu pauses. (plan 36: A / RT / Menu as in How to play; 起飞 = flap, the game’s word) | 可以用游戏手柄来玩：A 起飞，RT 放屁，Menu 暂停。 |
 | splashLowPower | Battery saver mode or low power mode can impact game performance. (plan 28, 4.7: a loading-screen tip for every device; Michael's words, general on purpose: Apple's name and Android's both) | 省电模式或低电量模式可能会影响游戏性能。 |

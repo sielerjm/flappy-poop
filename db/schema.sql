@@ -65,6 +65,26 @@
 --                                      the server minted (2.4a); agreed when both devices report the same;
 --                                      a counted race goes on the 🏅 and 🏆 boards (2.4b)
 --   * online online_history()          the player's online rival and recent races, for a trusted device
+--   * online friend_list()             the player's friends, asks both ways and blocks (3.1), each named by
+--                                      a peer handle (never an id), for a trusted device
+--   * online send_friend_request(...)  ask a player raced (an agreed race from two paired devices, 3.7) to be
+--                                      friends; asks are capped
+--   * online respond_friend_request(...) accept or decline an ask
+--   * online remove_friend(...)        end a friendship, take back an ask, or turn one down
+--   * online block_user(...)           block a player raced or befriended: no friendship, no asks either way
+--   * online unblock_user(...)         lift one's own block
+--   * online online_beat(...)          this device's heartbeat while its player is in online mode (3.2),
+--                                      or word that it left; a trusted device only
+--   * online friend_statuses()         the player's friends, each online, in a game or offline (from their
+--                                      devices' heartbeats; no shared channel), for a trusted device
+--   * online send_invite(...)          invite a friend in online mode into this device's own room (4.1), by a
+--                                      peer handle; their paired devices are told on their own topic; capped;
+--                                      an invite lives INVITE_TTL (2 minutes)
+--   * online invite_list()             the live invites to the player and their recent ones out, for a
+--                                      trusted device
+--   * online accept_invite(...)        take the guest's seat of the inviting friend's room: no code to type
+--   * online decline_invite(...)       turn an invite down (the sender is told)
+--   * online cancel_invite(...)        take back one's own invite (the friend is told)
 --   Apply this file before pushing a client that calls them.
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
@@ -74,7 +94,8 @@
 -- player_achievements, player_meta, education_settings, education_public, research_participants
 -- or research_responses (nor the research_* views), run_log, run_rejects, held_scores,
 -- score_steps, board_settings, online_profiles, online_players, online_pairings, rooms,
--- join_attempts, online_secret, matches or online_settings (authenticated has nothing on any table either). Profiles are public
+-- join_attempts, online_secret, matches, online_settings, online_trust, friendships, blocks,
+-- friend_asks or online_beats (authenticated has nothing on any table either). Profiles are public
 -- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
 -- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
@@ -167,6 +188,50 @@
 --   online races, e.g. how they ended, and the devices' telemetry (owner only; plan 39, 2.4a):
 --     select status, count(*) from public.matches group by 1;
 --     select id, status, host_stats, guest_stats from public.matches order by id desc limit 20;
+--   friends (plan 39, 3.1), owner only: how many, and who blocked whom (by id):
+--     select status, count(*) from public.friendships group by 1; select * from public.blocks;
+--   one player's friend rows, e.g. a friend planted on an owner's id by M1's accepted residual (3.2r:
+--     someone who linked first, or while the owner was away 7 days, kept trust in a merge); the owner
+--     can also Remove or Block it from their Friends screen:
+--     select * from public.friendships where '<player id>' in (a_player, b_player);
+--   devices in online mode now (plan 39, 3.2), owner only:
+--     select count(*) from public.online_beats where at > now() - interval '1 minute';
+--   invites (plan 39, 4.1), owner only: the last day's, by how they ended (a pending one past its time
+--     or off its room reads expired; nothing stores that):
+--     select status, count(*) from public.invites where sent_at > now() - interval '1 day' group by 1;
+--   undo invites (plan 39, 4.1), before the narrowed pairing's undo: drop function public.send_invite(text),
+--     public.invite_list(), public.accept_invite(uuid), public.decline_invite(uuid),
+--     public.cancel_invite(uuid), public.online_invite_live(public.invites),
+--     public.online_invite_json(public.invites, text), public.online_invite_friends(text, text); restore
+--     online_unseat, join_room, online_cleanup and online_can from git (plan 39, 3.7r, 20161aa) and run this
+--     file (4.1r: join_room calls online_invites_end, so it goes back before that is dropped); then drop
+--     function public.online_invites_end(uuid), public.online_invite_told(uuid, text, text, text),
+--     public.online_user_topic(text);
+--     drop table public.invites; delete from public.rooms where source = 'invite';
+--     alter table public.rooms drop constraint rooms_source_check,
+--       add constraint rooms_source_check check (source in ('code')).
+--   online races with a waiting seat (plan 39, 3.7), owner only: saved and counted, never a friendship:
+--     select count(*) from public.matches where status = 'agreed' and (host_trusted and guest_trusted) is not true;
+--   undo the narrowed pairing (plan 39, 3.7), before online status's undo: first end every race a waiting
+--     seat reported, as the old schema would have left it (its 🏅 and 🏆 rows stay; 3.7r), or the old
+--     functions make friends and handles of them:
+--     update public.matches set status = 'abandoned' where status = 'agreed' and (host_trusted and guest_trusted) is not true;
+--     then restore finish_match,
+--     online_peer_find, online_peer_shown, friend_eligible and online_races from git (plan 39, 3.2c,
+--     4b9e28b) and run this file (without 3.7's do block); then
+--     alter table public.matches drop column host_trusted, drop column guest_trusted.
+--   undo online status (plan 39, 3.2), before the friends' undo: drop function public.friend_statuses(),
+--     public.online_beat(boolean), public.online_state(text); drop table public.online_beats.
+--   undo friends (plan 39, 3.1), before the boards' races' undo: drop function public.friend_list(),
+--     public.send_friend_request(text), public.respond_friend_request(text, boolean),
+--     public.remove_friend(text), public.block_user(text), public.unblock_user(text),
+--     public.online_friend_start(text), public.online_trusted_me(), public.online_peer_find(text, text),
+--     public.online_peer_shown(text, text),
+--     public.friend_eligible(text, text), public.online_fold_friends(text, text, text),
+--     public.online_peer(text, text); restore fold_player, link_online_player, online_cleanup,
+--     online_races and online_history from git (plan 39, 2.7) and run this file; then
+--     drop function public.online_shown_name(text);
+--     drop table public.friendships, public.blocks, public.friend_asks, public.online_trust.
 --   undo the boards' races (plan 39, 2.4b), before online races' undo: restore finish_match, submit_score,
 --     submit_tournament, run_row_problem, post_must_hold, post_run, hold_run and release_run from git
 --     (2.4a) and run this file; then drop function public.online_count_race(bigint),
@@ -175,6 +240,9 @@
 --     check (mode in ('single', 'daily')); delete from public.tournaments where players = 2 (their
 --     matchups go with them; their medals stay counted); alter table public.tournaments drop constraint
 --     tournaments_players_check, add constraint tournaments_players_check check (players between 3 and 8).
+--   undo 5.2b's pacing (plan 39, AUD-136 to AUD-138), before the races' undo: drop table
+--     public.online_links; drop index public.matches_host_uid; restore join_room, answer_guest,
+--     set_room_status, link_online_player, online_cleanup and server_now from git and run this file.
 --   undo online races (plan 39, 2.4a), before the rooms' undo: drop function public.finish_match(text, int, jsonb),
 --     public.online_history(), public.online_races(text), public.admin_set_online_open(boolean),
 --     public.online_require_open(); restore set_room_status, create_room, join_room, online_unseat,
@@ -1239,15 +1307,20 @@ begin
   -- Online play (plan 39): the merged player's devices follow. Trust (M1): a merge needs only the two
   -- ids, so trust goes to a side with a device trusted and seen in the last 7 days. When only one side
   -- has one, the other side's devices drop to pending (they pair with a code), as a link does for
-  -- stale devices; when both have one, the side whose trusted device linked first keeps it. So a
-  -- made-up player merged with a stolen id, either way round, gains nothing, however long its device
-  -- sat idle (AUD-094). When neither has one, every device keeps its trust and the 7-day rule decides
-  -- the next link (M1's accepted residual). The kept player's online name stays (the merged one's when
-  -- the kept player has none); the pairing codes of the merged player, and of a side that lost trust,
-  -- go. Rooms follow, so a merge mid-race keeps both racers seated.
-  select min(o.linked_at) into v_keep_first from public.online_players o
+  -- stale devices; when both have one, the senior side keeps it: the one first trusted earlier
+  -- (online_trust, which a Clear and a removed device keep, so an owner who cleared and came back is
+  -- still senior to a made-up player linked since: AUD-103, plan 39 3.1). So a made-up player merged
+  -- with a stolen id, either way round, gains nothing, however long its device sat idle (AUD-094).
+  -- When neither has one, every device keeps its trust and the 7-day rule decides the next link (M1's
+  -- accepted residual). The online name is the side's that keeps trust (the kept player's when nobody
+  -- loses it, or the merged one's when the kept player has none), so a made-up player's name never
+  -- goes out as the owner's to their friends; the pairing codes of the merged player, and of a side
+  -- that lost trust, go. Rooms follow, so a merge mid-race keeps both racers seated.
+  select case when count(*) > 0 then least(min(o.linked_at), (select t.since from public.online_trust t where t.player_id = v_keep)) end
+    into v_keep_first from public.online_players o
    where o.player_id = v_keep and o.trusted and o.seen_at > now() - interval '7 days';
-  select min(o.linked_at) into v_merge_first from public.online_players o
+  select case when count(*) > 0 then least(min(o.linked_at), (select t.since from public.online_trust t where t.player_id = v_merge)) end
+    into v_merge_first from public.online_players o
    where o.player_id = v_merge and o.trusted and o.seen_at > now() - interval '7 days';
   if v_keep_first is not null and (v_merge_first is null or v_keep_first <= v_merge_first) then
     update public.online_players set trusted = false where player_id = v_merge;
@@ -1260,8 +1333,23 @@ begin
   update public.online_players set player_id = v_keep where player_id = v_merge;
   insert into public.online_profiles (player_id, name, updated_at)
   select v_keep, o.name, o.updated_at from public.online_profiles o where o.player_id = v_merge
-  on conflict (player_id) do nothing;
+  on conflict (player_id) do update set name = excluded.name, updated_at = excluded.updated_at
+    where v_lost = v_keep;
   delete from public.online_profiles where player_id = v_merge;
+  -- A player's first trust goes with trust: the merged side's when the kept side lost it, the older of
+  -- the two when nobody did; the kept side keeps its own when the merged side lost it.
+  if v_lost = v_keep then
+    insert into public.online_trust (player_id, since) values (v_keep, v_merge_first)
+    on conflict (player_id) do update set since = excluded.since;
+  elsif v_lost = v_merge then
+    insert into public.online_trust (player_id, since) values (v_keep, v_keep_first)
+    on conflict (player_id) do nothing;
+  else
+    insert into public.online_trust (player_id, since)
+    select v_keep, t.since from public.online_trust t where t.player_id = v_merge
+    on conflict (player_id) do update set since = least(public.online_trust.since, excluded.since);
+  end if;
+  delete from public.online_trust where player_id = v_merge;
   delete from public.online_pairings where player_id = v_merge;
   update public.rooms set host_player = v_keep where host_player = v_merge;
   update public.rooms set guest_player = v_keep where guest_player = v_merge;
@@ -1280,6 +1368,8 @@ begin
     update public.matches set host_player = v_keep where host_player = v_merge;
     update public.matches set guest_player = v_keep where guest_player = v_merge;
   end if;
+  -- Friends, asks and blocks follow trust in the same way (plan 39, 3.1; item 33a's proposal).
+  perform public.online_fold_friends(v_keep, v_merge, v_lost);
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -3601,8 +3691,10 @@ $$;
 -- and, from a trusted device, the name; a pending device gets the stored name back. A device already
 -- linked to another player (Load user code) moves, and is judged as a new device. Returns
 -- { trusted, name }. Past three pending devices the new one replaces the pending device seen longest ago
--- (2.4e). Raises 'not signed in', 'bad player id', 'bad name', 'name taken', and 'too many devices
--- waiting' only when all three pending devices are seated in a race.
+-- (2.4e). Raises 'not signed in', 'bad player id', 'bad name', 'name taken', 'too many devices
+-- waiting' only when all three pending devices are seated in a race, and 'rate limited' when this
+-- device has linked 10 players it was not linked to within the hour (online_links; plan 39, 5.2b,
+-- AUD-138: each could leave an online_trust row for 90 days); a refresh of its own player is never paced.
 create or replace function public.link_online_player(p_player_id text, p_name text)
 returns jsonb
 language plpgsql
@@ -3618,6 +3710,7 @@ declare
   v_me public.online_players;
   v_trusted boolean;
   v_old uuid;
+  c_links constant int := 10; -- links of a player this device was not linked to, an hour (5.2b, AUD-138)
 begin
   if v_uid is null then
     raise exception 'not signed in';
@@ -3627,6 +3720,11 @@ begin
   end if;
   if v_name is null or v_name !~ '^[^[:cntrl:]]{1,16}$' then
     raise exception 'bad name';
+  end if;
+  -- Paced before any lock or housekeeping runs; the same player again (every 🌐 entry) never is.
+  if not exists (select 1 from public.online_players o where o.uid = v_uid and o.player_id = public.resolve_player(p_player_id))
+     and (select count(*) from public.online_links l where l.uid = v_uid and l.at > now() - interval '1 hour') >= c_links then
+    raise exception 'rate limited';
   end if;
   -- The name's lock first (submit_score takes it), then the player's (fold_player takes it), and the id
   -- resolved again under it, so a merge running alongside is followed rather than undone.
@@ -3648,6 +3746,7 @@ begin
     update public.online_players o set seen_at = now() where o.uid = v_uid;
     v_trusted := v_me.trusted;
   else
+    insert into public.online_links (uid) values (v_uid);
     if v_me.uid is not null then
       perform public.online_unseat(v_uid); -- its seats were the other player's
       delete from public.online_players o where o.uid = v_uid;
@@ -3676,6 +3775,12 @@ begin
       delete from auth.users u where u.id = v_old and u.is_anonymous;
     end if;
     insert into public.online_players (uid, player_id, trusted) values (v_uid, v_id, v_trusted);
+  end if;
+  if v_trusted then -- the player's first trust (merge seniority, AUD-103), and the player seen now (3.2r)
+    insert into public.online_trust (player_id, since) values (v_id, now())
+    on conflict (player_id) do update set seen_at = now();
+  else
+    update public.online_trust t set seen_at = now() where t.player_id = v_id;
   end if;
 
   if v_trusted or not exists (select 1 from public.online_profiles p where p.player_id = v_id) then
@@ -3927,7 +4032,8 @@ grant  execute on function public.online_pair(text) to authenticated;
 -- the room's two seated devices may join (the policies below). The server tells them what changed with
 -- realtime.send: 'guest' (a guest sat down), 'answer' (accepted or declined), 'left' and 'status'.
 -- For the same reason a guest leaving closes the room (online_unseat): no code is offered twice.
--- source: how the room was reached; 'code' only until invites and share links (Tier 4).
+-- source: how the room was made: 'code' (create_room) or 'invite' (send_invite made it, 4.1; a room
+-- send_invite reuses keeps its own). A share link (4.3) carries a code, so its room is a 'code' room.
 -- Rooms expire when anything is created (online_cleanup; no pg_cron). Readable by no role.
 create table if not exists public.rooms (
   code         text primary key check (code ~ '^[1-9][0-9]{5}$'),
@@ -3937,7 +4043,7 @@ create table if not exists public.rooms (
   guest_player text check (guest_player ~ '^[A-Za-z0-9_-]{22}$'),
   status       text not null default 'open'
                check (status in ('open', 'asked', 'ready', 'playing', 'finished', 'abandoned')),
-  source       text not null default 'code' check (source in ('code')),
+  source       text not null default 'code' check (source in ('code', 'invite')),
   seed         bigint check (seed between 0 and 4294967295),
   started_at   timestamptz,                    -- the current race's GO time, minted by set_room_status
   round        int not null default 0,         -- races started in this room
@@ -3948,8 +4054,12 @@ alter table public.rooms enable row level security;
 revoke all on public.rooms from public, anon, authenticated;
 create unique index if not exists rooms_host on public.rooms (host_uid);   -- one room per host device
 create index if not exists rooms_guest on public.rooms (guest_uid);
+-- A table from before plan 39 (4.1) takes 'code' only.
+alter table public.rooms drop constraint if exists rooms_source_check;
+alter table public.rooms add constraint rooms_source_check check (source in ('code', 'invite'));
 
--- Every join_room call, for its caps (failed joins per device, per IP and in all), kept an hour. The
+-- Every join_room call, for its caps (failed joins per device, per IP and in all; seated ones per
+-- device and per IP, 5.2b), kept an hour. The
 -- IP is never stored: only a hash of its bucket (online_ip_bucket) with this database's own random
 -- pepper (online_secret), so a stored value cannot be turned back into an address.
 create table if not exists public.join_attempts (
@@ -3966,12 +4076,25 @@ create index if not exists join_attempts_at on public.join_attempts (at);
 create index if not exists join_attempts_uid on public.join_attempts (uid, at);
 create index if not exists join_attempts_ip on public.join_attempts (ip_hash, at);
 
+-- Each time a device links a player it was not linked to (its first link, or a move: Load user code),
+-- for link_online_player's pacing (plan 39, 5.2b, AUD-138: every such link can leave an online_trust
+-- row for 90 days), kept an hour. Only the device's uid and the time.
+create table if not exists public.online_links (
+  id  bigserial primary key,
+  uid uuid not null,
+  at  timestamptz not null default now()
+);
+alter table public.online_links enable row level security;
+revoke all on public.online_links from public, anon, authenticated;
+revoke all on sequence public.online_links_id_seq from public, anon, authenticated;
+create index if not exists online_links_uid on public.online_links (uid, at);
+
 -- One row per race (plan 39, 2.4a), minted when the host starts it (set_room_status 'playing'): the
 -- room's code and round, the seed and GO the server minted, both seats' devices and (resolved)
 -- players. A rematch overwrites the room's seed and GO, so each race is checked against its own row
--- (rooms.match_id points at the race running). Each seated, trusted device reports the race's final
--- numbers for both seats (finish_match): agreed, disputed or refused, or abandoned on a leave
--- mid-race. counted: an agreed race between two players, within the caps, which the boards and the
+-- (rooms.match_id points at the race running). Each seated device, paired or waiting (3.7, item 61),
+-- reports the race's final numbers for both seats (finish_match): agreed, disputed or refused, or
+-- abandoned on a leave mid-race. counted: an agreed race between two players, within the caps, which the boards and the
 -- owner's online rival line read. host_stats / guest_stats: each device's numbers-only telemetry
 -- (round trips, messages, reconnects, pauses), for the owner's eyes in the SQL editor. Kept: it is the
 -- players' online history. A device's row going (auth.users) leaves the race with its players.
@@ -4005,7 +4128,25 @@ create index if not exists matches_room on public.matches (room_code, round);
 create index if not exists matches_host on public.matches (host_player, finished_at);
 create index if not exists matches_guest on public.matches (guest_player, finished_at);
 create index if not exists matches_playing on public.matches (started_at) where status = 'playing';
+create index if not exists matches_host_uid on public.matches (host_uid, started_at); -- set_room_status's pacing (5.2b)
 alter table public.rooms add column if not exists match_id bigint;  -- the race running (no FK: races outlive rooms)
+-- Each seat's trust as its report landed (plan 39, 3.7, item 61): true from a paired device, false from
+-- a waiting one, null until that seat reports. Only a race with both seats true makes two players
+-- eligible to be friends (friend_eligible) or gives a handle (online_peer_find), so a stolen id racing
+-- an accomplice from a waiting device saves a race but reaches nobody. A pairing, a demotion or a
+-- removal after the report changes nothing; a merge moves the race with both as they are. Added once:
+-- every report before 3.7 came from a paired device (finish_match refused a waiting one), so a seat
+-- that had reported is true and one that had not waits for its report. A re-paste changes nothing.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'matches' and column_name = 'host_trusted') then
+    alter table public.matches add column host_trusted boolean, add column guest_trusted boolean;
+    update public.matches set host_trusted = case when host_report is not null then true end,
+                              guest_trusted = case when guest_report is not null then true end;
+  end if;
+end;
+$$;
 
 -- Online play's switch (one row; plan 39, 2.4a). open false: no room is made, joined or started
 -- (create_room, join_room and set_room_status 'playing' raise 'online closed'); a race already
@@ -4028,6 +4169,151 @@ revoke all on public.online_secret from public, anon, authenticated;
 insert into public.online_secret (id, pepper)
 values (1, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''))
 on conflict (id) do nothing;
+
+-- When a player first had a trusted device (plan 39, 3.1, AUD-103): set by the first trusted link and
+-- kept when devices go (a Clear, a removal, the 7-day relink), so merge seniority (fold_player) is
+-- the player's age online, not their newest device's. Filled once from the devices trusted at the
+-- paste (their first link; a player who had cleared and come back before it counts from then).
+-- seen_at: the player's last link by any device (3.2r). A row goes 90 days after it once nothing is left
+-- (online_cleanup: no device, agreed race, friendship or block), so one device linking made-up ids in
+-- a loop leaves nothing for good; a player with races or friends keeps theirs. Readable by no role.
+create table if not exists public.online_trust (
+  player_id text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  since     timestamptz not null,
+  seen_at   timestamptz not null default now()
+);
+alter table public.online_trust add column if not exists seen_at timestamptz not null default now(); -- a 3.1 paste
+alter table public.online_trust enable row level security;
+revoke all on public.online_trust from public, anon, authenticated;
+insert into public.online_trust (player_id, since)
+select o.player_id, min(o.linked_at) from public.online_players o where o.trusted group by o.player_id
+on conflict (player_id) do nothing;
+
+-- Friends (plan 39, 3.1). A pair of players who raced (an agreed race stored under both ids), once,
+-- either way round (a_player < b_player), and which of them asked. pending: asked; accepted: friends.
+-- A decline, a removal and a block delete the row. Keyed on resolved player ids, never devices, so a
+-- lost anonymous session costs nothing; a merge moves rows as it moves races, following trust
+-- (online_fold_friends). Readable by no role: a device reads its own through friend_list(), which
+-- names the other player by a peer handle (online_peer), never by an id.
+create table if not exists public.friendships (
+  a_player    text not null check (a_player ~ '^[A-Za-z0-9_-]{22}$'),
+  b_player    text not null check (b_player ~ '^[A-Za-z0-9_-]{22}$'),
+  asker       text not null,
+  status      text not null default 'pending' check (status in ('pending', 'accepted')),
+  created_at  timestamptz not null default now(),  -- the ask
+  accepted_at timestamptz,
+  primary key (a_player, b_player),
+  check (a_player < b_player),
+  check (asker in (a_player, b_player))
+);
+alter table public.friendships enable row level security;
+revoke all on public.friendships from public, anon, authenticated;
+create index if not exists friendships_b on public.friendships (b_player);
+
+-- A player's blocks (3.1): no friendship and no asks between the two, either way, and their races
+-- leave both players' recent races and rival lines. Readable by no role.
+create table if not exists public.blocks (
+  blocker    text not null check (blocker ~ '^[A-Za-z0-9_-]{22}$'),
+  blocked    text not null check (blocked ~ '^[A-Za-z0-9_-]{22}$'),
+  created_at timestamptz not null default now(),
+  primary key (blocker, blocked),
+  check (blocker <> blocked)
+);
+alter table public.blocks enable row level security;
+revoke all on public.blocks from public, anon, authenticated;
+create index if not exists blocks_blocked on public.blocks (blocked);
+
+-- Each ask sent (3.1), for send_friend_request's caps: kept 7 days (online_cleanup). Taking an ask back
+-- gives none back. Readable by no role.
+create table if not exists public.friend_asks (
+  id        bigserial primary key,
+  player_id text not null,
+  other_id  text not null,
+  at        timestamptz not null default now()
+);
+alter table public.friend_asks enable row level security;
+revoke all on public.friend_asks from public, anon, authenticated;
+revoke all on sequence public.friend_asks_id_seq from public, anon, authenticated;
+create index if not exists friend_asks_player on public.friend_asks (player_id, at);
+
+-- How a device names another player (3.1): a hash of the pepper, the viewer's id and the other's, 32
+-- hex characters. No player id leaves the server (an id is a save code's identity), and one viewer's
+-- handle for a player names nobody for anyone else. Internal.
+create or replace function public.online_peer(p_me text, p_other text)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select left(encode(sha256(convert_to(s.pepper || ':peer:' || p_me || ':' || p_other, 'UTF8')), 'hex'), 32)
+    from public.online_secret s where s.id = 1;
+$$;
+revoke execute on function public.online_peer(text, text) from public, anon, authenticated;
+
+-- The player a viewer's peer handle names, or null: only someone the viewer raced (an agreed race under
+-- both ids, from two paired devices: 3.7, as friend_eligible), befriended, asked or was asked by, or
+-- blocked, and never an id a merge folded away. So a handle, whoever holds it, reaches nobody else,
+-- and a race with a waiting seat gives none. Internal.
+create or replace function public.online_peer_find(p_me text, p_peer text)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select c.other from (
+    select case when m.host_player = p_me then m.guest_player else m.host_player end as other
+      from public.matches m where m.status = 'agreed' and m.host_trusted and m.guest_trusted
+                                and p_me in (m.host_player, m.guest_player)
+    union
+    select case when f.a_player = p_me then f.b_player else f.a_player end
+      from public.friendships f where p_me in (f.a_player, f.b_player)
+    union
+    select b.blocked from public.blocks b where b.blocker = p_me
+  ) c
+  where c.other <> p_me and public.resolve_player(c.other) = c.other and public.online_peer(p_me, c.other) = p_peer
+  limit 1;
+$$;
+revoke execute on function public.online_peer_find(text, text) from public, anon, authenticated;
+
+-- The handle a list shows p_me for p_other, or null when online_peer_find would find nobody by it, so no
+-- button hangs on a handle nothing takes (3.2r): a race a merge left under an old id shows under the
+-- kept player's name with no handle, until the two race under their current ids; so does a race with a
+-- waiting seat (3.7), until the two race from paired devices. Internal.
+create or replace function public.online_peer_shown(p_me text, p_other text)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select case when public.online_peer_find(p_me, h.peer) = p_other then h.peer end
+    from (select public.online_peer(p_me, p_other) as peer) h;
+$$;
+revoke execute on function public.online_peer_shown(text, text) from public, anon, authenticated;
+
+-- May p_me ask p_other to be friends (3.1)? Only when they raced: an agreed race stored under both ids
+-- with both seats paired as they reported (3.7: a waiting device's race is saved but makes nobody
+-- eligible, so a stolen id racing an accomplice cannot reach the owner with an ask; a race a merge
+-- left under an old id does not count either, so a made-up player merged with a stolen id makes
+-- nobody eligible), neither id folded away, neither hidden (plan 30), and no block either way. Internal.
+create or replace function public.friend_eligible(p_me text, p_other text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select p_me <> p_other
+     and public.resolve_player(p_me) = p_me and public.resolve_player(p_other) = p_other
+     and not public.player_hidden(p_me) and not public.player_hidden(p_other)
+     and exists (select 1 from public.matches m where m.status = 'agreed' and m.host_trusted and m.guest_trusted
+                  and ((m.host_player = p_me and m.guest_player = p_other) or (m.host_player = p_other and m.guest_player = p_me)))
+     and not exists (select 1 from public.blocks b
+                      where (b.blocker = p_me and b.blocked = p_other) or (b.blocker = p_other and b.blocked = p_me));
+$$;
+revoke execute on function public.friend_eligible(text, text) from public, anon, authenticated;
 
 -- The caller's IP as the per-IP caps count it (finding 18): cf-connecting-ip, which Cloudflare sets
 -- and refuses from a client; failing that the last x-forwarded-for entry (the first is the client's
@@ -4082,12 +4368,98 @@ as $$
   left join public.online_secret s on s.id = 1;
 $$;
 
+-- Invites (plan 39, 4.1): a paired device asks a friend in online mode into its own open room, by the
+-- handle its lists gave it (send_invite). An invite lives c_ttl (INVITE_TTL, 2 minutes, stored on the row
+-- as expires_at, so a client shows what the server checks) and only while its room is open under the
+-- device that sent it, that device beats (online mode) and the two are still friends, neither hidden nor
+-- merged away (online_invite_live, read every time: no pg_cron, and 'expired' is never stored). One live
+-- invite per sending device and per pair. Keyed on resolved player ids; the room by its code. Kept two
+-- days for the caps (online_cleanup), whatever becomes of the device: its anonymous user's deletion (an
+-- unlink, a removal) only clears from_uid, so unlinking and linking again starts no new count (4.1r).
+-- Readable by no role. Defined here because online_unseat and online_cleanup use it; its functions come
+-- after online status.
+create table if not exists public.invites (
+  id          uuid primary key default gen_random_uuid(),
+  from_uid    uuid references auth.users (id) on delete set null, -- the sending device, its room's host; null once it is gone
+  from_player text not null check (from_player ~ '^[A-Za-z0-9_-]{22}$'),
+  to_player   text not null check (to_player ~ '^[A-Za-z0-9_-]{22}$'),
+  room_code   text not null check (room_code ~ '^[1-9][0-9]{5}$'),
+  status      text not null default 'pending' check (status in ('pending', 'accepted', 'declined', 'cancelled')),
+  sent_at     timestamptz not null default now(),
+  expires_at  timestamptz not null
+);
+alter table public.invites enable row level security;
+revoke all on public.invites from public, anon, authenticated;
+create index if not exists invites_to on public.invites (to_player, sent_at);
+create index if not exists invites_from on public.invites (from_player, sent_at);
+create index if not exists invites_device on public.invites (from_uid) where status = 'pending';
+
+-- A player's own Realtime topic (4.1): 'user:' and 32 hex characters of sha256 of the pepper and the
+-- player's resolved id, given to their paired devices by invite_list. Named by the server, not by the id
+-- the device holds: a device whose save still holds an id a merge folded away hears its player's invites
+-- all the same (4.1r), and the name carries no player id (a save code's identity, ACC-001). Only that
+-- player's paired devices may read it, and nobody write it (online_can). Internal.
+create or replace function public.online_user_topic(p_player text)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select 'user:' || left(encode(sha256(convert_to(s.pepper || ':user:' || p_player, 'UTF8')), 'hex'), 32)
+    from public.online_secret s where s.id = 1;
+$$;
+revoke execute on function public.online_user_topic(text) from public, anon, authenticated;
+
+-- Tell both players an invite changed ('invite_update' { invite, status } on each one's own topic,
+-- online_user_topic, which only that player's paired devices read: online_can), so the friend's ✉️ and
+-- the sender's wait follow at once. Internal.
+create or replace function public.online_invite_told(p_invite uuid, p_status text, p_from text, p_to text)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+begin
+  perform realtime.send(jsonb_build_object('invite', p_invite, 'status', p_status), 'invite_update', public.online_user_topic(p_to), true);
+  perform realtime.send(jsonb_build_object('invite', p_invite, 'status', p_status), 'invite_update', public.online_user_topic(p_from), true);
+end;
+$$;
+revoke execute on function public.online_invite_told(uuid, text, text, text) from public, anon, authenticated;
+
+-- A device's invites end with its room (online_unseat: it left, hosts or joins another, or its link
+-- went) and when a code guest takes its room's seat (join_room): each one still in its time is cancelled
+-- and both players are told. One already past its time is
+-- left as it is (it reads expired, and nobody needs telling). Internal.
+create or replace function public.online_invites_end(p_uid uuid)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  r record;
+begin
+  for r in
+    update public.invites i set status = 'cancelled'
+     where i.from_uid = p_uid and i.status = 'pending' and i.expires_at > now()
+    returning i.id, i.from_player, i.to_player
+  loop
+    perform public.online_invite_told(r.id, 'cancelled', r.from_player, r.to_player);
+  end loop;
+end;
+$$;
+revoke execute on function public.online_invites_end(uuid) from public, anon, authenticated;
+
 -- Take a device out of every room it sits in (it left, hosts or joins another room, unlinked, was
 -- removed, or moved to another player), and tell the room's channel ('left', with the seat). A race
 -- in progress is abandoned (no winner) and kept, so the other device can read why. Any other room is
 -- closed, the guest's seat included: a device that leaves keeps its channel until its token
 -- refreshes (finding 19), so a freed seat is never offered again under the same code; the host makes
--- a new room. An abandoned room waits for housekeeping. Internal.
+-- a new room. An abandoned room waits for housekeeping. The device's invites go with its room
+-- (online_invites_end, after the rooms: rooms are locked before invites everywhere). Internal.
 create or replace function public.online_unseat(p_uid uuid)
 returns void
 language plpgsql
@@ -4115,6 +4487,7 @@ begin
       delete from public.rooms x where x.code = r.code;
     end if;
   end loop;
+  perform public.online_invites_end(p_uid);
 end;
 $$;
 
@@ -4145,9 +4518,23 @@ begin
      where x.status = 'abandoned' and x.host_report is null and x.guest_report is null
        and x.created_at < now() - interval '1 day'
      limit 100);
+  -- A race nobody sees (refused, disputed, or abandoned with a report: only agreed ones are anyone's
+  -- history, rival line or friend eligibility) keeps its numbers 30 days for debugging, then goes
+  -- (plan 39, 5.2b, AUD-137: re-minted races were never deleted).
+  delete from public.matches m where m.id in (
+    select x.id from public.matches x
+     where x.status in ('refused', 'disputed', 'abandoned') and x.created_at < now() - interval '30 days'
+     order by x.created_at
+     limit 200);
+  delete from public.online_links l where l.id in ( -- link_online_player's pacing counts an hour (5.2b)
+    select x.id from public.online_links x where x.at < now() - interval '1 hour' order by x.at limit 500);
   delete from public.join_attempts a where a.id in (
     select x.id from public.join_attempts x where x.at < now() - interval '1 hour' order by x.at limit 500);
   delete from public.online_pairings c where c.expires_at < now();
+  delete from public.friend_asks k where k.id in ( -- the ask caps count 7 days at most (3.1)
+    select x.id from public.friend_asks x where x.at < now() - interval '7 days' order by x.at limit 500);
+  delete from public.invites i where i.id in ( -- the invite caps count a day at most (4.1)
+    select x.id from public.invites x where x.sent_at < now() - interval '2 days' order by x.sent_at limit 500);
   delete from auth.users u where u.id in (
     select x.id from auth.users x
       left join public.online_players o on o.uid = x.id
@@ -4160,18 +4547,37 @@ begin
   delete from public.online_profiles p
    where p.updated_at < now() - interval '90 days'
      and not exists (select 1 from public.online_players o where o.player_id = p.player_id);
+  -- A first trust with nothing left, 90 days after the player's last link (3.2r), oldest first. A player
+  -- back after 90 days who links in the same instant may lose it: their seniority starts again (M1's
+  -- accepted residual covers a player away that long).
+  delete from public.online_trust t where t.player_id in (
+    select x.player_id from public.online_trust x
+     where x.seen_at < now() - interval '90 days'
+       and not exists (select 1 from public.online_players o where o.player_id = x.player_id)
+       and not exists (select 1 from public.matches m where m.status = 'agreed' and x.player_id in (m.host_player, m.guest_player))
+       and not exists (select 1 from public.friendships f where x.player_id in (f.a_player, f.b_player))
+       and not exists (select 1 from public.blocks b where x.player_id in (b.blocker, b.blocked))
+     order by x.seen_at
+     limit 100);
 end;
 $$;
 
 -- The server's clock in ms since the epoch, for the countdown's clock offset (best of a few round
--- trips; the spike measured ±25 ms).
+-- trips; the spike measured ±25 ms). Definer with the signed-in check like every online function
+-- (plan 39, 5.2b, AUD-102 / AUD-141), though it reads only the clock.
 create or replace function public.server_now()
 returns bigint
-language sql
+language plpgsql
 stable
+security definer
 set search_path = ''
 as $$
-  select floor(extract(epoch from clock_timestamp()) * 1000)::bigint;
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  return floor(extract(epoch from clock_timestamp()) * 1000)::bigint;
+end;
 $$;
 
 -- A room's state for one of its two seated devices. Internal: room_state and the 'status' event.
@@ -4247,9 +4653,13 @@ $$;
 -- guess learns nothing. Failed joins are capped before the code is even looked at (an IP and the
 -- whole game are capped as well as a device, since a new anonymous device costs nothing):
 -- { ok: false, error: 'rate limited' } past 5 failures from this device or 20 from its IP in 10
--- minutes, 'busy' past 200 in all in a minute. A room idle 15 minutes is no room, housekeeping or not.
+-- minutes, 'busy' past 200 in all in a minute. Seated joins are paced too (plan 39, 5.2b, AUD-136: each
+-- one makes the server send to the room, so a colluding pair looping join and decline would send at
+-- the speed of its calls): 'rate limited' past 10 from this device or 50 from its IP in 10 minutes. A
+-- room idle 15 minutes is no room, housekeeping or not.
 -- Raises 'not signed in', 'not linked', 'in a race' (checked first, so a racing device learns nothing),
--- 'online closed' (the switch; no try is spent).
+-- 'online closed' (the switch; no try is spent). The seat taken, the host's live invite ends (4.1: its
+-- friend is told).
 create or replace function public.join_room(p_code text)
 returns jsonb
 language plpgsql
@@ -4261,6 +4671,8 @@ declare
   c_device_fails constant int := 5;      -- failed joins per device in 10 minutes
   c_ip_fails     constant int := 20;     -- per IP bucket in 10 minutes (a school's wifi is one IP)
   c_all_fails    constant int := 200;    -- in all, per minute
+  c_device_oks   constant int := 10;     -- seated joins per device in 10 minutes (5.2b, AUD-136)
+  c_ip_oks       constant int := 50;     -- per IP bucket in 10 minutes
   v_uid uuid := auth.uid();
   v_me public.online_players;
   v_ip text;
@@ -4293,7 +4705,11 @@ begin
   if (select count(*) from public.join_attempts a
        where not a.ok and a.uid = v_uid and a.at > now() - interval '10 minutes') >= c_device_fails
      or (v_ip is not null and (select count(*) from public.join_attempts a
-       where not a.ok and a.ip_hash = v_ip and a.at > now() - interval '10 minutes') >= c_ip_fails) then
+       where not a.ok and a.ip_hash = v_ip and a.at > now() - interval '10 minutes') >= c_ip_fails)
+     or (select count(*) from public.join_attempts a
+       where a.ok and a.uid = v_uid and a.at > now() - interval '10 minutes') >= c_device_oks
+     or (v_ip is not null and (select count(*) from public.join_attempts a
+       where a.ok and a.ip_hash = v_ip and a.at > now() - interval '10 minutes') >= c_ip_oks) then
     return jsonb_build_object('ok', false, 'error', 'rate limited');
   end if;
   select * into v_room from public.rooms r
@@ -4309,6 +4725,7 @@ begin
   update public.rooms r
      set guest_uid = v_uid, guest_player = v_me.player_id, status = 'asked', updated_at = now()
    where r.code = v_code;
+  perform public.online_invites_end(v_room.host_uid); -- the seat is taken: the host's invite ends (4.1)
   perform realtime.send(
     jsonb_build_object('name', (select p.name from public.online_profiles p where p.player_id = v_me.player_id)),
     'guest', 'room:' || v_code, true);
@@ -4321,7 +4738,9 @@ $$;
 -- told ('answer', accept false) on the old topic, and the room moves to a new code, open and empty:
 -- { ok, code: <new>, status: 'open' }, so the declined device, which may stay on the old topic
 -- until its token refreshes, reaches nobody (finding 19). Raises 'not signed in', 'no room' (not
--- this device's room), 'no guest' (nobody waiting).
+-- this device's room), 'no guest' (nobody waiting), 'rate limited' (a decline within 2 seconds of the
+-- code's minting, as create_room's: nobody can learn a new code and knock that fast, so only a loop
+-- does; 5.2b, AUD-136).
 create or replace function public.answer_guest(p_code text, p_accept boolean)
 returns jsonb
 language plpgsql
@@ -4343,6 +4762,9 @@ begin
   end if;
   if v_room.status <> 'asked' then
     raise exception 'no guest';
+  end if;
+  if not coalesce(p_accept, false) and v_room.created_at > now() - interval '2 seconds' then
+    raise exception 'rate limited';
   end if;
   perform realtime.send(jsonb_build_object('accept', coalesce(p_accept, false)), 'answer', 'room:' || p_code, true);
   if coalesce(p_accept, false) then
@@ -4400,7 +4822,8 @@ $$;
 -- the other report; housekeeping ends it 6 hours after GO). Both devices are told ('status', the room as
 -- room_state shows it). Returns the room as room_state does. Raises 'not signed in', 'no room', 'not
 -- host', 'bad status', 'online closed' (the switch: no new race, a rematch included), 'rate limited' (a
--- rematch within a minute of the last race's GO).
+-- rematch within a minute of the last race's GO, or a race from this host device in any room within a
+-- minute of its last race's GO: 5.2b, AUD-137, since leaving and creating a room again re-minted at will).
 create or replace function public.set_room_status(p_code text, p_status text)
 returns jsonb
 language plpgsql
@@ -4430,7 +4853,9 @@ begin
       raise exception 'bad status';
     end if;
     perform public.online_require_open();
-    if v_room.started_at > now() - c_rematch then
+    if v_room.started_at > now() - c_rematch
+       or exists (select 1 from public.matches m -- another room's: this room's own is the line above
+                   where m.host_uid = v_uid and m.room_code <> v_room.code and m.started_at > now() - c_rematch) then
       raise exception 'rate limited'; -- no race ends that soon: a loop of starts would only mint rows
     end if;
     update public.rooms r
@@ -4513,7 +4938,7 @@ as $$
   update public.online_settings s set open = coalesce(p_on, true) where s.id returning s.open;
 $$;
 
--- A seated, trusted device reports its race's end (plan 39, 2.4a). p_result is { slots, stats }:
+-- A seated device, paired or waiting (3.7), reports its race's end (plan 39, 2.4a). p_result is { slots, stats }:
 -- slots are both seats' final numbers in seat order (host, guest) as this device saw them, each
 -- { score, deaths, levelWins, finalFirst } (what raceOutcome reads); stats are its own numbers-only
 -- telemetry (a key not in c_stat_keys, a non-number or a number out of range is dropped, never the
@@ -4524,10 +4949,12 @@ $$;
 -- order: score, deaths, level wins, the final line, else a draw) and different ones dispute. An
 -- agreed race counts unless one player sat on both seats, the pair has c_pair_day counted races in
 -- 24 hours, or either player has c_player_day; a counted race goes on the 🏅 and 🏆 boards
--- (online_count_race, 2.4b). Returns { ok: true, status, counted }. Raises 'not
--- signed in', 'not linked', 'not trusted' (a pending device: match history is private, M1), 'no
--- match' (this device sat in no race of that code and round, or has moved to another player since),
--- 'bad result'.
+-- (online_count_race, 2.4b). A waiting device's report is taken like a paired one's (3.7, item 61:
+-- pairing guards only what a stolen id would show of other people); each seat's trust is kept with
+-- its report (host_trusted, guest_trusted), and only a race with both paired makes two players
+-- eligible to be friends. Returns { ok: true, status, counted }. Raises 'not signed in', 'not
+-- linked', 'no match' (this device sat in no race of that code and round, or has moved to another
+-- player since), 'bad result'.
 create or replace function public.finish_match(p_code text, p_round int, p_result jsonb)
 returns jsonb
 language plpgsql
@@ -4560,9 +4987,6 @@ begin
   v_me := public.online_me();
   if v_me.uid is null then
     raise exception 'not linked';
-  end if;
-  if not v_me.trusted then
-    raise exception 'not trusted';
   end if;
   select * into v_m from public.matches m
    where m.room_code = p_code and m.round = p_round and v_uid in (m.host_uid, m.guest_uid)
@@ -4612,12 +5036,14 @@ begin
        or (v_slots -> 1 ->> 'score')::int > c_score_base + c_score_rate * v_secs then
       v_m.status := 'refused';
     end if;
-    if v_host then
+    if v_host then -- this device's trust as it reports, read after the locks (3.7)
       v_m.host_report := v_slots;
       v_m.host_stats := v_stats;
+      v_m.host_trusted := v_me.trusted;
     else
       v_m.guest_report := v_slots;
       v_m.guest_stats := v_stats;
+      v_m.guest_trusted := v_me.trusted;
     end if;
     if v_m.status = 'playing' and v_m.host_report is not null and v_m.guest_report is not null then
       if v_m.host_report = v_m.guest_report then
@@ -4656,7 +5082,8 @@ begin
     update public.matches m
        set status = v_m.status, host_report = v_m.host_report, guest_report = v_m.guest_report,
            host_stats = v_m.host_stats, guest_stats = v_m.guest_stats, winner_seat = v_m.winner_seat,
-           decided_by = v_m.decided_by, counted = v_m.counted, finished_at = v_m.finished_at
+           decided_by = v_m.decided_by, counted = v_m.counted, finished_at = v_m.finished_at,
+           host_trusted = v_m.host_trusted, guest_trusted = v_m.guest_trusted
      where m.id = v_m.id;
     if v_m.counted then
       perform public.online_count_race(v_m.id);
@@ -4739,11 +5166,27 @@ begin
 end;
 $$;
 
+-- The name online play shows for a player: their online name, else their board name, else 'Player'.
+-- Internal: online_races, friend_list.
+create or replace function public.online_shown_name(p_player text)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce((select p.name from public.online_profiles p where p.player_id = p_player),
+                  (select s.name from public.scores s where s.player_id = p_player order by s.updated_at desc limit 1),
+                  'Player');
+$$;
+revoke execute on function public.online_shown_name(text) from public, anon, authenticated;
+
 -- A player's agreed online races against another player, as they saw them: the opponent's (resolved)
 -- id and shown name (online, else the board's), won (null: a draw), both scores, when. A race whose two
--- ids are now one player (a merge), and a hidden opponent (plan 30), are left out. Only races stored
--- under the player's own id: a merge leaves a side that lost trust behind (fold_player). Internal:
--- online_history.
+-- ids are now one player (a merge), a hidden opponent (plan 30), and an opponent blocked either way
+-- (3.1) are left out. Only races stored under the player's own id: a merge leaves a side that lost
+-- trust behind (fold_player). A race with a waiting seat counts here as any other (3.7, item 61): it
+-- is the player's race, shown only to a paired device. Internal: online_history.
 create or replace function public.online_races(p_player text)
 returns table (opp text, oname text, won boolean, mine int, theirs int, at timestamptz, mid bigint)
 language sql
@@ -4752,9 +5195,7 @@ security definer
 set search_path = ''
 as $$
   select x.opp,
-         coalesce((select p.name from public.online_profiles p where p.player_id = x.opp),
-                  (select s.name from public.scores s where s.player_id = x.opp order by s.updated_at desc limit 1),
-                  'Player'),
+         public.online_shown_name(x.opp),
          case when x.winner_seat is null then null else x.winner_seat = x.my_seat end,
          (x.host_report -> (case when x.my_seat = 'host' then 0 else 1 end) ->> 'score')::int,
          (x.host_report -> (case when x.my_seat = 'host' then 1 else 0 end) ->> 'score')::int,
@@ -4765,15 +5206,18 @@ as $$
         from public.matches m
        where m.status = 'agreed' and p_player in (m.host_player, m.guest_player)
     ) x
-   where x.opp <> p_player and not public.player_hidden(x.opp);
+   where x.opp <> p_player and not public.player_hidden(x.opp)
+     and not exists (select 1 from public.blocks b
+                      where (b.blocker = p_player and b.blocked = x.opp) or (b.blocker = x.opp and b.blocked = p_player));
 $$;
 
 -- The owner's online races (plan 39, 2.4a), for a trusted device of the player: { rival, recent }.
 -- rival: the player they lost to most online (then met most), { name, meetings, losses }, or null;
 -- recent: their last c_recent agreed races, newest first, { name, won, mine, theirs, at } (won null:
 -- a draw; at in ms). Online pairings are private (Design rules): the public profile's rival line
--- (player_stats) counts split-screen races only. No ids. Raises 'not signed in', 'not linked', 'not
--- trusted' (a pending device, M1).
+-- (player_stats) counts split-screen races only. No ids: the rival and each recent race carry the
+-- opponent's peer handle (3.1: what send_friend_request and block_user take). Raises 'not signed in',
+-- 'not linked', 'not trusted' (a pending device, M1).
 create or replace function public.online_history()
 returns jsonb
 language plpgsql
@@ -4797,15 +5241,17 @@ begin
   if not v_me.trusted then
     raise exception 'not trusted';
   end if;
-  select jsonb_build_object('name', y.oname, 'meetings', y.meetings, 'losses', y.losses) into v_rival
+  select jsonb_build_object('name', y.oname, 'meetings', y.meetings, 'losses', y.losses,
+                            'peer', public.online_peer_shown(v_me.player_id, y.opp)) into v_rival
     from (
-      select min(r.oname) as oname, count(*)::int as meetings, count(*) filter (where r.won = false)::int as losses
+      select r.opp, min(r.oname) as oname, count(*)::int as meetings, count(*) filter (where r.won = false)::int as losses
         from public.online_races(v_me.player_id) r
        group by r.opp
     ) y
    order by y.losses desc, y.meetings desc, y.oname asc
    limit 1;
-  select coalesce(jsonb_agg(jsonb_build_object('name', z.oname, 'won', z.won, 'mine', z.mine, 'theirs', z.theirs,
+  select coalesce(jsonb_agg(jsonb_build_object('name', z.oname, 'peer', public.online_peer_shown(v_me.player_id, z.opp),
+                                               'won', z.won, 'mine', z.mine, 'theirs', z.theirs,
                                                'at', floor(extract(epoch from z.at) * 1000)::bigint)
                             order by z.at desc, z.mid desc), '[]'::jsonb) into v_recent
     from (select r.* from public.online_races(v_me.player_id) r order by r.at desc, r.mid desc limit c_recent) z;
@@ -4813,10 +5259,733 @@ begin
 end;
 $$;
 
+-- Friends (plan 39, 3.1). Only between players who raced (friend_eligible); no search, no lists of
+-- strangers (the Safety rules): a device names another player only by the peer handle its own lists
+-- gave it (friend_list, online_history). Every function is for a trusted device (M1 rule 2: friends
+-- are private) and keyed on resolved player ids.
+
+-- The caller's link, for a function only a trusted device may call. Raises 'not signed in', 'not
+-- linked', 'not trusted'. Internal.
+create or replace function public.online_trusted_me()
+returns public.online_players
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players;
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  v_me := public.online_me();
+  if v_me.uid is null then
+    raise exception 'not linked';
+  end if;
+  if not v_me.trusted then
+    raise exception 'not trusted';
+  end if;
+  return v_me;
+end;
+$$;
+revoke execute on function public.online_trusted_me() from public, anon, authenticated;
+
+-- The start of every friend function that takes a peer handle: the caller (a trusted device), the
+-- player the handle names (online_peer_find; null when none), and both players' locks, taken as
+-- fold_player takes them, so a merge and a friend call wait for each other in one order. The link is
+-- read again under the locks: a merge that ran meanwhile moved it, and the handle then names nobody.
+-- Raises as online_trusted_me, and 'bad peer'. Internal.
+create or replace function public.online_friend_start(p_peer text, out me text, out other text)
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players := public.online_trusted_me();
+begin
+  if p_peer is null or p_peer !~ '^[0-9a-f]{32}$' then
+    raise exception 'bad peer';
+  end if;
+  me := v_me.player_id;
+  other := public.online_peer_find(me, p_peer);
+  if other is null then
+    return;
+  end if;
+  perform pg_advisory_xact_lock(hashtext(least(me, other)));
+  perform pg_advisory_xact_lock(hashtext(greatest(me, other)));
+  v_me := public.online_me();
+  if v_me.uid is null or not v_me.trusted or v_me.player_id <> me then
+    other := null;
+  end if;
+end;
+$$;
+revoke execute on function public.online_friend_start(text) from public, anon, authenticated;
+
+-- The player's friends, asks and blocks: { friends: [{ peer, name, since }], incoming: [{ peer, name,
+-- at }], outgoing: [{ peer, name, at }], blocked: [{ peer, name }] } (times in ms; friends and blocks by
+-- name, asks newest first). A hidden player (plan 30) and an id a merge folded away are left out (a
+-- block of one stays listed while it is not folded away). No ids.
+create or replace function public.friend_list()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_id text := (public.online_trusted_me()).player_id;
+  v_rows jsonb;
+  v_blocked jsonb;
+begin
+  select coalesce(jsonb_agg(jsonb_build_object('peer', public.online_peer(v_id, x.other), 'name', public.online_shown_name(x.other),
+                                               'status', x.status, 'mine', x.asker = v_id,
+                                               'at', floor(extract(epoch from x.created_at) * 1000)::bigint,
+                                               'since', floor(extract(epoch from x.accepted_at) * 1000)::bigint)), '[]'::jsonb)
+    into v_rows
+    from (select case when f.a_player = v_id then f.b_player else f.a_player end as other, f.*
+            from public.friendships f where v_id in (f.a_player, f.b_player)) x
+   where public.resolve_player(x.other) = x.other and not public.player_hidden(x.other);
+  select coalesce(jsonb_agg(jsonb_build_object('peer', y.peer, 'name', y.name) order by lower(y.name), y.peer), '[]'::jsonb)
+    into v_blocked
+    from (select public.online_peer(v_id, b.blocked) as peer, public.online_shown_name(b.blocked) as name
+            from public.blocks b where b.blocker = v_id and public.resolve_player(b.blocked) = b.blocked) y;
+  return jsonb_build_object(
+    'friends', coalesce((select jsonb_agg(jsonb_build_object('peer', r ->> 'peer', 'name', r ->> 'name', 'since', (r ->> 'since')::bigint)
+                                          order by lower(r ->> 'name'), r ->> 'peer')
+                           from jsonb_array_elements(v_rows) r where r ->> 'status' = 'accepted'), '[]'::jsonb),
+    'incoming', coalesce((select jsonb_agg(jsonb_build_object('peer', r ->> 'peer', 'name', r ->> 'name', 'at', (r ->> 'at')::bigint)
+                                           order by (r ->> 'at')::bigint desc, r ->> 'peer')
+                            from jsonb_array_elements(v_rows) r where r ->> 'status' = 'pending' and not (r ->> 'mine')::boolean), '[]'::jsonb),
+    'outgoing', coalesce((select jsonb_agg(jsonb_build_object('peer', r ->> 'peer', 'name', r ->> 'name', 'at', (r ->> 'at')::bigint)
+                                           order by (r ->> 'at')::bigint desc, r ->> 'peer')
+                            from jsonb_array_elements(v_rows) r where r ->> 'status' = 'pending' and (r ->> 'mine')::boolean), '[]'::jsonb),
+    'blocked', v_blocked);
+end;
+$$;
+
+-- Ask a player raced to be friends, by the peer handle a list gave: { ok: true, status: 'pending' } (asked,
+-- or asked already), { ok: true, status: 'accepted' } (already friends, or they had asked: both want it),
+-- { ok: false, error: 'not eligible' } (the handle names nobody this player raced, or a block either way,
+-- or a hidden player: never which), { ok: false, error: 'rate limited' } (c_asks_day asks in 24 hours,
+-- or c_pair_week to one player in 7 days; taking an ask back gives none back).
+create or replace function public.send_friend_request(p_peer text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  c_asks_day  constant int := 20;  -- asks a player sends in 24 hours
+  c_pair_week constant int := 3;   -- asks to one player in 7 days: a decline, and two more tries
+  s record;
+  v_a text;
+  v_b text;
+  v_f public.friendships;
+begin
+  select * into s from public.online_friend_start(p_peer);
+  if s.other is null or not public.friend_eligible(s.me, s.other) then
+    return jsonb_build_object('ok', false, 'error', 'not eligible');
+  end if;
+  v_a := least(s.me, s.other);
+  v_b := greatest(s.me, s.other);
+  select * into v_f from public.friendships f where f.a_player = v_a and f.b_player = v_b for update;
+  if v_f.a_player is not null then
+    if v_f.status = 'pending' and v_f.asker <> s.me then
+      update public.friendships f set status = 'accepted', accepted_at = now() where f.a_player = v_a and f.b_player = v_b;
+      return jsonb_build_object('ok', true, 'status', 'accepted');
+    end if;
+    return jsonb_build_object('ok', true, 'status', v_f.status);
+  end if;
+  if (select count(*) from public.friend_asks k where k.player_id = s.me and k.at > now() - interval '1 day') >= c_asks_day
+     or (select count(*) from public.friend_asks k
+          where k.player_id = s.me and k.other_id = s.other and k.at > now() - interval '7 days') >= c_pair_week then
+    return jsonb_build_object('ok', false, 'error', 'rate limited');
+  end if;
+  insert into public.friend_asks (player_id, other_id) values (s.me, s.other);
+  insert into public.friendships (a_player, b_player, asker) values (v_a, v_b, s.me);
+  return jsonb_build_object('ok', true, 'status', 'pending');
+end;
+$$;
+
+-- Answer an ask the other player sent: { ok: true, status: 'accepted' | 'declined' } (a decline
+-- deletes it; they may ask again, within send_friend_request's caps), or { ok: false, error: 'no
+-- request' } (none waits from them: taken back, answered, or the handle names nobody).
+create or replace function public.respond_friend_request(p_peer text, p_accept boolean)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  s record;
+begin
+  select * into s from public.online_friend_start(p_peer);
+  if s.other is not null and coalesce(p_accept, false) then
+    update public.friendships f set status = 'accepted', accepted_at = now()
+     where f.a_player = least(s.me, s.other) and f.b_player = greatest(s.me, s.other) and f.status = 'pending' and f.asker = s.other;
+    if found then
+      return jsonb_build_object('ok', true, 'status', 'accepted');
+    end if;
+  elsif s.other is not null then
+    delete from public.friendships f
+     where f.a_player = least(s.me, s.other) and f.b_player = greatest(s.me, s.other) and f.status = 'pending' and f.asker = s.other;
+    if found then
+      return jsonb_build_object('ok', true, 'status', 'declined');
+    end if;
+  end if;
+  return jsonb_build_object('ok', false, 'error', 'no request');
+end;
+$$;
+
+-- End a friendship, take back an ask, or turn one down: { ok: true }, also when there was nothing (a
+-- stale handle). The race stays, so either may ask again.
+create or replace function public.remove_friend(p_peer text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  s record;
+begin
+  select * into s from public.online_friend_start(p_peer);
+  if s.other is not null then
+    delete from public.friendships f where f.a_player = least(s.me, s.other) and f.b_player = greatest(s.me, s.other);
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- Block a player raced, befriended or asked by: any friendship or ask between the two goes, neither may
+-- ask the other, and their races leave both players' recent races and rival lines (online_races).
+-- { ok: true } (also when already blocked), or { ok: false, error: 'no peer' } (the handle names
+-- nobody this player knows).
+create or replace function public.block_user(p_peer text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  s record;
+begin
+  select * into s from public.online_friend_start(p_peer);
+  if s.other is null then
+    return jsonb_build_object('ok', false, 'error', 'no peer');
+  end if;
+  insert into public.blocks (blocker, blocked) values (s.me, s.other) on conflict (blocker, blocked) do nothing;
+  delete from public.friendships f where f.a_player = least(s.me, s.other) and f.b_player = greatest(s.me, s.other);
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- Lift this player's own block (the other's block of them, if any, stands): { ok: true }, also when
+-- there was none.
+create or replace function public.unblock_user(p_peer text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  s record;
+begin
+  select * into s from public.online_friend_start(p_peer);
+  if s.other is not null then
+    delete from public.blocks b where b.blocker = s.me and b.blocked = s.other;
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- A merge's friend data (fold_player, 3.1), following trust as races do (item 33a): when the merged
+-- side lost trust (p_lost = p_merge), its friendships, asks and blocks stay under its id, which no list
+-- shows, so a made-up player merged with a stolen id brings the owner no stranger's friendship and no
+-- block of the owner's friends; when the kept side lost it, the two sides swap (the trusted side's come
+-- to the kept id, the other's stay under the merged one); when nobody lost it, all of it moves. Moved
+-- rows merge: a friendship beats an ask, and asks crossed between the two sides (one asked a player
+-- who had asked the other) become a friendship. Between the two ids nothing stays: they are one player.
+-- A block that lands on a friendship ends it. Internal: fold_player, which holds both players' locks.
+create or replace function public.online_fold_friends(p_keep text, p_merge text, p_lost text)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_swap boolean := p_lost is not distinct from p_keep;
+  v_rows jsonb;
+  r record;
+  v_a text;
+  v_b text;
+  v_asker text;
+begin
+  delete from public.friendships f where f.a_player = least(p_keep, p_merge) and f.b_player = greatest(p_keep, p_merge);
+  delete from public.blocks b where (b.blocker, b.blocked) in ((p_keep, p_merge), (p_merge, p_keep));
+  if p_lost = p_merge then
+    return;
+  end if;
+  with d as (
+    delete from public.friendships f where f.a_player in (p_keep, p_merge) or f.b_player in (p_keep, p_merge) returning f.*
+  ) select coalesce(jsonb_agg(to_jsonb(d)), '[]'::jsonb) into v_rows from d;
+  for r in select * from jsonb_to_recordset(v_rows)
+             as x(a_player text, b_player text, asker text, status text, created_at timestamptz, accepted_at timestamptz) loop
+    v_a := case when r.a_player = p_merge then p_keep when v_swap and r.a_player = p_keep then p_merge else r.a_player end;
+    v_b := case when r.b_player = p_merge then p_keep when v_swap and r.b_player = p_keep then p_merge else r.b_player end;
+    v_asker := case when r.asker = p_merge then p_keep when v_swap and r.asker = p_keep then p_merge else r.asker end;
+    insert into public.friendships (a_player, b_player, asker, status, created_at, accepted_at)
+    values (least(v_a, v_b), greatest(v_a, v_b), v_asker, r.status, r.created_at, r.accepted_at)
+    on conflict (a_player, b_player) do update
+      set status      = case when public.friendships.status = 'accepted' or excluded.status = 'accepted'
+                                  or public.friendships.asker <> excluded.asker then 'accepted' else 'pending' end,
+          accepted_at = case when public.friendships.status = 'accepted' or excluded.status = 'accepted'
+                                  or public.friendships.asker <> excluded.asker
+                             then coalesce(least(public.friendships.accepted_at, excluded.accepted_at), now()) end,
+          created_at  = least(public.friendships.created_at, excluded.created_at);
+  end loop;
+  with d as (
+    delete from public.blocks b where b.blocker in (p_keep, p_merge) or b.blocked in (p_keep, p_merge) returning b.*
+  ) select coalesce(jsonb_agg(to_jsonb(d)), '[]'::jsonb) into v_rows from d;
+  insert into public.blocks (blocker, blocked, created_at)
+  select y.blocker, y.blocked, min(y.created_at)
+    from (select case when x.blocker = p_merge then p_keep when v_swap and x.blocker = p_keep then p_merge else x.blocker end as blocker,
+                 case when x.blocked = p_merge then p_keep when v_swap and x.blocked = p_keep then p_merge else x.blocked end as blocked,
+                 x.created_at
+            from jsonb_to_recordset(v_rows) as x(blocker text, blocked text, created_at timestamptz)) y
+   group by y.blocker, y.blocked;
+  delete from public.friendships f
+   where (f.a_player in (p_keep, p_merge) or f.b_player in (p_keep, p_merge))
+     and exists (select 1 from public.blocks b
+                  where (b.blocker = f.a_player and b.blocked = f.b_player) or (b.blocker = f.b_player and b.blocked = f.a_player));
+  update public.friend_asks k
+     set player_id = case when k.player_id = p_merge then p_keep else p_merge end
+   where k.player_id = p_merge or (v_swap and k.player_id = p_keep);
+  update public.friend_asks k
+     set other_id = case when k.other_id = p_merge then p_keep else p_merge end
+   where k.other_id = p_merge or (v_swap and k.other_id = p_keep);
+end;
+$$;
+revoke execute on function public.online_fold_friends(text, text, text) from public, anon, authenticated;
+
+-- Online status (plan 39, 3.2). A friend's dot: online (in online mode: the 🌐 window), in a game (in
+-- an online race, paused or not) or offline (anything else: solo, split screen, other menus, the app
+-- closed, no connection). No shared presence channel: any anonymous account could list every online
+-- device there (the Design rules). So each trusted device beats while its player is in online mode, a
+-- row read through friend_statuses by the player's friends and nobody else.
+-- One row per device, not per player: two devices of one player never overwrite each other's beat, a
+-- device that drops to pending stops counting at once (trust is read when the state is), and the row
+-- goes with the device's link (unlinked, removed, reset, a stale anonymous user), which a merge moves
+-- with its trust (fold_player), so nothing here needs housekeeping or a merge rule. Readable by no role.
+create table if not exists public.online_beats (
+  uid uuid primary key references public.online_players (uid) on delete cascade,
+  at  timestamptz not null default now()
+);
+alter table public.online_beats enable row level security;
+revoke all on public.online_beats from public, anon, authenticated;
+
+-- A player's state, from their trusted devices' beats: 'in_game' when one that beat within c_fresh sits
+-- in a running race (a room 'playing': its pauses too, and a room still being set up is not one),
+-- 'online' when one beat within c_fresh, else 'offline'. A device stops beating when its player leaves
+-- online mode, and says so (online_beat(false)), so its friends see it go at once; a closed app or a
+-- lost connection goes after c_fresh. Internal: friend_statuses, and invites (Tier 4: both online).
+create or replace function public.online_state(p_player text)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  c_fresh constant interval := interval '60 seconds';
+begin
+  if exists (select 1 from public.online_players o
+               join public.online_beats b on b.uid = o.uid
+              where o.player_id = p_player and o.trusted and b.at > now() - c_fresh
+                and exists (select 1 from public.rooms r
+                             where r.status = 'playing' and (r.host_uid = o.uid or r.guest_uid = o.uid))) then
+    return 'in_game';
+  end if;
+  if exists (select 1 from public.online_players o
+               join public.online_beats b on b.uid = o.uid
+              where o.player_id = p_player and o.trusted and b.at > now() - c_fresh) then
+    return 'online';
+  end if;
+  return 'offline';
+end;
+$$;
+revoke execute on function public.online_state(text) from public, anon, authenticated;
+
+-- This device's heartbeat while its player is in online mode (the 🌐 window or an online race):
+-- { ok: true }. p_here false (or null) says the device left online mode: its beat goes, so its friends
+-- see it offline at once. A trusted device only (M1 rule 2): a pending device, which may be someone
+-- else's, never shows its player online. A beat within c_gap of the last writes nothing, so a client
+-- that beats too often costs no more writes than one beat each c_gap.
+create or replace function public.online_beat(p_here boolean)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  c_gap constant interval := interval '5 seconds';
+  v_me public.online_players := public.online_trusted_me();
+begin
+  if p_here then
+    insert into public.online_beats as b (uid, at) values (v_me.uid, now())
+    on conflict (uid) do update set at = excluded.at where b.at < now() - c_gap;
+  else
+    delete from public.online_beats b where b.uid = v_me.uid;
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- The player's friends with each one's state, for a trusted device: { friends: [{ peer, name, state }] },
+-- state 'online' | 'in_game' | 'offline' (online_state), sorted online, in a game, offline, then by name.
+-- The friends are friend_list's: accepted only, a hidden player (plan 30) and an id a merge folded away
+-- left out; a block ends the friendship, so it ends the state too. No ids. No function gives anyone
+-- else's state: a stranger, an ask either way and a blocked player read nothing.
+create or replace function public.friend_statuses()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_id text := (public.online_trusted_me()).player_id;
+begin
+  return jsonb_build_object('friends', coalesce((
+    select jsonb_agg(jsonb_build_object('peer', y.peer, 'name', y.name, 'state', y.state)
+                     order by array_position(array['online', 'in_game', 'offline'], y.state), lower(y.name), y.peer)
+      from (select public.online_peer(v_id, x.other) as peer, public.online_shown_name(x.other) as name,
+                   public.online_state(x.other) as state
+              from (select case when f.a_player = v_id then f.b_player else f.a_player end as other
+                      from public.friendships f
+                     where v_id in (f.a_player, f.b_player) and f.status = 'accepted') x
+             where public.resolve_player(x.other) = x.other and not public.player_hidden(x.other)) y), '[]'::jsonb));
+end;
+$$;
+
+-- Invites (plan 39, 4.1; the table is with the rooms). Only between accepted friends, both in online mode
+-- (the outline's "both online": 🟢 means "can be invited now"), each named by a peer handle, never an id.
+-- Every function is for a trusted device (M1 rule 2: invites are private, item 61) and keyed on resolved
+-- player ids. The server tells the players on their own topics (online_user_topic: 'invite' to the friend
+-- when one is sent; 'invite_update' { invite, status } to both when one is accepted, declined or
+-- cancelled), which only that player's paired devices read and nobody writes (online_can). An invite past
+-- its time is told to nobody: both sides count down from its expires_at.
+
+-- Are two players friends who may invite each other? An accepted friendship, neither id folded away,
+-- neither hidden (plan 30: their friends do not list them), no block either way. Internal.
+create or replace function public.online_invite_friends(p_me text, p_other text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select p_me <> p_other
+     and public.resolve_player(p_me) = p_me and public.resolve_player(p_other) = p_other
+     and not public.player_hidden(p_me) and not public.player_hidden(p_other)
+     and exists (select 1 from public.friendships f
+                  where f.a_player = least(p_me, p_other) and f.b_player = greatest(p_me, p_other) and f.status = 'accepted')
+     and not exists (select 1 from public.blocks b
+                      where (b.blocker = p_me and b.blocked = p_other) or (b.blocker = p_other and b.blocked = p_me));
+$$;
+revoke execute on function public.online_invite_friends(text, text) from public, anon, authenticated;
+
+-- Is an invite live? Pending and inside its time; its room open (and inside its 15 minutes) under the
+-- device that sent it, as the player it sent as; that device still paired and beating within c_fresh
+-- (online_state's: in online mode, so a closed app's invite goes with its beat, at once when its pagehide
+-- beacon lands); and the two still friends (online_invite_friends). Read every time, never stored: an
+-- unfriend, a block, a merge, a demotion or a lost beat ends it at once,
+-- with nothing to clean up. Internal.
+create or replace function public.online_invite_live(p_inv public.invites)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  c_fresh constant interval := interval '60 seconds';
+begin
+  return p_inv.status = 'pending' and p_inv.expires_at > now()
+     and exists (select 1 from public.rooms r
+                   join public.online_players o on o.uid = r.host_uid
+                  where r.code = p_inv.room_code and r.host_uid = p_inv.from_uid and r.host_player = p_inv.from_player
+                    and r.status = 'open' and r.updated_at > now() - interval '15 minutes'
+                    and o.player_id = p_inv.from_player and o.trusted)
+     and exists (select 1 from public.online_beats b where b.uid = p_inv.from_uid and b.at > now() - c_fresh)
+     and public.online_invite_friends(p_inv.from_player, p_inv.to_player);
+end;
+$$;
+revoke execute on function public.online_invite_live(public.invites) from public, anon, authenticated;
+
+-- An invite as p_viewer sees it: { invite, peer, name, sent_at, expires_at }, the other player's handle
+-- for p_viewer (the one friend_list gives) and their shown name, times in ms. No ids. Internal.
+create or replace function public.online_invite_json(p_inv public.invites, p_viewer text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'invite', p_inv.id,
+    'peer', public.online_peer(p_viewer, x.other),
+    'name', public.online_shown_name(x.other),
+    'sent_at', floor(extract(epoch from p_inv.sent_at) * 1000)::bigint,
+    'expires_at', floor(extract(epoch from p_inv.expires_at) * 1000)::bigint)
+  from (select case when p_viewer = p_inv.from_player then p_inv.to_player else p_inv.from_player end as other) x;
+$$;
+revoke execute on function public.online_invite_json(public.invites, text) from public, anon, authenticated;
+
+-- Invite a friend (by the handle friend_list or friend_statuses gave) into this device's own room: its
+-- open room when it hosts one (the code stays, so a Resend keeps the host on its channel; its 15 minutes
+-- start again), else a new one ('invite'; create_room's rules: one per 2 seconds, housekeeping, the
+-- device's other seat goes). The friend's paired devices are told at once ('invite' on their player's
+-- topic, online_user_topic, as invite_list shows it) and list it. { ok: true, invite, code, sent_at, expires_at } (ms; expires_at
+-- is sent_at + c_ttl, INVITE_TTL), { ok: false, error: 'unavailable' } (the handle names no accepted
+-- friend, or the friend is not in online mode now or is in a game, or either is hidden: never which),
+-- { ok: false, error: 'rate limited' } (c_minute invites a minute or c_day a day from this player,
+-- c_pair_hour to this friend an hour, a replaced one counted; or a new room within 2 seconds). One live
+-- invite per sending device and per pair: this device's other one and this player's other one to this
+-- friend are cancelled first, both players told. Sending is a beat: the device is in online mode, sending
+-- from it, so another window of the same browser that just left online mode (and deleted this device's
+-- beat: item 60's two-tab note) does not leave the invite dead or the sender offline. Raises as
+-- online_friend_start ('not signed in', 'not linked', 'not trusted', 'bad peer'), 'in a race' (as
+-- create_room), 'online closed' (the switch) and 'busy' (no free code).
+create or replace function public.send_invite(p_peer text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  c_ttl constant interval := interval '2 minutes'; -- INVITE_TTL, stored on the row
+  c_minute    constant int := 5;   -- invites a player sends in a minute
+  c_pair_hour constant int := 10;  -- to one friend in an hour
+  c_day       constant int := 100; -- a player in a day
+  s record;
+  v_me public.online_players;
+  v_code text;
+  v_inv public.invites;
+  r record;
+begin
+  select * into s from public.online_friend_start(p_peer); -- a paired device, a well-formed handle, both players' locks
+  v_me := public.online_me();
+  if exists (select 1 from public.rooms x where v_me.uid in (x.host_uid, x.guest_uid) and x.status = 'playing') then
+    raise exception 'in a race';
+  end if;
+  perform public.online_require_open();
+  if s.other is null or not public.online_invite_friends(s.me, s.other) or public.online_state(s.other) <> 'online' then
+    return jsonb_build_object('ok', false, 'error', 'unavailable');
+  end if;
+  if (select count(*) from public.invites i where i.from_player = s.me and i.sent_at > now() - interval '1 minute') >= c_minute
+     or (select count(*) from public.invites i where i.from_player = s.me and i.sent_at > now() - interval '1 day') >= c_day
+     or (select count(*) from public.invites i
+          where i.from_player = s.me and i.to_player = s.other and i.sent_at > now() - interval '1 hour') >= c_pair_hour then
+    return jsonb_build_object('ok', false, 'error', 'rate limited');
+  end if;
+  select x.code into v_code from public.rooms x
+   where x.host_uid = v_me.uid and x.status = 'open' and x.updated_at > now() - interval '15 minutes'
+   for update;
+  if v_code is null then
+    if exists (select 1 from public.rooms x where x.host_uid = v_me.uid and x.created_at > now() - interval '2 seconds') then
+      return jsonb_build_object('ok', false, 'error', 'rate limited');
+    end if;
+    perform public.online_cleanup();
+    perform public.online_unseat(v_me.uid); -- its seat elsewhere, and its invites with its room
+    delete from public.rooms x where x.host_uid = v_me.uid; -- its abandoned or finished room too
+    for i in 1 .. 20 loop
+      v_code := (100000 + public.online_random(900000))::text;
+      begin
+        insert into public.rooms (code, host_uid, host_player, source) values (v_code, v_me.uid, v_me.player_id, 'invite');
+        exit;
+      exception when unique_violation then
+        v_code := null; -- that code is taken: draw another
+      end;
+    end loop;
+    if v_code is null then
+      raise exception 'busy';
+    end if;
+  else
+    update public.rooms x set updated_at = now() where x.code = v_code;
+  end if;
+  for r in
+    update public.invites i set status = 'cancelled'
+     where i.status = 'pending' and i.expires_at > now()
+       and (i.from_uid = v_me.uid or (i.from_player = s.me and i.to_player = s.other))
+    returning i.id, i.from_player, i.to_player
+  loop
+    perform public.online_invite_told(r.id, 'cancelled', r.from_player, r.to_player);
+  end loop;
+  insert into public.online_beats as b (uid, at) values (v_me.uid, now())
+  on conflict (uid) do update set at = excluded.at;
+  insert into public.invites (from_uid, from_player, to_player, room_code, expires_at)
+  values (v_me.uid, s.me, s.other, v_code, now() + c_ttl)
+  returning * into v_inv;
+  perform realtime.send(public.online_invite_json(v_inv, s.other), 'invite', public.online_user_topic(s.other), true);
+  return (public.online_invite_json(v_inv, s.me) - 'peer' - 'name') || jsonb_build_object('ok', true, 'code', v_code);
+end;
+$$;
+
+-- The player's invites, for a trusted device: { incoming: [{ invite, peer, name, sent_at, expires_at }],
+-- outgoing: [{ invite, peer, name, status, sent_at, expires_at }], topic } (ms, newest first; topic is
+-- the player's own Realtime topic, online_user_topic, the one the device subscribes to for 'invite' and
+-- 'invite_update' while in online mode). Incoming: the live
+-- ones (online_invite_live), what a missed 'invite' event would have shown; read on entering online mode.
+-- Outgoing: this player's from the last c_recent (up to 20), from any of its devices, each 'pending'
+-- (live), 'accepted', 'declined', 'cancelled' or 'expired' (anything else: past its time, its room gone
+-- or taken, the sender out of online mode, the friendship ended: never which); a hidden friend and an id
+-- a merge folded away are left out. No ids.
+create or replace function public.invite_list()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  c_recent constant interval := interval '10 minutes';
+  v_id text := (public.online_trusted_me()).player_id;
+begin
+  return jsonb_build_object(
+    'incoming', coalesce((select jsonb_agg(public.online_invite_json(i, v_id) order by i.sent_at desc, i.id)
+                            from public.invites i
+                           where i.to_player = v_id and i.status = 'pending' and i.expires_at > now()
+                             and public.online_invite_live(i)), '[]'::jsonb),
+    'outgoing', coalesce((select jsonb_agg(public.online_invite_json(i, v_id)
+                                           || jsonb_build_object('status', case when i.status = 'pending' and not public.online_invite_live(i)
+                                                                                then 'expired' else i.status end)
+                                           order by i.sent_at desc, i.id)
+                            from (select * from public.invites x
+                                   where x.from_player = v_id and x.sent_at > now() - c_recent
+                                     and public.resolve_player(x.to_player) = x.to_player and not public.player_hidden(x.to_player)
+                                   order by x.sent_at desc, x.id
+                                   limit 20) i), '[]'::jsonb),
+    'topic', public.online_user_topic(v_id));
+end;
+$$;
+
+-- Take the guest's seat of a friend's room by their invite, with one tap: no code (so no join cap) and no
+-- Let in (the host chose this guest): { ok: true, code, status: 'ready', host_name }. The host is told
+-- ('status' on room:<code>, the room as room_state shows it, as set_room_status tells it), and both
+-- players ('invite_update', accepted). This device leaves its other seat first, as join_room, and its
+-- own invite goes with its room. { ok: false, error: 'expired' } for anything but a live invite to this
+-- player (past its time, answered, cancelled, its room gone or taken, the sender out of online mode, the
+-- friendship ended, or not this player's at all: never which). Raises as online_trusted_me, 'in a race'
+-- (first, as join_room) and 'online closed' (the switch).
+create or replace function public.accept_invite(p_invite uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players := public.online_trusted_me();
+  v_inv public.invites;
+  v_room public.rooms;
+begin
+  if exists (select 1 from public.rooms x where v_me.uid in (x.host_uid, x.guest_uid) and x.status = 'playing') then
+    raise exception 'in a race';
+  end if;
+  perform public.online_require_open();
+  select * into v_inv from public.invites i where i.id = p_invite and i.to_player = v_me.player_id;
+  if v_inv.id is null then
+    return jsonb_build_object('ok', false, 'error', 'expired');
+  end if;
+  -- Both players' locks, as fold_player and the friend functions take them; then the room, then the
+  -- invite (rooms before invites, as online_unseat). The link is read again under the locks.
+  perform pg_advisory_xact_lock(hashtext(least(v_inv.from_player, v_inv.to_player)));
+  perform pg_advisory_xact_lock(hashtext(greatest(v_inv.from_player, v_inv.to_player)));
+  v_me := public.online_me();
+  select * into v_room from public.rooms x where x.code = v_inv.room_code for update;
+  select * into v_inv from public.invites i where i.id = p_invite for update;
+  if v_me.uid is null or not v_me.trusted or v_me.player_id is distinct from v_inv.to_player
+     or not public.online_invite_live(v_inv) then
+    return jsonb_build_object('ok', false, 'error', 'expired');
+  end if;
+  perform public.online_unseat(v_me.uid);
+  update public.rooms x
+     set guest_uid = v_me.uid, guest_player = v_me.player_id, status = 'ready', updated_at = now()
+   where x.code = v_room.code
+  returning * into v_room;
+  update public.invites i set status = 'accepted' where i.id = p_invite;
+  perform realtime.send(public.online_room_json(v_room, null) - 'seat' - 'server_ms' - 'ok', 'status', 'room:' || v_room.code, true);
+  perform public.online_invite_told(p_invite, 'accepted', v_inv.from_player, v_inv.to_player);
+  return jsonb_build_object('ok', true, 'code', v_room.code, 'status', 'ready',
+    'host_name', (select p.name from public.online_profiles p where p.player_id = v_room.host_player));
+end;
+$$;
+
+-- Turn a friend's invite down: both players are told ('invite_update', declined: the sender's "<name>
+-- can't play right now"), and the sender's room stays open (invite someone else, or resend). { ok: true }
+-- whatever the id: someone else's, or one no longer live, changes nothing and tells nobody. Raises as
+-- online_trusted_me.
+create or replace function public.decline_invite(p_invite uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players := public.online_trusted_me();
+  v_inv public.invites;
+begin
+  select * into v_inv from public.invites i where i.id = p_invite and i.to_player = v_me.player_id for update;
+  if v_inv.id is not null and public.online_invite_live(v_inv) then
+    update public.invites i set status = 'declined' where i.id = p_invite;
+    perform public.online_invite_told(p_invite, 'declined', v_inv.from_player, v_inv.to_player);
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- Take back one's own invite, from any of the player's paired devices: both players are told
+-- ('invite_update', cancelled), and the room stays open. { ok: true } whatever the id: someone else's,
+-- or one no longer live, changes nothing and tells nobody. Raises as online_trusted_me. (Leaving the
+-- room, or online play, cancels it too: online_unseat.)
+create or replace function public.cancel_invite(p_invite uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players := public.online_trusted_me();
+  v_inv public.invites;
+begin
+  select * into v_inv from public.invites i where i.id = p_invite and i.from_player = v_me.player_id for update;
+  if v_inv.id is not null and public.online_invite_live(v_inv) then
+    update public.invites i set status = 'cancelled' where i.id = p_invite;
+    perform public.online_invite_told(p_invite, 'cancelled', v_inv.from_player, v_inv.to_player);
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
 -- The Realtime policies' check (granted to authenticated, because a policy runs it as the device
 -- asking): may this device read (p_write false) or write a channel topic? room:<code>: its two seated
--- devices, each still linked as the player it sat down as. Every other topic: nobody (user:<player id>
--- comes with invites, Tier 4). Answers only about the caller.
+-- devices, each still linked as the player it sat down as. A player's own topic (invites, 4.1:
+-- online_user_topic, 'user:' and a handle, never the id): read by that player's paired devices only (M1
+-- rule 2: a waiting device, which may be someone else's, reads nothing private) and written by nobody:
+-- only the server sends there (realtime.send runs as the definer), so what arrives there is the server's
+-- word. Every other topic: nobody. Answers only about the caller.
 create or replace function public.online_can(p_topic text, p_write boolean)
 returns boolean
 language sql
@@ -4831,6 +6000,9 @@ as $$
        where r.code = substr(p_topic, 6)
          and ((r.host_uid = o.uid and r.host_player = o.player_id)
               or (r.guest_uid = o.uid and r.guest_player = o.player_id)))
+    when p_topic ~ '^user:[0-9a-f]{32}$' then not coalesce(p_write, true) and exists (
+      select 1 from public.online_players o
+       where o.uid = auth.uid() and o.trusted and public.online_user_topic(o.player_id) = p_topic)
     else false
   end;
 $$;
@@ -4878,6 +6050,32 @@ revoke execute on function public.finish_match(text, int, jsonb) from public, an
 grant  execute on function public.finish_match(text, int, jsonb) to authenticated;
 revoke execute on function public.online_history() from public, anon;
 grant  execute on function public.online_history() to authenticated;
+revoke execute on function public.friend_list() from public, anon;
+grant  execute on function public.friend_list() to authenticated;
+revoke execute on function public.send_friend_request(text) from public, anon;
+grant  execute on function public.send_friend_request(text) to authenticated;
+revoke execute on function public.respond_friend_request(text, boolean) from public, anon;
+grant  execute on function public.respond_friend_request(text, boolean) to authenticated;
+revoke execute on function public.remove_friend(text) from public, anon;
+grant  execute on function public.remove_friend(text) to authenticated;
+revoke execute on function public.block_user(text) from public, anon;
+grant  execute on function public.block_user(text) to authenticated;
+revoke execute on function public.unblock_user(text) from public, anon;
+grant  execute on function public.unblock_user(text) to authenticated;
+revoke execute on function public.online_beat(boolean) from public, anon;
+grant  execute on function public.online_beat(boolean) to authenticated;
+revoke execute on function public.friend_statuses() from public, anon;
+grant  execute on function public.friend_statuses() to authenticated;
+revoke execute on function public.send_invite(text) from public, anon;
+grant  execute on function public.send_invite(text) to authenticated;
+revoke execute on function public.invite_list() from public, anon;
+grant  execute on function public.invite_list() to authenticated;
+revoke execute on function public.accept_invite(uuid) from public, anon;
+grant  execute on function public.accept_invite(uuid) to authenticated;
+revoke execute on function public.decline_invite(uuid) from public, anon;
+grant  execute on function public.decline_invite(uuid) to authenticated;
+revoke execute on function public.cancel_invite(uuid) from public, anon;
+grant  execute on function public.cancel_invite(uuid) to authenticated;
 
 -- Which version of this file the database last ran: a short SHA-256 of the file with the value
 -- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
@@ -4889,7 +6087,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'b15eb4bda85ff098'::text; -- schema stamp
+  select 'ee80a6b46ab4ce85'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

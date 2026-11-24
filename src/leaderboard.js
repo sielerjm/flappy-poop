@@ -372,6 +372,25 @@ export function createTournamentQueue(storage = browserStorage(), { key = LEADER
   };
 }
 
+/** A split-screen race's 🏆 post, or null: { id, playerId, name, score, level, runId? } (runId: the race half's run queued with it, plan 39, 2.8). */
+function normalizeRacePost(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id || raw.id.length > 64) return null;
+  const r = normalizeRecord(raw);
+  if (!r || !ID_RE.test(r.playerId)) return null;
+  const runId = typeof raw.runId === 'string' && ID_RE.test(raw.runId) ? raw.runId : null;
+  return { id: raw.id, playerId: r.playerId, name: r.name, score: r.score, level: r.level, ...(runId ? { runId } : {}) };
+}
+
+/**
+ * Split-screen race scores (plan 39, 2.5, item 42(c)) waiting for the 🏆 board: each racer with a
+ * player id posts their race score through submit_score's own rules (the higher score stays, the name
+ * claim, 👑). Queued once per id; drained like the tournament queue.
+ */
+export function createRacePostQueue(storage = browserStorage(), { key = LEADERBOARD.racePostsKey, max = LEADERBOARD.racePostQueueMax } = {}) {
+  const q = createPostQueue(storage, { key, max, normalize: normalizeRacePost, idOf: (e) => e.id });
+  return { load: q.load, add: q.add, outcome: q.outcome, drain: q.drain };
+}
+
 // ---------------------------------------------------------------------------
 // Daily Dump (🌞). The attempt record lives on this device under dailyKey: claimed when the run
 // starts (final: false), rewritten as the score grows, final at the crash. A record left unfinished
@@ -549,9 +568,11 @@ export async function fetchPlayDays(playerId, tz = null, opts = {}) {
  * One request with the apikey header and a timeout. Resolves to the parsed
  * JSON body (undefined for an empty 2xx body) or to null on any failure. With
  * `errors`, a non-2xx answer resolves to { error: true, status, message } (the
- * PostgREST message, e.g. "name taken") instead of null.
+ * PostgREST message, e.g. "name taken") instead of null. With `none`, a 2xx
+ * JSON null (a scalar function that found nothing) resolves to `none`, so it
+ * reads apart from a failure.
  */
-async function request(path, { method = 'GET', body, errors = false } = {}, { fetch = globalThis.fetch, config = LEADERBOARD } = {}) {
+async function request(path, { method = 'GET', body, errors = false, none } = {}, { fetch = globalThis.fetch, config = LEADERBOARD } = {}) {
   const base = baseUrl(config);
   if (!base || typeof fetch !== 'function') return null;
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -579,7 +600,8 @@ async function request(path, { method = 'GET', body, errors = false } = {}, { fe
     if (res.status === 204) return undefined;
     const text = typeof res.text === 'function' ? await res.text() : '';
     if (text === '') return undefined;
-    return JSON.parse(text);
+    const out = JSON.parse(text);
+    return out === null && none !== undefined ? none : out;
   } catch {
     return null;
   } finally {
@@ -590,8 +612,9 @@ async function request(path, { method = 'GET', body, errors = false } = {}, { fe
 /**
  * POST the plan to submit_score(). { ok: true } only when the server accepted
  * it; otherwise { ok: false, reason }: 'nameTaken' when another player holds
- * the username (the server's "name taken"), else 'other' (rate limited, bad
- * input, offline, a malformed plan).
+ * the username (the server's "name taken"), 'refused' for its "bad …" (an
+ * entry it will never take), else 'other' (rate limited, offline, the server
+ * down, a malformed plan).
  */
 export async function submitScore(plan, opts = {}) {
   const p = normalizeRecord(plan);
@@ -602,7 +625,7 @@ export async function submitScore(plan, opts = {}) {
     opts
   );
   if (out === null) return { ok: false, reason: 'other' };
-  if (out?.error) return { ok: false, reason: /name taken/i.test(out.message) ? 'nameTaken' : 'other' };
+  if (out?.error) return { ok: false, reason: /name taken/i.test(out.message) ? 'nameTaken' : /^bad /.test(out.message) ? 'refused' : 'other' };
   return { ok: true };
 }
 
@@ -639,6 +662,20 @@ export async function mergePlayers(keepId, mergeId, opts = {}) {
 export async function fetchPlayerName(playerId, opts = {}) {
   if (typeof playerId !== 'string' || !ID_RE.test(playerId)) return null;
   const out = await request('/rpc/player_name', { method: 'POST', body: { p_player_id: playerId } }, opts);
+  if (typeof out !== 'string') return null;
+  const { ok, name } = validateName(out);
+  return ok && name === out ? out : null;
+}
+
+/**
+ * fetchPlayerName's answer kept apart (plan 39, 2.7, AUD-106): the board's name for this player's id,
+ * '' when the player has no rows, or null when the board cannot say (disabled, unreachable, down, not
+ * deployed, an answer that is not a valid username). A split-screen race post goes under it.
+ */
+export async function fetchBoardName(playerId, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId)) return null;
+  const out = await request('/rpc/player_name', { method: 'POST', body: { p_player_id: playerId }, none: '' }, opts);
+  if (out === '') return '';
   if (typeof out !== 'string') return null;
   const { ok, name } = validateName(out);
   return ok && name === out ? out : null;

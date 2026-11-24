@@ -28,6 +28,7 @@ import { LEADERBOARD, TUNING } from './config.js';
 import { browserStorage, pageStorage } from './store.js';
 import { debugHandleAllowed } from './logic.js';
 import { loadSupabase } from './supabaseLoader.js';
+import { USER_TOPIC, topicEvent } from './onlineInvites.js';
 import {
   SERVER_EVENTS,
   createClock,
@@ -62,12 +63,25 @@ export const ONLINE_RPCS = Object.freeze([
   'room_state',
   'finish_match',
   'online_history',
+  'friend_list',
+  'send_friend_request',
+  'respond_friend_request',
+  'remove_friend',
+  'block_user',
+  'unblock_user',
+  'online_beat',
+  'friend_statuses',
+  'send_invite',
+  'invite_list',
+  'accept_invite',
+  'decline_invite',
+  'cancel_invite',
 ]);
 
 const SEATS = ['host', 'guest'];
 
 /** The online functions' plain messages (their `raise exception`s), passed on as they are. */
-const SERVER_ERRORS = new Set(['not signed in', 'not linked', 'not trusted', 'bad name', 'name taken', 'too many devices waiting', 'rate limited', 'in a race', 'no room', 'no guest', 'not host', 'bad status', 'online closed', 'no match', 'bad result']);
+const SERVER_ERRORS = new Set(['not signed in', 'not linked', 'not trusted', 'bad name', 'name taken', 'too many devices waiting', 'rate limited', 'in a race', 'no room', 'no guest', 'not host', 'bad status', 'online closed', 'no match', 'bad result', 'bad peer']);
 
 const REFUSED = /unauthorized|permission/i; // a policy said no: at join ('Unauthorized: …') or at a token refresh
 const CAPPED = /too many|rate limit/i; // 'Too many messages per second', 'Client presence rate limit exceeded'
@@ -223,7 +237,9 @@ function randomSid() {
  *
  * - signIn() / warm(): the client, a reused or new anonymous session ({ ok, uid } or { ok: false,
  *   error: 'disabled' | 'load failed' | 'rate limited' | 'offline' | 'error' }); warm also opens the
- *   socket and starts the clock (the pre-warm when 🌐 is switched on, item 16).
+ *   socket and starts the clock (the pre-warm when 🌐 is switched on, item 16). signIn({ create: false })
+ *   reuses a stored session only ('signed out' without one). A close() while either is out wins: the
+ *   late answer starts no ticker, socket or clock (5.2b).
  * - rpc(fn, args): an online function → { ok: true, data } or { ok: false, error } (the server's
  *   plain message, or 'not online', 'signed out', 'refused', 'offline', 'error').
  * - syncClock() / pump() / serverNow() / clockSynced: server_now() round trips into createClock.
@@ -276,10 +292,12 @@ export function createOnlineNet({
   let session = null; // the last session seen; null when signed out
   let signing = null; // the sign-in in flight
   let active = false; // inside online play: between signIn / warm and close
+  let closes = 0; // close() calls so far: a sign-in or warm that outlives a close starts nothing (plan 39, 5.2b, AUD-145)
   let ticking = false; // the token ticker (startAutoRefresh) is on
   let sampling = null; // the server_now sample in flight
   let nextSampleAt = -Infinity;
   let slot = null; // the room channel
+  let user = null; // 4.2: the player's own topic (invites), { topic, ch, joined }
   const queue = [];
   const tracks = []; // presence track times, for the per-client cap
   const stats = { sent: 0, received: 0, lost: 0, bad: 0, stale: 0, verifies: 0, rejoins: 0, retries: 0, tracks: 0, rttMs: null, rttMinMs: null };
@@ -290,10 +308,19 @@ export function createOnlineNet({
     if (client) return { ok: true };
     try {
       const lib = await load();
-      client ??= lib.createClient(url, config.publishableKey, {
-        auth: { storage: sessionStorageOver(storage), storageKey: config.onlineSessionKey, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
-        ...(fetch ? { global: { fetch } } : {}),
-      });
+      if (!client) {
+        client = lib.createClient(url, config.publishableKey, {
+          auth: { storage: sessionStorageOver(storage), storageKey: config.onlineSessionKey, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
+          ...(fetch ? { global: { fetch } } : {}),
+        });
+        // The ticker and supabase-js's own reads refresh the token without us; beacon() reads `session`
+        // synchronously, so keep it current (T3-review AUD-112). Only while signed in: sign-in sets it.
+        quietly(() =>
+          client.auth.onAuthStateChange?.((event, s) => {
+            if (event === 'TOKEN_REFRESHED' && s && session) session = s;
+          }),
+        );
+      }
       return { ok: true };
     } catch (e) {
       return { ok: false, error: 'load failed', messageKey: e?.messageKey ?? 'onlineLoadFailed' };
@@ -307,7 +334,7 @@ export function createOnlineNet({
     quietly(() => client.auth.startAutoRefresh?.());
   }
 
-  async function doSignIn() {
+  async function doSignIn(create) {
     if (!url) return { ok: false, error: 'disabled' };
     const got = await getClient();
     if (!got.ok) return got;
@@ -321,24 +348,34 @@ export function createOnlineNet({
       }
     }
     if (!s) {
+      if (!create) return { ok: false, error: 'signed out' }; // AUD-146: a stored session only, never a new user
       const r = await auth.signInAnonymously().catch((error) => ({ error }));
       if (r?.error || !r?.data?.session) return { ok: false, error: signInError(r?.error) };
       s = r.data.session;
     }
     session = s;
-    startTicker();
     return { ok: true, uid: s.user?.id ?? null };
   }
 
-  function signIn() {
+  /**
+   * The session, reused or new ({ create: false }: reused only, as Clear and a Load of another player
+   * need, AUD-146). The token ticker starts only if close() was not called while it was out (AUD-145).
+   */
+  function signIn({ create = true } = {}) {
     if (client && session) {
       startTicker();
       return Promise.resolve({ ok: true, uid: session.user?.id ?? null });
     }
-    signing ??= doSignIn().finally(() => {
-      signing = null;
+    const gen = closes;
+    const pending = create
+      ? (signing ??= doSignIn(true).finally(() => {
+          signing = null;
+        }))
+      : (signing ?? doSignIn(false));
+    return pending.then((r) => {
+      if (r.ok && gen === closes) startTicker();
+      return r;
     });
-    return signing;
   }
 
   /** Refresh before a join: a token ending within refreshMarginMs is refreshed, then Realtime gets it. */
@@ -699,18 +736,97 @@ export function createOnlineNet({
     return true;
   }
 
+  // --- the player's own topic (4.2) ---
+
+  /**
+   * The topic invite_list() names (never one built from the save's id): private, no presence (the
+   * policy refuses any write there), no self. Its events are the server's own (realtime.send as the
+   * definer), so they need no room_state check; each is parsed (topicEvent) and queued as
+   * { kind: 'user', event: 'invite' | 'invite_update', invite | update }. Every join, a rejoin
+   * included, queues { kind: 'user', event: 'joined' }: the panel reads invite_list() again then
+   * (events may have been missed while it was away). A refusal or a close drops it ('closed').
+   */
+  async function openTopic(topic) {
+    if (typeof topic !== 'string' || !USER_TOPIC.test(topic)) return { ok: false, error: 'bad topic' };
+    if (user?.topic === topic) return { ok: true };
+    closeTopic();
+    const u = { topic, ch: null, joined: false };
+    user = u;
+    if (signing) await signing;
+    if (user !== u) return { ok: false, error: 'closed' };
+    if (!client || !session) {
+      user = null;
+      return { ok: false, error: 'signed out' };
+    }
+    const fresh = await ensureFresh();
+    if (user !== u) return { ok: false, error: 'closed' };
+    if (!fresh.ok) {
+      user = null;
+      return fresh;
+    }
+    try {
+      const ch = client.channel(topic, { config: { private: true, broadcast: { self: false, ack: false } } });
+      u.ch = ch;
+      ch.on('broadcast', { event: '*' }, (m) => {
+        if (user !== u || u.ch !== ch) return;
+        const e = topicEvent(m?.event, m?.payload);
+        if (e) emit({ kind: 'user', ...e });
+      });
+      ch.subscribe((status, err) => {
+        if (user !== u || u.ch !== ch) return;
+        if (status === 'SUBSCRIBED') {
+          u.joined = true;
+          emit({ kind: 'user', event: 'joined' });
+        } else if ((status === 'CHANNEL_ERROR' && REFUSED.test(String(err?.message ?? err ?? ''))) || status === 'CLOSED') {
+          closeTopic();
+          emit({ kind: 'user', event: 'closed' });
+        }
+      });
+    } catch {
+      closeTopic();
+      return { ok: false, error: 'error' };
+    }
+    return { ok: true };
+  }
+
+  function closeTopic() {
+    const u = user;
+    if (!u) return;
+    user = null;
+    const ch = u.ch;
+    u.ch = null;
+    if (ch) quietly(() => client?.removeChannel(ch));
+  }
+
   // --- entering and leaving online play ---
 
   async function warm() {
+    const gen = closes;
     const r = await signIn();
-    if (!r.ok) return r;
+    if (!r.ok || gen !== closes) return r; // closed while it loaded or signed in (AUD-145): no socket, no clock
     quietly(() => client.realtime?.connect?.()); // the first join connects anyway
     pump();
     return r;
   }
 
+  /**
+   * T4-review AUD-127: one transport serves every 🌐 window and race of the page, and their closes wait
+   * for leave_room's answer. lease() is taken by each user; its release closes the transport only if no
+   * later lease was taken meanwhile, so a window opened in that gap keeps its room, topic and ticker.
+   */
+  let leases = 0;
+  function lease() {
+    leases += 1;
+    const at = leases;
+    return () => {
+      if (leases === at) close();
+    };
+  }
+
   function close() {
+    closes += 1;
     closeRoom();
+    closeTopic();
     active = false;
     if (!client) return;
     if (ticking) {
@@ -718,6 +834,32 @@ export function createOnlineNet({
       quietly(() => client.auth.stopAutoRefresh?.());
     }
     quietly(() => client.realtime?.disconnect?.());
+  }
+
+  /**
+   * An online function as a keepalive POST that outlives the page (plan 39, 3.3: pagehide's
+   * online_beat(false)): the Data API's own route with the session's token, never awaited. False when
+   * there is nothing to send it with (signed out, the feature off, no fetch); a lost one costs nothing
+   * the server's freshness window (c_fresh) does not already cover.
+   */
+  function beacon(fn, args = {}) {
+    if (typeof fn !== 'string' || !ONLINE_RPCS.includes(fn) || !url || !session?.access_token) return false;
+    if (Number.isFinite(Number(session.expires_at)) && !(Number(session.expires_at) * 1000 > now())) return false; // the server would answer 401
+    const go = fetch ?? globalThis.fetch;
+    if (typeof go !== 'function') return false;
+    try {
+      Promise.resolve(
+        go(`${url}/rest/v1/rpc/${fn}`, {
+          method: 'POST',
+          keepalive: true,
+          headers: { apikey: config.publishableKey, Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(args),
+        }),
+      ).catch(() => {});
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function signOut() {
@@ -730,6 +872,7 @@ export function createOnlineNet({
     signIn,
     warm,
     rpc,
+    beacon,
     syncClock,
     pump,
     serverNow,
@@ -742,6 +885,10 @@ export function createOnlineNet({
     peer: () => slot?.peer ?? null,
     channelState: () => slot?.state ?? 'none',
     closeRoom,
+    openTopic,
+    closeTopic,
+    topicState: () => (user ? (user.joined ? 'joined' : 'joining') : 'none'),
+    lease,
     close,
     signOut,
     stats: () => ({ ...stats }),

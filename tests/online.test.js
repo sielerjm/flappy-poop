@@ -24,6 +24,9 @@ import {
   agreedWidth,
   roomInit,
   roomStep,
+  joinCodeFromSearch,
+  withoutJoin,
+  joinLink,
   racePhase,
   codeExpiresAt,
   createNetSim,
@@ -51,6 +54,19 @@ const SERVER_EVENT_NAMES = ['guest', 'answer', 'left', 'status'];
 test('no client event reuses a server event name', () => {
   for (const name of SERVER_EVENT_NAMES) assert.equal(Object.hasOwn(ONLINE_EVENTS, name), false, name);
   assert.ok(Object.keys(ONLINE_EVENTS).length >= 8);
+});
+
+test('pause (plan 39, 2.1): one of seven reasons, why this side is paused; round and count bounded; resume is the host\'s GO or its cancel', () => {
+  const send = createSender({ sid: 's', now: () => 5000 });
+  for (const reason of ['away', 'offline', 'busy', 'link', 'menu', 'lost', 'peer']) {
+    assert.ok(send('pause', { reason, ready: false, round: 0, count: 0 }), reason);
+  }
+  for (const bad of [{ reason: 'bored' }, { reason: 'Away' }, { round: -1 }, { round: 1.5 }, { count: -1 }, { ready: 'yes' }]) {
+    assert.equal(send('pause', { reason: 'away', ready: false, round: 0, count: 0, ...bad }), null, JSON.stringify(bad));
+  }
+  assert.ok(send('resume', { round: 0, startAt: 9000, cancel: true }));
+  assert.equal(send('resume', { round: 0, startAt: -1, cancel: false }), null);
+  assert.ok(T.online.pause.heartbeatMs * 2 <= T.online.pause.silenceMs, 'a paused peer\'s heartbeat never reads as silence');
 });
 
 test('pos carries everything ghostPlacement, rivalMarker and raceOutcome read', () => {
@@ -155,9 +171,12 @@ test('every event has a valid example and every field is checked', () => {
     first: { level: 1, seat: 'guest' },
     ready: { level: 1, ready: true },
     go: { level: 2, startAt: 1_800_000_000_000, cancel: false },
-    width: { width: 1280 },
+    width: { width: 1280, heard: false },
     done: { score: 90, deaths: 2, levelWins: 3, finalFirst: true, won: true },
     rematch: { want: true },
+    pause: { reason: 'away', ready: false, round: 0, count: 0 },
+    resume: { round: 2, startAt: 1_800_000_000_000, cancel: false },
+    rewind: { round: 1, level: 3, at: 1_800_000_000_000 },
   };
   assert.deepEqual(Object.keys(examples).sort(), Object.keys(ONLINE_EVENTS).sort());
   const send = createSender({ sid: 's', now: () => 42 });
@@ -689,6 +708,52 @@ test('a status for another code is ignored (a stale topic after a Decline)', () 
   let r = roomStep(roomInit(), { type: 'create', at: AT });
   r = roomStep(r, { type: 'rpc', result: { ok: true, code: '551204', status: 'open' }, at: AT });
   assert.equal(roomStep(r, { type: 'status', room: { code: '482913', status: 'playing', seed: 1, start_ms: AT, round: 1 }, at: AT }), r);
+});
+
+test("4.2 'invited': a friend's invite accepted puts this device in the room as the guest, 'ready' at once (no code typed, no Let in); only from no room, only accept_invite's ready answer", () => {
+  const ok = { ok: true, code: '482913', status: 'ready', host_name: 'SirFlushALot' };
+  const r = roomStep(roomInit(), { type: 'invited', result: ok, at: AT });
+  assert.deepEqual(r, { ...roomInit(), phase: 'ready', role: 'guest', code: '482913', hostName: 'SirFlushALot', changedAt: AT });
+  assert.equal(codeExpiresAt(r), AT + T.online.codeTtlMs, "the room's clock starts at the accept, as join's");
+  const closed = { ...roomInit(), phase: 'closed', reason: 'left' };
+  assert.equal(roomStep(closed, { type: 'invited', result: ok, at: AT }).phase, 'ready');
+  const open = roomStep(roomStep(roomInit(), { type: 'create', at: AT }), { type: 'rpc', result: { ok: true, code: '551204', status: 'open' }, at: AT });
+  assert.equal(roomStep(open, { type: 'invited', result: ok, at: AT }), open, 'a live room is never replaced');
+  for (const bad of [null, { ...ok, ok: false }, { ...ok, status: 'asked' }, { ...ok, code: '12' }]) {
+    const idle = roomInit();
+    assert.equal(roomStep(idle, { type: 'invited', result: bad, at: AT }), idle, JSON.stringify(bad));
+  }
+});
+
+test("4.2 'renew': a Resend kept the host's open room, so its 15 minutes start again; nothing else renews", () => {
+  const open = roomStep(roomStep(roomInit(), { type: 'create', at: AT }), { type: 'rpc', result: { ok: true, code: '551204', status: 'open' }, at: AT });
+  const r = roomStep(open, { type: 'renew', code: '551204', at: AT + 600_000 });
+  assert.deepEqual(r, { ...open, changedAt: AT + 600_000 });
+  assert.equal(codeExpiresAt(r), AT + 600_000 + T.online.codeTtlMs);
+  assert.equal(roomStep(open, { type: 'renew', code: '482913', at: AT + 1 }), open, 'another code');
+  const asked = roomStep(open, { type: 'guest', name: 'Mia', at: AT + 1 });
+  assert.equal(roomStep(asked, { type: 'renew', code: '551204', at: AT + 2 }), asked, 'a guest asking: not open');
+  const guest = roomStep(roomInit(), { type: 'invited', result: { ok: true, code: '551204', status: 'ready', host_name: 'X' }, at: AT });
+  assert.equal(roomStep(guest, { type: 'renew', code: '551204', at: AT + 2 }), guest);
+});
+
+test('4.3 the share link: joinLink is the game\'s address with ?join=<code>; joinCodeFromSearch reads the first 6-digit code (a space allowed, as typed); anything else is none', () => {
+  assert.equal(joinLink('482913'), 'https://sielerjm.github.io/flappy-poop/?join=482913');
+  assert.equal(joinCodeFromSearch('?join=482913'), '482913');
+  assert.equal(joinCodeFromSearch('?r=1&join=482%20913'), '482913');
+  assert.equal(joinCodeFromSearch('?join=12345&join=730155'), '730155', 'the first that holds a code');
+  assert.equal(joinCodeFromSearch('?onlinetest=abc&join=482913#x'), '482913');
+  for (const bad of ['', '?join=', '?join=48291', '?join=4829130', '?join=abcdef', '?joined=482913', '?invite=482913', null, '?join=%E0%A4%A']) assert.equal(joinCodeFromSearch(bad), null, String(bad));
+});
+
+test('4.3 withoutJoin takes every join parameter out of the address (it would sit in the history), keeping the rest and the hash as written', () => {
+  const base = 'https://sielerjm.github.io/flappy-poop/';
+  assert.equal(withoutJoin(`${base}?join=482913`), base);
+  assert.equal(withoutJoin(`${base}?onlinetest=abc&join=482913&perf`), `${base}?onlinetest=abc&perf`);
+  assert.equal(withoutJoin(`${base}?join=482913&join=1#top`), `${base}#top`);
+  assert.equal(withoutJoin(`${base}?invite=x`), `${base}?invite=x`, "plan 28's invite parameter is not this one");
+  assert.equal(withoutJoin(base), base);
+  assert.equal(withoutJoin(null), null);
 });
 
 test('roomStep never mutates its input', () => {

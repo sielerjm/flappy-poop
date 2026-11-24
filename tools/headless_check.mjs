@@ -71,7 +71,7 @@ export const SECTIONS = [
   { name: 'versus-join', needs: [], about: 'two players: the 👥 toggle, the lobby, a race\'s join screen, claims, countdown, routed input, leaving' },
   { name: 'versus-match', needs: [], about: 'two players: shared pause, level sync and ready check, catch-up, respawn, result, the result panel\'s gate, the smoke\'s rematch' },
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
-  { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players' },
+  { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players; each race post backed by its half\'s run (2.8)' },
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats (with their day streaks, 34.14), the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
   { name: 'education-unlock', needs: [], about: "📚 for everyone (plan 28, 2.3; the section keeps its old name): the 📚 switch from the first boot and remembered across a restart, the old word refused as a name with its line, the off switch hiding 📚, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, each DOM window inside an iPhone's faked safe area (plan 28, 4.1), the 📚 popup's Show / Hide remembered (4.2)" },
@@ -82,7 +82,7 @@ export const SECTIONS = [
   { name: 'education-backup', needs: [], about: "💾 backup and restore of the 📚 cards (plan 28, 3.1b), the share sheet stubbed as on a phone: Back up reaches the sheet inside the tap with one JSON file (nothing that names the player), the same file restored again changes nothing, the cards deleted and restored from the file come back while the 📚 board would get none of their runs, the panel at 375 px (no sideways scroll, 44 px buttons), restore disabled over a paused run, Clear's note about the cards" },
   { name: 'blocked-storage', needs: [], about: "blocked site data (plan 28, 1.3): the page reloaded with every read of localStorage throwing still boots past the splash, holds a settings choice for the visit (the 📚 switch across a Play restart too) and plays a run to the game-over panel, with no page exception; the live board blocked at the browser for the rest of the run; then storage restored and the page reloaded" },
   { name: 'invite-link', needs: [], about: "the invite link (plan 28, 2.4): the page loaded with ?invite=<code> opens the 📚 Education data panel with the code filled in on the first ready screen; the address bar has lost the code; no storage keeps it; a load without it opens nothing (the live board blocked at the browser)" },
-  { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers" },
+  { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers; a split-screen race through Chrome's input keeps a race summary per half, each press in its own half's (plan 39, 2.8)" },
   { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them; the 🌞 card's and \"Your cards\"' \"🔥 Current streak = n\" lines (round 2); the days from other devices (34.13: a stubbed play_days, asked once, folded in)" },
   { name: 'education-superq', needs: [], about: "❓ the challenge question (plan 34): the bubble on its pair in a 📚 run, the pairs either side opening at the same height and holding still, its size and float; flown past it opens anyway; the run held under the offer (no banner, tray or \"?\"; P and a hidden page do nothing); taps and Space locked for a moment; Decline flies on with a grace and saves nothing; Try's card cannot be left until answered; right pays 8 + 2 × level and saves the card as reviewed; wrong takes 5 and saves it as missed, holding Fly on; neither counts in the run's tally; round 2: the offer its own square card (sentence above the buttons, no tally), the ring and a fresh Space on Try it, a held Space nothing (AUD-068); the bubble's pop and no book sound on the offer" },
   { name: 'phaser-fallback', needs: [], about: "Phaser's fallback (plan 35, 1.2): the page reloaded with the CDN blocked, then stalled, boots from assets/vendor/ (the stall after the 6 s wait); with both copies blocked the splash reads Couldn't load. Tap to retry, and the tap reloads; without src/splash.js too, the bare ↻; then back on the CDN" },
@@ -90,6 +90,10 @@ export const SECTIONS = [
   { name: 'online-client', needs: [], about: "the online client (plan 39, 0.2): the boot and the sections since ask for nothing of assets/vendor/supabase.js; blocked, loadSupabase() rejects with onlineLoadFailed and no error card shows; unblocked, one same-origin request at the pin gives supabase.createClient, and a second call asks for nothing more" },
   { name: 'resync', needs: [], about: "the resync (plan 35, 1.4), the live board blocked: two online events in a row sync once and the next one after it settles syncs again; a show after a 1 s hide syncs nothing, after a 31 s one it syncs; a restart keeps the one guard and leaves one online listener" },
   { name: 'online-race', needs: [], about: "the online race (plan 39, 1.7a-1.8) against a scripted guest in the page (its own referee and feed, a 40 ms link; no network): the scene and its Play, Space flapping the one half, the purse under the opponent's pill and a long name fitted to it, the host taking level 1's line, the wait timer and Keep waiting, the shared count and GO, the final line to the guest, one outcome on both, the results panel, Rematch's states and round 2, then Leave from the wait offer back to single player" },
+  { name: 'online-reload', needs: [], about: "reload resume (plan 39, 2.3, D4) against a scripted guest in the page (a 40 ms link; no network): the race into level 2 with its level start kept in the tab's record; the guest's reload restarts this race at level 2's start under the overlay; then a real page reload: a stand-in transport under Play, the 🌐 window rejoins (room_state, the channel as the host, nothing left), the race back rewound, both Ready, one GO, level 2 from its first pair with the kept score, purse, beans and level wins, the race to its end and the record gone; 2.3b: a relaunch (a new tab id, the record's beat stale) rejoins and takes the record over; the racing page whose record another page takes steps aside (the transport closed, no leave_room, Play plain, the 🌐 window's line) and, once that page stops beating, looks again and rejoins; a fresh page beside a live beat offers nothing, rejoins nothing, leaves nothing, and its 🌐 window says the race runs in another window" },
+  { name: 'online-friends', needs: [], about: "friends and online status (plan 39, 3.3, Preview G), on a stand-in transport under Play (no network): the 🌐 window beats once linked; the online home's 🤝 Friends with its badge; the Friends screen's order (a request, friends online → in a game → offline with dot and word, a request sent, a recent opponent, Blocked closed); Accept, Add friend, ⋯ Block asked twice, Back with the badge read again; ✕ out of 🌐 says offline once" },
+  { name: 'online-invites', needs: [], about: "invites, the ✉️ (plan 39, 4.2, Preview I), on a stand-in transport under Play (no network) on a 320 phone: invite_list once linked and the topic it names; ✉️ 1 on 🤝 Friends; the inviting 🟢 friend first with the ✉️ and its time, the buttons inside the row under a 16-character name (Michael's ask); a topic invite adds one; the ✉️ tapped: the ready screen as the guest; Invite on a 🟢 friend: the room screen waiting, their no with Resend, Resend in the same room" },
+  { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -1057,6 +1061,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     await evaluate(`import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; })`);
     // Run the farts from the start of level 3 (50 pipes of room) so neither crosses a finish line here.
     const TT = await evaluate(`import('./src/config.js').then((m) => JSON.stringify(m.TUNING))`).then(JSON.parse);
+    // After a death or a win the Over panel opens from time.delayedCall(deathToOverMs), on the game clock,
+    // which falls behind the wall clock when frames drop under load: wait the delay, then until Over is up
+    // (5 s at most), then settleMs for it to draw (plan 39, 5.2b, AUD-148: 5.1's :8000 failure). press()
+    // in the education sections waits out a hold the same way.
+    const waitOver = async (settleMs = 300) => {
+      await sleep(TT.deathToOverMs);
+      for (let i = 0; i < 50 && !(await evaluate(`__flappy.scene.isActive('Over')`)); i += 1) await sleep(100);
+      await sleep(settleMs);
+    };
     const [len1, len2, len3] = TT.levels.pipes;
     // Pipe spacing per level (wider on the slow levels 1–2), from the game's own logic.
     const SPACING = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => JSON.stringify([0, 1, 2, 3].map((n) => l.pipeSpacing(Math.max(1, n), c.TUNING))))`).then(JSON.parse);
@@ -1585,7 +1598,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // Let the poop fall and die: the game-over panel carries the run summary.
       await evaluate(`${play}.poop.body.setAllowGravity(true), true`);
       for (let i = 0; i < 60 && (await playState()) !== 'dead'; i += 1) await sleep(100);
-      await sleep(TT.deathToOverMs + 300);
+      await waitOver(300);
       const over = await evaluate(`JSON.stringify({ dead: ${play}.state === 'dead', active: __flappy.scene.isActive('Over'), counts: __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text' && /^×\\d+$/.test(c.text)).map((c) => c.text), collected: ${play}.collected, pipes: ${play}.pipesPassed })`).then(JSON.parse);
       const runFC = await evaluate(`JSON.stringify([${play}.runFalls, ${play}.runCloseCalls])`).then(JSON.parse);
       const expected = [...['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery'].map((k) => `×${over.collected[k]}`), `×${runFC[0]}`, `×${runFC[1]}`, `×${over.pipes}`, `×${over.collected.coin}`];
@@ -2125,7 +2138,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, ${play}.pipes.clear(true, true), true`);
         await evaluate(`${play}.level = ${last}, ${play}.pipesSpawned = ${end}, ${play}.pipesPassed = ${end}, ${play}.finishSpawned = false, ${play}.applyLevel(), ${play}.distanceSinceSpawn = ${SPACING[3]}, true`);
         for (let i = 0; i < 120 && (await playState()) !== 'dead'; i += 1) await sleep(100);
-        await sleep(TT.deathToOverMs + 300);
+        await waitOver(300);
         const won = await evaluate(`JSON.stringify({ won: ${play}.won, level: ${play}.level, breakOn: ${play}.levelBreak, over: __flappy.scene.isActive('Over'), tex: ${play}.poop.texture.key, head: __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text').map((c) => ({ t: c.text, w: c.width }))[0] })`).then(JSON.parse);
         const want = await evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'runWon'))`);
         ok(won.won && won.level === last && !won.breakOn && won.over && won.tex !== 'poop-dead' && won.head?.t === want && won.head.w <= 520, `crossing level ${last}'s finish line wins: Over opens with "${won.head?.t}" (${won.head?.w?.toFixed(0)} px wide), level stays ${won.level}, no break, poop ${won.tex}`);
@@ -2154,7 +2167,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         };
         const dieNow = async () => {
           await evaluate(`${play}.resumePlay(), ${play}.graceLeftMs = 0, ${play}.die(), true`);
-          await sleep(TT.deathToOverMs + 300);
+          await waitOver(300);
         };
         const overTexts = () => evaluate(`__flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text').map((c) => c.text)`);
 
@@ -3359,13 +3372,24 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const lobbyNames = await evaluate(`JSON.stringify([...document.querySelectorAll('[id^="tour-slot-"] .who')].map((w) => w.firstChild?.textContent).sort())`).then(JSON.parse);
         ok(again.join() === [guest, 'Linked', 'Smoke'].sort().join() && againSeeding && straight && !straightPanel && bracketAtJoin, `New tournament keeps the players (${again.join(', ')}) and seeds again; Continue after its semi goes straight to the Final's join screen; Bracket there shows the Final next`);
         ok(armed === (await tx('tournamentAbandonConfirm')) && stillOpen && toLobby && lobbyNames.join() === again.join(), `Abandon asks once ("${armed.slice(0, 30)}…"), then the lobby with the same players (${lobbyNames.join(', ')})`);
-        // Two players: − to 2 (the guest and Linked) → one Final; Continue → a podium without 🥉 and nothing queued, though Linked is linked.
+        // Plan 39, 2.5 (item 42(c)): each race queued its linked racers' scores for 🏆 (Linked, Smoke), never the guest's.
+        const rposts = await evaluate(`JSON.stringify(${P1}.racePostQueue.load())`).then(JSON.parse);
+        ok(rposts.length > 0 && rposts.every((r) => (r.name === 'Linked' || r.name === 'Smoke') && /^[A-Za-z0-9_-]{22}$/.test(r.playerId) && r.score > 0 && r.level >= 1) && !rposts.some((r) => r.name === guest), `the races queued ${rposts.length} 🏆 posts, linked racers only (${[...new Set(rposts.map((r) => r.name))].join(', ')})`);
+        // 2.8: each post names its racer's half run, queued under that racer's id at the post's score and level
+        // (mode race, off the toilet, over the final line); the guest's runs went nowhere.
+        const rruns = await evaluate(`JSON.stringify(${P1}.runQueue.load().filter((q) => q.row.mode === 'race'))`).then(JSON.parse);
+        const backed = rposts.every((r) => rruns.some((q) => q.row.run_id === r.runId && q.playerId === r.playerId && q.row.score === r.score && q.row.level === r.level && q.row.toilet === false && q.row.won === true));
+        ok(backed && rruns.length === rposts.length, `each 🏆 post is backed by its half's race run, queued under its racer's id (${rruns.length} runs for ${rposts.length} posts)`);
+        await evaluate(`(localStorage.removeItem('flappyPoop.racePosts'), localStorage.removeItem('flappyPoop.tournaments'), localStorage.removeItem('flappyPoop.runQueue'), true)`);
+        // Two players: − to 2 (the guest and Linked) → one Final; Continue → a podium without 🥉, and (2.5) the tournament queued for 🏅: Linked is linked.
         await click('tour-minus');
         await click('tour-start');
         const twoSeed = await evaluate(`JSON.stringify({ pairs: document.querySelectorAll('#tour-body .pair').length, round: document.querySelector('#tour-body .pair .round')?.textContent, byes: document.querySelectorAll('#tour-body .seed.bye').length })`).then(JSON.parse);
         const two = await raceOnce(9, 3, true);
+        await until(`document.getElementById('tour-saved')?.textContent === ${JSON.stringify(later)}`, 60);
         const twoPodium = await evaluate(`JSON.stringify({ lines: [...document.querySelectorAll('#tour-podium p')].map((p) => p.textContent), saved: document.getElementById('tour-saved')?.textContent, q: ${P1}.tournamentQueue.load().length, posted: __flappy.registry.get('tournament')?.posted })`).then(JSON.parse);
-        ok(twoSeed.pairs === 1 && twoSeed.round === (await tx('tournamentFinal')) && twoSeed.byes === 0 && two.seen.title === (await tx('tournamentFinal')) && twoPodium.lines.length === 2 && twoPodium.lines[0].startsWith('🥇') && twoPodium.lines[1].startsWith('🥈') && twoPodium.saved === (await tx('tournamentSaveTwo')) && twoPodium.q === 0 && twoPodium.posted === 'two', `2 players: one "${twoSeed.round}", a podium of ${twoPodium.lines.length} (${twoPodium.lines.join(' · ')}), "${twoPodium.saved}", nothing queued`);
+        ok(twoSeed.pairs === 1 && twoSeed.round === (await tx('tournamentFinal')) && twoSeed.byes === 0 && two.seen.title === (await tx('tournamentFinal')) && twoPodium.lines.length === 2 && twoPodium.lines[0].startsWith('🥇') && twoPodium.lines[1].startsWith('🥈') && twoPodium.saved === later && twoPodium.q === 1 && twoPodium.posted === 'queued', `2 players: one "${twoSeed.round}", a podium of ${twoPodium.lines.length} (${twoPodium.lines.join(' · ')}), queued for 🏅 once: "${twoPodium.saved}"`);
+        await evaluate(`(localStorage.removeItem('flappyPoop.racePosts'), localStorage.removeItem('flappyPoop.tournaments'), true)`);
         // An all-guest tournament: its Final queues nothing, and the podium says so.
         await evaluate(`Promise.all([import('./src/tournament.js'), import('./src/logic.js')]).then(([t, l]) => { const tour = t.createTournament([0, 1, 2].map((i) => ({ name: 'G' + i, playerId: null, guest: true })), l.createRng(3)); const semi = t.nextMatch(tour); t.recordResult(tour, semi.id, 0, { by: 'score', slots: [{ score: 5, deaths: 0, levelWins: 0, finalFirst: false }, { score: 1, deaths: 0, levelWins: 0, finalFirst: true }] }); __flappy.registry.set('tournament', { tour, matchId: 'final' }); __flappy.events.emit('tournament-race', { outcome: { winner: 0, by: 'score' }, slots: [{ score: 9, deaths: 0, levelWins: 1, finalFirst: true }, { score: 2, deaths: 1, levelWins: 0, finalFirst: false }] }); return true; })`);
         await sleep(200);
@@ -4101,7 +4125,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const daily = await evaluate(`JSON.stringify({ daily: ${play}.runIsDaily, edu: ${play}.runIsEducation })`).then(JSON.parse);
         ok(daily.daily && !daily.edu, 'a Daily Dump run is not an education run');
         await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.graceLeftMs = 0, ${play}.die(), true`);
-        await sleep(TT.deathToOverMs + 300);
+        await waitOver(300);
 
         // The start level and unlocked levels (plan 25, B5; in the 📚 popup since plan 26): no ◀ ▶ until a
         // later level is unlocked; ◀ / ▶ step and wrap within the levels unlocked; the popup's Play starts
@@ -5052,7 +5076,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const w3 = await answer(false);
         ok(w1.phase === 'strikes' && w1.verdict === wrong && w2.phase === 'strikes' && w3.phase === 'over' && w3.verdict === over && w3.right === endRun, `three misses: ${w1.status} → ${w2.status} → ${w3.status}, "${w3.verdict}", ${w3.right}`);
         await press('rightBtn', held);
-        await sleep(TT.deathToOverMs + 400);
+        await waitOver(400);
         const gone = await playNow();
         ok(gone.over && gone.state === 'dead' && gone.pipes === before.pipes && !gone.filled && gone.face === 'poop-dead' && gone.score === 9, `End run: game over (Over up, state ${gone.state}), the field never cleared or refilled (${gone.pipes} pipe parts, the dead poop), no penalty (score ${gone.score})`);
         ok((await stores()) === stores0, 'an education game over records nothing');
@@ -5209,7 +5233,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await press('leftBtn'); // the warning again
         ok((await quitView()).verdict === quitWarn, 'and its first press warns again');
         await press('leftBtn', held); // past the hold: quit
-        await sleep(TT.deathToOverMs + 400);
+        await waitOver(400);
         const pg = await playNow();
         ok(pg.over && pg.state === 'dead' && !pg.quiz, `the second press, after the hold, quits; under a paused run it still ends it (state ${pg.state})`);
 
@@ -5386,7 +5410,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(choiceWhyFit.bad.length === 0, `and with Why open (${choiceWhyFit.bad.join(', ') || `none over; ${choiceWhyFit.tight} px to spare at the tightest`})`);
         await press('leftBtn'); // the warning
         await press('leftBtn', held); // Quit
-        await sleep(TT.deathToOverMs + 400);
+        await waitOver(400);
         const g = await playNow();
         ok(g.over && g.state === 'dead' && !g.quiz, 'Quit, warned, ends the run');
 
@@ -5437,7 +5461,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${Q}.rightBtn.press(), true`);
         await sleep(300);
         await quitQuiz();
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const p1 = await panel();
         const note = await tx('eduNotSaved');
         ok(p1.active && p1.tally === '❔ 1  ·  ✅ 0  ·  ❌ 1' && !p1.texts.some((s) => /[\u{1F4DA}\u{1F480}⭐]/u.test(s)) && p1.texts.includes(note) && !p1.share && !p1.bonus, `an education game over: "${p1.tally}" (no 📚 / 💀 / ⭐ line), "${note}", no Share`);
@@ -5470,7 +5494,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // A won run: the bonus button opens the rectum's questions over the panel; no coins; Esc back.
         await startEdu();
         await evaluate(`(() => { const p = ${play}; p.level = 7; p.applyLevel(); p.win(); return true; })()`);
-        await sleep(TT.deathToOverMs + TT.retryLockoutMs + 500);
+        await waitOver(TT.retryLockoutMs + 500);
         const p2 = await panel();
         ok(p2.active && p2.bonus && !p2.share, 'a won education run offers the 📚 bonus quiz where Share would be');
         const e2 = await eduPanel();
@@ -5536,7 +5560,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
         await quitQuiz();
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const dropPanel = await panel();
         const dropLine = await badgeLine();
         const rec1 = await eduRec();
@@ -5557,7 +5581,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const p = ${play}; p.applyLocale('zh-Hans'); p.runQuiz = { ...p.runQuiz, answered: 5, right: 5, wrong: 0 }; p.graceLeftMs = 0; p.die(); return true; })()`); // zh-Hans for this panel: its buttons' labels must fit too (the restart after it reads the stored language again)
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
         await quitQuiz();
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const quitPanel = await panel();
         const quitLine = await badgeLine();
         const recQuit = await eduRec();
@@ -5568,7 +5592,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // left (plan 26: bonus answers count), then the streak is 1 and the average 100 %.
         await startEdu();
         await winWith(5, 5);
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const aceLine = await badgeLine();
         const recWait = await eduRec();
         ok(aceLine?.includes('💯') && aceLine.includes('🅰️') && recWait.badges.join() === 'edu_drop_out' && !recWait.counters.gradedRuns && recWait.pending === 5, `a run answered 5 of 5 shows 💯 and 🅰️ on its panel ("${aceLine}") and waits, unrecorded (${JSON.stringify(recWait)}), until the panel is left`);
@@ -5642,7 +5666,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const testRevives = await evaluate(`${play}.runQuiz.revives`);
         await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; return true; })()`);
         await winWith(9, 10);
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const rec3 = await eduRec();
         const testLine = await badgeLine();
         ok(testRevives === 1 && JSON.stringify(rec3) === JSON.stringify(rec2) && testLine === null, `a test run counts nothing: its revive (${testRevives}) and its 9 of 10 leave the record as it was, and its panel names no badge`);
@@ -5854,7 +5878,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
         }
         await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const plainOver = await panel();
         const plainButtons = await evaluate(`(() => { const o = ${O}; const b = o.buttons; return JSON.stringify({ halo: o.homeHalo.texture.key, homeY: b.home.y, againY: b.again.y, againX: b.again.x, cx: (b.share.x + b.home.x) / 2, bonus: b.bonus ?? null, ids: o.cells.map((c) => c.id).join() }); })()`).then(JSON.parse);
         ok(plainButtons.halo === 'over-home-halo' && plainButtons.againY > plainButtons.homeY && plainButtons.againX === plainButtons.cx && plainButtons.bonus === null && plainButtons.ids === 'fiber,probiotic,postbiotic,bacteria,bean,mystery,falls,closeCalls,pipes,coin', 'a normal panel keeps its layout: Share | Home over Play again, the full glow, the ‼️ 😢 row in the grid');
@@ -6549,6 +6573,67 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await finish();
       const dc = (await lastRow())?.row?.data;
       ok(flewC && dc && dc.flaps_pressed >= 3 && dc.flaps_trusted === 0 && dc.flaps_fresh === 0 && dc.press_touch >= 3, `a forged pointer event counts as a press but never a real one (${dc ? flapsOf(dc) : 'no summary'})`);
+
+      // 4. A split-screen race through Chrome's input (plan 39, 2.8): each half keeps a race summary and
+      // every press counts in the half it belongs to (Space and W are player 1's, ↑ and Enter player 2's,
+      // a click the half it lands on); at the final line each slot carries its run, at the slot's score
+      // and level, off the toilet.
+      {
+        const VS = `__flappy.scene.getScene('Versus')`;
+        const P2 = `__flappy.scene.getScene('PlayB')`;
+        // No nativeVirtualKeyCode: on a Mac it is the Mac's key code (32 is U, 13 is W), which Chrome
+        // can take as a browser key and open a tab of its own over the game (the page goes hidden).
+        const key = async (k, code, vk) => {
+          for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: vk });
+          await sleep(220);
+        };
+        const want = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, last: c.TUNING.levels.lastLevel, end: l.levelEnd(c.TUNING.levels.lastLevel, l.withLevelPipes(c.TUNING, c.TUNING.tournament.levelPipes)) }))`).then(JSON.parse);
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1800, height: 1000, deviceScaleFactor: 1, mobile: false });
+        await fresh();
+        for (let i = 0; i < 60 && (await evaluate('__flappy.scale.width')) !== want.W; i += 1) await sleep(100);
+        await evaluate(`${P}.toggleVersus(), ${P}.launch(), true`);
+        const joined = await lobbyToRace();
+        await evaluate(`(document.activeElement?.blur?.(), true)`); // Space and Enter must reach the game, not a focused button
+        await key(' ', 'Space', 32); // the claims: Space for the left half, ↑ for the right
+        await key('ArrowUp', 'ArrowUp', 38);
+        let racing = false;
+        for (let i = 0; i < (4 * want.countdownMs + 3000) / 100 && !racing; i += 1) {
+          await sleep(100);
+          racing = await evaluate(`${VS}.match.status === 'playing' && ${P}.state === 'playing' && ${P2}.state === 'playing'`);
+        }
+        await evaluate(`[${P}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
+        const total = await evaluate('__flappy.scale.width');
+        await key(' ', 'Space', 32);
+        await key('w', 'KeyW', 87);
+        await key('ArrowUp', 'ArrowUp', 38);
+        await key('ArrowUp', 'ArrowUp', 38);
+        await key('Enter', 'Enter', 13);
+        await tapAt(total / 4, 640);
+        await tapAt((3 * total) / 4, 640);
+        await evaluate(`[${P}, ${P2}].forEach((p) => { p.poop.y = 640; p.poop.setVelocity(0, 0); }), true`);
+        const finishAt = (Q, score) => evaluate(`(() => { const p = ${Q}; p.score = ${score}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = ${want.last}; p.pipesSpawned = ${want.end}; p.pipesPassed = ${want.end}; p.finishSpawned = false; p.applyLevel(); p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
+        await finishAt(P, 40);
+        for (let i = 0; i < 40 && !(await evaluate(`${VS}.match.slots[0].ended`)); i += 1) await sleep(100);
+        await finishAt(P2, 30);
+        for (let i = 0; i < 40 && (await evaluate(`${VS}.match.status`)) !== 'over'; i += 1) await sleep(100);
+        const got = await evaluate(`JSON.stringify(${VS}.match.slots.map((s) => ({ score: s.score, level: s.level, run: s.run ? { mode: s.run.mode, score: s.run.score, level: s.run.level, toilet: s.run.toilet, won: s.run.won, d: s.run.data } : null })))`).then(JSON.parse);
+        const [h1, h2] = got;
+        const shaped = got.every((s) => s.run && s.run.mode === 'race' && s.run.score === s.score && s.run.level === s.level && s.level === want.last && s.run.toilet === false && s.run.won === true);
+        const how = joined && racing ? '' : `; joined ${joined}, racing ${racing}, ${await evaluate(`JSON.stringify({ status: ${VS}.match?.status, devices: ${VS}.match?.slots?.map((s) => s.device), page: document.visibilityState })`)}`;
+        ok(joined && racing && shaped, `a split-screen race keeps a race summary per half, each on its slot at the slot's score and level (${got.map((s) => `${s.run?.mode} ${s.run?.score}/${s.score} L${s.run?.level}`).join(', ')}${how})`);
+        const k1 = h1.run?.d;
+        const k2 = h2.run?.d;
+        const near = (v, n) => v >= n && v <= n + 1; // Phaser now and then hands one key event over twice
+        ok(k1 && k2 && near(k1.press_key, 2) && k1.press_mouse === 1 && k1.downs === k1.press_key + 1 && near(k1.ups, 3) && near(k2.press_key, 3) && k2.press_mouse === 1 && k2.downs === k2.press_key + 1 && near(k2.ups, 4) && k1.press_touch + k1.press_pad + k2.press_touch + k2.press_pad === 0,
+          `each press counts in its own half: player 1 ${k1?.press_key} keys + ${k1?.press_mouse} click (${k1?.downs} down, ${k1?.ups} up), player 2 ${k2?.press_key} keys + ${k2?.press_mouse} click (${k2?.downs} down, ${k2?.ups} up)`);
+        ok(k1 && k2 && k1.flaps_internal === 1 && k1.flaps_pressed >= 3 && k1.flaps_trusted === k1.flaps_pressed && k1.flaps_fresh >= 2 && k2.flaps_internal === 1 && k2.flaps_pressed >= 4 && k2.flaps_trusted === k2.flaps_pressed && k2.flaps_fresh >= 3,
+          `and each half's flaps are its own real presses (player 1: ${k1 ? flapsOf(k1) : 'none'}; player 2: ${k2 ? flapsOf(k2) : 'none'})`);
+        // 👥 off before leaving (Play restarts reading it), so the next sections start a 📚 run as before; then the boot viewport.
+        await evaluate(`__flappy.registry.set('versus', false), true`);
+        await leaveVersus();
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+        for (let i = 0; i < 60 && !(await evaluate(`__flappy.scale.width === 720 && ${P}.state === 'ready' && !${P}.versusOn`)); i += 1) await sleep(100);
+      }
     });
 
     await section('streaks', async () => {
@@ -7132,8 +7217,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const toBot = (event, payload) => setTimeout(() => { if (!inboxB.take(event, payload)) return; const item = { kind: 'peer', event, msg: payload, at: payload.t }; bot.feed?.receive(item); bot.ref?.receive(item); }, LAT);
         const toHost = (event, payload) => setTimeout(() => { if (inboxA.take(event, payload)) q.push({ kind: 'peer', event, msg: payload, at: payload.t }); }, LAT);
         const sendBot = (event, fields) => { const m = sendB(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('B> ' + event + ' ' + JSON.stringify(fields)); toHost(event, m.payload); return true; };
+        const reports = [];
+        const friendCalls = [];
+        const counts = { sent: 3 }; // the lobby's sends before the race (2.7, AUD-110: the report counts only the race's own)
         const net = { serverNow: now, pump() {}, take: () => q.splice(0), peer: () => ({ name: 'JollyPlunger042', width: 720 }), close() { log.push('close'); },
-          send(event, fields) { const m = sendA(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('A> ' + event + ' ' + JSON.stringify(fields)); toBot(event, m.payload); return true; } };
+          stats: () => ({ sent: counts.sent, received: 9, rttMs: 40.4, rttMinMs: null }),
+          async rpc(fn, args) {
+            // 3.6 (AUD-118): the results panel's friend offer reads the lists and the race's handle; kept out of the reports.
+            if (fn === 'friend_list') return (friendCalls.push([fn, args]), { ok: true, data: { friends: [], incoming: [], outgoing: [], blocked: [] } });
+            if (fn === 'online_history') return (friendCalls.push([fn, args]), { ok: true, data: { rival: null, recent: [{ name: 'JollyPlunger042', peer: 'ab'.repeat(16), at: now(), won: true, mine: 1, theirs: 0 }] } });
+            if (fn === 'send_friend_request') return (friendCalls.push([fn, args]), { ok: true, data: { ok: true, status: 'pending' } });
+            reports.push([fn, args]); return { ok: true, data: { ok: true, status: reports.length === 1 ? 'playing' : 'agreed', counted: reports.length > 1 } }; },
+          send(event, fields) { const m = sendA(event, fields); if (!m) return false; counts.sent += 1; if (event !== 'pos' && event !== 'flap') log.push('A> ' + event + ' ' + JSON.stringify(fields)); toBot(event, m.payload); return true; } };
         const room = { phase: 'playing', role: 'host', code: '482913', hostName: 'Smoke', guestName: 'JollyPlunger042', seed: 4242, startMs: now() + 3500, round: 1 };
         bot.reset = (since) => {
           bot.since = since; bot.beginAt = null; bot.finalAt = null;
@@ -7162,7 +7257,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           bot.feed.tick({ ...h, ended: h.ended && ref.settled(h.level) });
         }, 16);
         const plan = R.raceStartPlan(room, { mine: 720, theirs: 720 });
-        globalThis.__race = { net, lobby, bot, log, room, plan, L, T };
+        globalThis.__race = { net, lobby, bot, log, room, plan, L, T, reports, counts, friendCalls };
         ${P}.scene.start('OnlineRace', { net, lobby, plan });
         return true;
       })()`);
@@ -7208,7 +7303,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(end.bot.winner === 1 - end.outcome.winner && end.bot.by === end.outcome.by && end.finalFirst[1] === true && end.finish.includes('finish'), `one outcome on both, finalFirst the guest's, the room finished (${JSON.stringify(end)})`);
         // The results panel (Preview D4), Rematch's states, the rematch into round 2.
         ok(await until(`Boolean(${OR}.result)`, 2500), 'the results panel, a beat after the end');
+        // 2.5: the race reported once over (finish_match, seat order, this side's telemetry); the first answer
+        // waits for the other game, the next ask is saved, and the panel's line follows.
+        ok(await until(`${OR}.result.saved.text === ${JSON.stringify('Saved to the 🏅 and 🏆 boards')}`, 6000), `the report: ${await evaluate(`JSON.stringify(__race.reports.map((r) => r[0]))`)}, the line "${await evaluate(`${OR}.result.saved.text`)}"`);
+        const rep = await evaluate(`JSON.stringify({ r: __race.reports[0], slots: ${OR}.finalSlots.map((s) => [s.score, s.deaths, s.levelWins, s.finalFirst]), sentInAll: __race.counts.sent })`).then(JSON.parse);
+        ok(rep.r[0] === 'finish_match' && rep.r[1].p_code === '482913' && rep.r[1].p_round === 1 && JSON.stringify(rep.r[1].p_result.slots.map((s) => [s.score, s.deaths, s.levelWins, s.finalFirst])) === JSON.stringify(rep.slots) && rep.r[1].p_result.stats.rttMs === 40 && rep.r[1].p_result.stats.sent >= 1 && rep.r[1].p_result.stats.sent <= rep.sentInAll - 3 && !('rttMinMs' in rep.r[1].p_result.stats), `finish_match as the host (its telemetry this race's own, an unmeasured RTT left out): ${JSON.stringify(rep.r[1])}`);
         await sleep(TT.retryLockoutMs + 50);
+        // 3.6 (AUD-118): the real Add as a friend button and its hit box, once the race is saved.
+        ok(await until(`${OR}.result.friend.visible && ${OR}.result.friend.getText() === 'Add JollyPlunger042 as a friend'`, 3000), `the saved race offers "Add JollyPlunger042 as a friend": visible ${await evaluate(`${OR}.result.friend.visible`)}, "${await evaluate(`${OR}.result.friend.getText()`)}", offer ${await evaluate(`${OR}.friendOffer?.phase`)}`);
+        await evaluate(`(() => { const r = ${OR}; const b = r.result.friendBox; r.onPointer({ x: b.x + (r.shiftX ?? 0), y: b.y }); return true; })()`);
+        ok(await until(`__race.friendCalls.some((c) => c[0] === 'send_friend_request' && c[1]?.p_peer === 'ab'.repeat(16))`, 2000), `a tap on it sends send_friend_request by the race's handle: ${await evaluate(`JSON.stringify(__race.friendCalls.map((c) => c[0]))`)}`);
+        ok(await until(`${OR}.result.friendLine.text === 'Friend request sent to JollyPlunger042' && !${OR}.result.friend.visible`, 2000), `the line reads "${await evaluate(`${OR}.result.friendLine.text`)}" and the button goes`);
         const panelTap = (which) => evaluate(`(() => { const r = ${OR}; const b = r.result.boxes.${which}; r.onPointer({ x: b.x, y: b.y }); return true; })()`);
         await panelTap('share');
         ok(await until(`${OR}.result.status.text === 'Waiting for JollyPlunger042…' && ${OR}.result.rematch.getText() === 'Rematch ✓'`, 1000), `Rematch: "${await evaluate(`${OR}.result.rematch.getText()`)}", "${await evaluate(`${OR}.result.status.text`)}"`);
@@ -7235,6 +7340,531 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       } finally {
         await evaluate(`(clearInterval(globalThis.__race?.bot?.timer), true)`).catch(() => null);
       }
+    });
+
+    await section('online-reload', async () => {
+      // Reload resume (plan 39, 2.3, D4), in the real game against a scripted guest in the page (a 40 ms
+      // link, no network). Part 1: the race into level 2 (its level start kept in this tab's record),
+      // then the guest "reloads" (a new session and its rewind): this page restarts at level 2's start,
+      // held under the pause overlay. Part 2: this page really reloads; a stand-in transport installed
+      // before the boot (Play's onlineNet and onlineAccount) answers room_state, so the 🌐 window
+      // rejoins through its own lobby and hands the race back rewound; both say Ready, one GO, the
+      // level runs from its first pair with the kept numbers, and the race ends with the record gone.
+      // 2.3b (the record in localStorage with its owner and beat): Part 3, a relaunch: sessionStorage
+      // gone (a new tab id) and the record another page left, its beat stale: the 🌐 window claims it
+      // and rejoins. Part 4: another page takes the record over: this one steps aside, says so, and
+      // rejoins once that page stops beating. Part 5: a fresh page beside a live beat: nothing.
+      const KEY = 'flappyPoop.onlineResume';
+      const TAB = 'flappyPoop.onlineTab';
+      await evaluate(`(localStorage.removeItem('${KEY}'), true)`).catch(() => null);
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+      const boot = async () => {
+        let sp = null;
+        for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+          await sleep(500);
+          sp = await splashNow().catch(() => null);
+        }
+        if (sp?.enabled) {
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+      };
+      await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+      await cdp.send('Page.bringToFront');
+      await boot();
+      const P = `__flappy.scene.getScene('Play')`;
+      const OR = `__flappy.scene.getScene('OnlineRace')`;
+      const ex0 = exceptions.length;
+      const until = async (expr, ms = 8000) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          if (await evaluate(expr)) return true;
+          await sleep(50);
+        }
+        return false;
+      };
+      const record = () => evaluate(`localStorage.getItem('${KEY}')`).then((s) => (s ? JSON.parse(s) : null));
+      const tabId = () => evaluate(`JSON.parse(sessionStorage.getItem('${TAB}') || 'null')?.id ?? null`);
+      const status = () => evaluate(`document.getElementById('tour-status')?.textContent ?? null`);
+      const ELSEWHERE = 'Your race is running in another window.';
+      const pin = () => evaluate(`(() => { const p = ${P}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; return true; })()`);
+      const toLine = (last) => evaluate(`(() => { const p = ${P}; const L = __rl.L; const T = __rl.T; ${last ? 'p.level = T.levels.lastLevel; p.applyLevel();' : ''} const end = L.levelEnd(p.level, T); p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = end; p.pipesPassed = end; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 60; return true; })()`);
+      // The scripted guest and the transport between them: built in the page, again after the reload.
+      // `rewound` starts it held at level 2's start (after this page's rewind, or its own reload).
+      const guest = (rewound) => `(async () => {
+        const [R, O, C, L] = await Promise.all([import('./src/onlineRace.js'), import('./src/online.js'), import('./src/config.js'), import('./src/logic.js')]);
+        const T = C.TUNING; const LAT = 40; const now = () => Date.now();
+        const q = []; const log = [];
+        const sendA = O.createSender({ sid: 'host1', now }); const inboxA = O.createInbox(); const inboxB = O.createInbox();
+        const bot = { sid: 1, rewound: ${rewound}, ready: false, restartAt: now(), sentAt: -Infinity, beginAt: null, finalAt: null, crossedAt: null, hold: false };
+        const sendBot = (event, fields) => { const m = bot.send(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('B> ' + event + ' ' + JSON.stringify(fields)); setTimeout(() => { if (inboxA.take(event, m.payload)) q.push({ kind: 'peer', event, msg: m.payload, at: m.payload.t }); }, LAT); return true; };
+        bot.start = (rw) => {
+          bot.send = O.createSender({ sid: 'bot' + bot.sid, now });
+          bot.rewound = rw; bot.ready = false; bot.restartAt = now(); bot.sentAt = -Infinity; bot.beginAt = null;
+          const since = rw ? bot.restartAt : __rl.room.startMs;
+          bot.pause = R.createRacePause({ seat: 'guest', now, send: sendBot, present: true });
+          bot.feed = R.createRaceFeed({ now, send: sendBot, since });
+          bot.ref = R.createRaceReferee({ seat: 'guest', now, send: sendBot, since });
+          bot.h = { state: rw ? 'waiting' : 'waiting', levelBreak: false, ended: false, won: false, flaps: 0, distance: 0, speed: 0, y: 640, vy: 0, angle: 0, frame: 'poop', alpha: 1, level: rw ? 2 : 1, pipesPassed: 0, score: rw ? 20 : 0, deaths: 0, levelWins: 0, finalFirst: false, tapped: false, arrivedAt: 0, t0: 0 };
+        };
+        const net = { serverNow: now, pump() {}, take: () => q.splice(0), peer: () => ({ name: 'JollyPlunger042', width: 720 }), channelState: () => 'joined', close() { log.push('close'); },
+          send(event, fields) { const m = sendA(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('A> ' + event + ' ' + JSON.stringify(fields)); setTimeout(() => { if (!inboxB.take(event, m.payload)) return; const item = { kind: 'peer', event, msg: m.payload, at: m.payload.t }; bot.feed?.receive(item); bot.ref?.receive(item); bot.pause?.receive(item); }, LAT); return true; } };
+        globalThis.__rl = { ...(globalThis.__rl ?? {}), net, bot, log, q, L, T, R };
+        __rl.room ??= { phase: 'playing', role: 'host', code: '482913', hostName: 'Smoke', guestName: 'JollyPlunger042', seed: 4242, startMs: now() + 3500, round: 1 };
+        if (globalThis.__reloadHooks) { __reloadHooks.send = (e, f) => net.send(e, f); __reloadHooks.take = () => net.take(); }
+        bot.start(${rewound});
+        bot.timer = setInterval(() => {
+          const h = bot.h; const ref = bot.ref; const at = now();
+          if (bot.rewound) {
+            if (!bot.ready && at - bot.restartAt >= 1000) bot.ready = true;
+            if (at - bot.sentAt >= T.online.pause.heartbeatMs) { bot.sentAt = at; sendBot('rewind', { round: 1, level: 2, at: bot.restartAt }); }
+          } else if (h.state === 'waiting' && at >= __rl.room.startMs) { h.state = 'playing'; h.t0 = at; h.speed = 300; }
+          bot.pause.tick({ phase: bot.rewound ? null : R.localPhase(h), hidden: false, offline: false, channel: 'joined', menu: false, rewind: bot.rewound && !bot.ready });
+          for (const e of bot.pause.drain()) if (e.type === 'resume' && bot.rewound) { bot.rewound = false; h.state = 'playing'; h.speed = 300; h.level = T.levels.lastLevel; bot.beginAt = at; }
+          if (h.state === 'playing' && !bot.pause.frozen()) {
+            h.distance += h.speed * 0.016; h.pipesPassed = Math.floor(h.distance / 300); h.score = h.pipesPassed + h.levelWins * 25;
+            if (h.level === 1 && at - h.t0 >= 2500) { ref.crossed({ level: 1, final: false, distance: h.distance }); h.level = 2; h.state = 'paused'; h.levelBreak = true; h.arrivedAt = at; }
+            else if (h.level === T.levels.lastLevel && bot.beginAt !== null && at - bot.beginAt >= 1500) { ref.crossed({ level: h.level, final: true, distance: h.distance }); h.state = 'dead'; h.ended = true; h.won = true; bot.finalAt = at; }
+          }
+          if (!bot.hold && h.levelBreak && !h.tapped && at - h.arrivedAt >= T.versus.levelSyncDelayMs + 1000) h.tapped = ref.setReady(h.level, true);
+          ref.tick({ level: h.level, inBreak: h.levelBreak && h.state === 'paused', shopOpen: false, held: bot.pause.frozen() });
+          for (const e of ref.drain()) {
+            if (e.type === 'first' && e.mine && !bot.feed.doneSent()) { h.levelWins += 1; h.score += 25; if (e.final) h.finalFirst = true; }
+            if (e.type === 'begin' && h.levelBreak) { h.levelBreak = false; h.state = 'playing'; bot.beginAt = null; }
+          }
+          if (!bot.rewound) bot.feed.tick({ ...h, ended: h.ended && ref.settled(h.level) });
+        }, 16);
+        return true;
+      })()`;
+      let scriptId = null;
+      let beatScriptId = null;
+      try {
+        // --- Part 1: into level 2, then the guest's reload -------------------------------------------
+        ok((await evaluate(guest(false))) === true, 'the scripted guest and the link are up');
+        await evaluate(`(() => { const lobby = { state: { room: __rl.room }, calls: [], roomItem() {}, remember() {}, finish() { lobby.calls.push('finish'); }, rematch() {}, leave: async () => { lobby.calls.push('leave'); } }; __rl.lobby = lobby; const plan = __rl.R.raceStartPlan(__rl.room, { mine: 720, theirs: 720 }); ${P}.scene.start('OnlineRace', { net: __rl.net, lobby, plan, store: ${P}.raceResumeStore() }); return true; })()`);
+        ok(await until(`${OR}?.match?.status === 'playing' && ${P}.state === 'playing'`, 9000), 'the race runs (GO on the server clock)');
+        const r0 = await record();
+        ok(r0?.code === '482913' && r0?.round === 1 && r0?.seat === 'host' && Object.keys(r0?.levels ?? {}).join() === '1', `the tab's resume record from the race's start: ${JSON.stringify(r0 && { code: r0.code, round: r0.round, seat: r0.seat, levels: Object.keys(r0.levels) })}`);
+        await pin();
+        await evaluate(`(() => { const p = ${P}; p.takeCoins(4); p.giveBeans(1); __rl.bot.hold = true; return true; })()`);
+        await sleep(600);
+        await toLine(false);
+        ok(await until(`${P}.levelBreak && ${P}.level === 2 && ${OR}.match.slots[0].levelWins === 1`, 4000), "the host first over level 1's line: its break at level 2");
+        ok(await until(`Boolean(${OR}.levels[2])`, 3000), 'the line settled: level 2\'s start kept');
+        const kept = await evaluate(`JSON.stringify(${OR}.levels[2])`).then(JSON.parse);
+        const r1 = await record();
+        ok(kept.level === 2 && kept.levelWins === 1 && kept.coins === (await evaluate(`${P}.effects.coins()`)) && kept.beans >= 1 && JSON.stringify(r1?.levels?.[2]) === JSON.stringify(kept), `…and written to the record: ${JSON.stringify(kept)}`);
+        await until(`${P}.levelHint.visible`, 2000);
+        await evaluate(`(${P}.handleChrome('tap'), __rl.bot.hold = false, true)`);
+        ok(await until(`!${P}.levelBreak && ${P}.state === 'playing' && ${P}.level === 2`, 8000), 'both ready, GO: level 2 runs');
+        await pin();
+        await sleep(800);
+        // The guest reloads: a new session, held at level 2's start, its rewind on the wire.
+        await evaluate(`(__rl.bot.sid = 2, __rl.bot.start(true), true)`);
+        ok(await until(`${OR}.rewound?.level === 2 && ${OR}.rewound.by === 'them' && ${P}.raceResume?.level === 2`, 4000), `the guest's rewind restarted this race at level 2's start (${await evaluate(`JSON.stringify(${OR}.rewound)`)})`);
+        ok(await until(`${OR}.isPaused() && ${OR}.pause.state().mine === 'rewind' && ${OR}.pauseUi.panel.visible`, 3000), `held under the overlay: "${await evaluate(`${OR}.pauseUi.title.text`)}" / "${await evaluate(`${OR}.pauseUi.sub.text`)}"`);
+        ok((await evaluate(`${P}.state`)) === 'ready' && (await evaluate(`${OR}.match.status`)) === 'countdown', 'Play waits at the level start (no run yet)');
+        await evaluate(`(clearInterval(__rl.bot.timer), true)`);
+
+        // --- Part 2: this page reloads --------------------------------------------------------------
+        const r2 = await record();
+        ok(r2?.levels?.[2]?.level === 2, `the record before the reload: levels ${Object.keys(r2?.levels ?? {}).join(', ')}, pause round ${r2?.pauseRound}`);
+        const room = await evaluate(`JSON.stringify(__rl.room)`).then(JSON.parse);
+        const stand = (cfg) => {
+          const hooks = (globalThis.__reloadHooks = { calls: [], send: null, take: null });
+          const net = {
+            warm: async () => ({ ok: true }),
+            serverNow: () => Date.now(),
+            pump() {},
+            take: () => (hooks.take ? hooks.take() : []),
+            send: (event, fields) => (hooks.send ? hooks.send(event, fields) : false),
+            peer: () => ({ name: cfg.guestName, width: 720, seat: 'guest' }),
+            channelState: () => 'joined',
+            async rpc(fn) {
+              hooks.calls.push(fn);
+              if (fn === 'room_state') return { ok: true, data: { ok: true, code: cfg.code, status: 'playing', source: 'code', seat: 'host', host_name: cfg.hostName, guest_name: cfg.guestName, seed: cfg.seed, start_ms: cfg.startMs, round: cfg.round, server_ms: Date.now() } };
+              return { ok: true, data: null };
+            },
+            async openRoom(code, opts) {
+              hooks.calls.push(`openRoom ${code} ${opts?.seat}`);
+              return { ok: true };
+            },
+            closeRoom() {
+              hooks.calls.push('closeRoom');
+            },
+            close() {
+              hooks.calls.push('close');
+            },
+          };
+          const account = { enter: async () => ({ ok: true, view: 'home', name: cfg.hostName, trusted: true, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted: true, name: cfg.hostName }) };
+          const iv = setInterval(() => {
+            const p = globalThis.__flappy?.scene?.getScene?.('Play');
+            if (!p) return;
+            clearInterval(iv);
+            p.onlineNet = net;
+            p.onlineAccount = () => account;
+            hooks.patched = true;
+          }, 1);
+        };
+        ({ identifier: scriptId } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `(${stand.toString()})(${JSON.stringify(room)});` }));
+        await cdp.send('Page.reload', { ignoreCache: false });
+        await boot();
+        ok(await evaluate(`globalThis.__reloadHooks?.patched === true`), 'reloaded: the stand-in transport sits under Play');
+        await evaluate(`(globalThis.__rl = { room: ${JSON.stringify(room)} }, true)`);
+        ok((await evaluate(guest(true))) === true, 'the guest is back on the link, still held at level 2\'s start');
+        ok(await until(`__flappy.scene.isActive('OnlineRace') && ${OR}.rewound?.level === 2 && ${OR}.rewound.by === 'me'`, 9000), `the 🌐 window rejoined (${await evaluate(`JSON.stringify(__reloadHooks.calls)`)}) and handed the race back, rewound at level 2`);
+        const calls = await evaluate(`JSON.stringify(__reloadHooks.calls)`).then(JSON.parse);
+        ok(calls.includes('room_state') && calls.includes('openRoom 482913 host') && !calls.includes('leave_room') && !calls.includes('create_room'), `room_state, the channel as the host, nothing left or created: ${calls.join(', ')}`);
+        const resumed = await evaluate(`JSON.stringify(${P}.raceResume)`).then(JSON.parse);
+        ok(JSON.stringify(resumed) === JSON.stringify(kept), `Play waits with level 2's kept start: ${JSON.stringify(resumed)}`);
+        ok(await until(`${OR}.pauseUi.panel.visible && ${OR}.pauseUi.ready.visible`, 3000), `the overlay: "${await evaluate(`${OR}.pauseUi.title.text`)}", Ready shown`);
+        ok(await until(`__rl.log.some((l) => l.startsWith('A> rewind') && l.includes('"level":2'))`, 3000), 'this page says rewind, level 2');
+        ok(await until(`${OR}.pause.state().ready.theirs === true`, 4000), 'the guest said Ready');
+        await evaluate(`(() => { const r = ${OR}; const b = r.pauseUi.boxes.ready; r.onPointer({ x: b.x, y: b.y }); return true; })()`);
+        ok(await until(`__rl.log.some((l) => l.startsWith('A> resume'))`, 3000), `both ready: the host's resume (${await evaluate(`__rl.log.filter((l) => l.startsWith('A> resume')).join(' | ')`)})`);
+        ok(await until(`${OR}.match.status === 'playing' && ${P}.state === 'playing'`, 6000), 'one GO: the level runs');
+        const start = await evaluate(`JSON.stringify({ level: ${P}.level, pipesPassed: ${P}.pipesPassed, end1: __rl.L.levelEnd(1, __rl.T), score: ${P}.score, coins: ${P}.effects.coins(), beans: ${P}.effects.beans(), levelWins: ${OR}.match.slots[0].levelWins, beganAt: __rl.bot.beginAt, rewound: ${OR}.rewound })`).then(JSON.parse);
+        ok(start.level === 2 && start.pipesPassed >= start.end1 && start.pipesPassed <= start.end1 + 1 && start.score >= kept.score && start.score <= kept.score + 2 && start.coins === kept.coins && start.beans === kept.beans && start.levelWins === kept.levelWins && start.rewound === null, `from level 2's first pair with the kept numbers: ${JSON.stringify(start)}`);
+        ok(start.beganAt !== null, 'the guest began on the same GO');
+        await pin();
+        const crossed = await until(`__rl.bot.finalAt !== null`, 4000);
+        ok(crossed, `the guest crossed the final line${crossed ? '' : ` (${await evaluate(`JSON.stringify({ h: __rl.bot.h, beginAt: __rl.bot.beginAt, now: Date.now(), frozen: __rl.bot.pause.frozen(), pause: __rl.bot.pause.state(), host: ${OR}.pause.state(), log: __rl.log.slice(-10) })`)})`}`);
+        await sleep(600);
+        await toLine(true);
+        ok(await until(`${OR}.match.status === 'over'`, 6000), 'both out: the race is over');
+        ok((await record()) === null, "the resume record is gone with the race");
+        ok(Boolean(await tabId()), `this page's tab id in sessionStorage (${await tabId()})`);
+
+        // --- Part 3 (2.3b): a relaunch ---------------------------------------------------------------
+        // iOS killed the app mid-race: the relaunch is a new session (sessionStorage gone: a new tab
+        // id), and the record the old page left in localStorage has not been beaten for a minute.
+        await evaluate(`(clearInterval(__rl.bot.timer), true)`);
+        const START = { level: 1, score: 0, coins: 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 0 };
+        const left = { v: 2, code: room.code, round: room.round, seat: 'host', pauseRound: 0, levels: { 1: START, 2: kept }, wall: Date.now(), owner: 'oldPage00000000x', beat: Date.now() - 60_000 };
+        const oldTab = await tabId();
+        await evaluate(`(localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(left))}), true)`);
+        // A relaunch's session starts empty: the tab id goes at the new document's start, after this
+        // page's pagehide has marked it closed (removed before the reload, pagehide would write it back
+        // and the reload keep it, as a reload should).
+        const { identifier: relaunchId } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `sessionStorage.removeItem('${TAB}');` });
+        await cdp.send('Page.reload', { ignoreCache: false });
+        await boot();
+        await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: relaunchId }).catch(() => null);
+        await evaluate(`(globalThis.__rl = { room: ${JSON.stringify(room)} }, true)`);
+        ok((await evaluate(guest(true))) === true, 'relaunched: the guest still held at level 2\'s start');
+        ok(await until(`__flappy.scene.isActive('OnlineRace') && ${OR}.rewound?.level === 2 && ${OR}.rewound.by === 'me'`, 9000), `the 🌐 window rejoined the old page's race (${await evaluate(`JSON.stringify(__reloadHooks.calls)`)}), rewound at level 2`);
+        const calls3 = await evaluate(`JSON.stringify(__reloadHooks.calls)`).then(JSON.parse);
+        ok(calls3.includes('room_state') && calls3.includes('openRoom 482913 host') && !calls3.includes('leave_room') && !calls3.includes('create_room'), `room_state, the channel as the host, nothing left: ${calls3.join(', ')}`);
+        const newTab = await tabId();
+        const r3 = await record();
+        ok(newTab && newTab !== oldTab && r3?.owner === newTab && Date.now() - r3.beat < 2500, `the record is this page's now (owner ${r3?.owner}, a new tab id ${newTab} ≠ ${oldTab}, beat ${Date.now() - (r3?.beat ?? 0)} ms ago)`);
+        const beat0 = r3?.beat ?? 0;
+        await sleep(2200);
+        ok(((await record())?.beat ?? 0) > beat0, `…and beaten every second (${((await record())?.beat ?? 0) - beat0} ms later)`);
+
+        // --- Part 4 (2.3b): another page takes it over -------------------------------------------------
+        // This page was frozen past staleMs (a background tab) and another page claimed the race: on its
+        // next frame this one steps aside. A page script plays the other page's beat.
+        const mark4 = (await evaluate(`__reloadHooks.calls.length`)) ?? 0;
+        const took = { ...(await record()), owner: 'otherPage0000000', beat: Date.now() };
+        await evaluate(`(localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(took))}), globalThis.__other = setInterval(() => { const r = JSON.parse(localStorage.getItem('${KEY}') || 'null'); if (r?.owner === 'otherPage0000000') { r.beat = Date.now(); localStorage.setItem('${KEY}', JSON.stringify(r)); } }, 500), true)`);
+        ok(await until(`!__flappy.scene.isActive('OnlineRace') && __flappy.scene.isActive('Play') && ${P}.match === null`, 3000), 'taken over: this page stepped aside, back to Play');
+        const calls4 = await evaluate(`JSON.stringify(__reloadHooks.calls.slice(${mark4}))`).then(JSON.parse);
+        ok(calls4.includes('close') && !calls4.includes('leave_room'), `the transport closed, the room not left (${calls4.join(', ')})`);
+        ok((await record())?.owner === 'otherPage0000000', 'the record left to the other page');
+        ok(await until(`document.getElementById('tour-status')?.textContent === ${JSON.stringify(ELSEWHERE)}`, 5000), `its 🌐 window says so: "${await status()}"`);
+        const calls4b = await evaluate(`JSON.stringify(__reloadHooks.calls.slice(${mark4}))`).then(JSON.parse);
+        ok(!calls4b.includes('room_state') && !calls4b.includes('leave_room'), `nothing rejoined or left while the other page beats (${calls4b.join(', ')})`);
+        // The other page dies: no more beats. The window looks again once, staleMs on: claims it and rejoins.
+        await evaluate(`(clearInterval(globalThis.__other), true)`);
+        ok(await until(`__flappy.scene.isActive('OnlineRace') && ${OR}.rewound?.level === 2`, TT.online.resume.staleMs + 5000), 'the other page stopped beating: the window looked again and rejoined');
+        const calls4c = await evaluate(`JSON.stringify(__reloadHooks.calls.slice(${mark4}))`).then(JSON.parse);
+        ok(calls4c.includes('room_state') && !calls4c.includes('leave_room') && (await record())?.owner === newTab, `claimed back for this page (${calls4c.join(', ')})`);
+        await evaluate(`(${OR}.leave(), true)`);
+        ok(await until(`!__flappy.scene.isActive('OnlineRace') && ${P}.match === null`, 3000) && (await record()) === null, 'Leave: back to Play, the record gone');
+        await evaluate(`(clearInterval(__rl.bot.timer), true)`);
+
+        // --- Part 5 (2.3b): a fresh page beside a live race ------------------------------------------
+        // The game open twice (a second tab, Safari and the home-screen app): the other page races and
+        // beats from before this page boots. This page offers nothing, rejoins nothing, leaves nothing.
+        const live = { ...left, owner: 'otherPage0000000', beat: Date.now() };
+        await evaluate(`(localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(live))}), localStorage.setItem('flappyPoop.onlineRace', '482913'), true)`);
+        ({ identifier: beatScriptId } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `setInterval(() => { try { const r = JSON.parse(localStorage.getItem('${KEY}') || 'null'); if (r && r.owner === 'otherPage0000000') { r.beat = Date.now(); localStorage.setItem('${KEY}', JSON.stringify(r)); } } catch (e) {} }, 500);` }));
+        await cdp.send('Page.reload', { ignoreCache: false });
+        await boot();
+        await sleep(1500);
+        const calls5 = await evaluate(`JSON.stringify(__reloadHooks.calls)`).then(JSON.parse);
+        const panelOpen = () => evaluate(`import('./src/ui/tournamentPanel.js').then((m) => m.isTournamentPanelOpen())`);
+        ok(!(await evaluate(`__flappy.scene.isActive('OnlineRace')`)) && !(await panelOpen()), 'booted beside it: no race, no 🌐 window offered');
+        ok(!calls5.includes('room_state') && !calls5.includes('leave_room'), `nothing rejoined or left (${calls5.join(', ') || 'no calls'})`);
+        await evaluate(`(${P}.openVersusWindow(), true)`);
+        ok(await until(`document.getElementById('tour-status')?.textContent === ${JSON.stringify(ELSEWHERE)}`, 5000), `the 🌐 window, opened by hand: "${await status()}"`);
+        const calls5b = await evaluate(`JSON.stringify(__reloadHooks.calls)`).then(JSON.parse);
+        ok(!calls5b.includes('room_state') && !calls5b.includes('leave_room') && !calls5b.some((c) => c.startsWith('openRoom')), `still nothing rejoined or left, item 46's code kept (${calls5b.join(', ')})`);
+        ok((await evaluate(`localStorage.getItem('flappyPoop.onlineRace')`)) === '482913' && (await record())?.owner === 'otherPage0000000', "item 46's remembered code and the other page's record untouched");
+        await evaluate(`(document.getElementById('tour-close')?.click(), true)`);
+        ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+      } finally {
+        if (scriptId) await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: scriptId }).catch(() => null);
+        if (beatScriptId) await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: beatScriptId }).catch(() => null);
+        await evaluate(`(clearInterval(globalThis.__rl?.bot?.timer), clearInterval(globalThis.__other), localStorage.removeItem('${KEY}'), localStorage.removeItem('flappyPoop.onlineRace'), true)`).catch(() => null);
+      }
+    });
+
+    await section('online-friends', async () => {
+      // Friends and online status (plan 39, 3.3), in the real page over Play (a 720 phone field) with a
+      // stand-in account and transport that answers the Tier 3 functions: the 🌐 window, the 🤝 Friends
+      // button, the screen and its actions, and the beat's calls (online_beat true once linked, false on ✕).
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+      await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+      let sp = null;
+      for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+        await sleep(500);
+        sp = await splashNow().catch(() => null);
+      }
+      if (sp?.enabled) {
+        await splashKey('keydown', ' ');
+        await splashKey('keyup', ' ');
+      }
+      for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+      const ex0 = exceptions.length;
+      const until = async (expr, ms = 5000) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          if (await evaluate(expr)) return true;
+          await sleep(50);
+        }
+        return false;
+      };
+      const text = (id) => evaluate(`document.getElementById('${id}')?.textContent ?? null`);
+      const click = (id) => evaluate(`(document.getElementById('${id}')?.click(), Boolean(document.getElementById('${id}')))`);
+      const calls = () => evaluate(`JSON.stringify(__fr.calls)`).then(JSON.parse);
+      await evaluate(`(() => {
+        const P = (n) => n.toString(16).padStart(2, '0').repeat(16);
+        let list = { friends: [{ peer: P(1), name: 'zedFriend' }, { peer: P(2), name: 'AmyFriend' }, { peer: P(3), name: 'bobFriend' }], incoming: [{ peer: P(4), name: 'AskedMe', at: Date.now() }], outgoing: [{ peer: P(5), name: 'IAsked', at: Date.now() }], blocked: [{ peer: P(6), name: 'Blocked6' }] };
+        const states = { friends: [{ peer: P(3), state: 'online', name: 'bobFriend' }, { peer: P(1), state: 'in_game', name: 'zedFriend' }, { peer: P(2), state: 'offline', name: 'AmyFriend' }] };
+        const history = { rival: null, recent: [{ name: 'Opp7', peer: P(7), at: Date.now(), won: true, mine: 3, theirs: 1 }, { name: 'zedFriend', peer: P(1), at: Date.now(), won: false, mine: 1, theirs: 2 }] };
+        const calls = [];
+        const net = { warm: async () => ({ ok: true }), serverNow: () => Date.now(), pump() {}, take: () => [], send: () => false, peer: () => null, channelState: () => 'none', close() {}, closeRoom() {}, beacon: () => true, async openRoom() { return { ok: true }; },
+          async rpc(fn, args) {
+            calls.push(fn === 'online_beat' ? 'online_beat:' + args.p_here : fn);
+            if (fn === 'friend_list') return { ok: true, data: list };
+            if (fn === 'friend_statuses') return { ok: true, data: states };
+            if (fn === 'online_history') return { ok: true, data: history };
+            if (fn === 'respond_friend_request') { const o = list.incoming.find((x) => x.peer === args.p_peer); list = { ...list, incoming: [], friends: [...list.friends, { peer: o.peer, name: o.name }] }; return { ok: true, data: { ok: true, status: 'accepted' } }; }
+            if (fn === 'send_friend_request') { list = { ...list, outgoing: [...list.outgoing, { peer: args.p_peer, name: 'Opp7', at: Date.now() }] }; return { ok: true, data: { ok: true, status: 'pending' } }; }
+            if (fn === 'block_user') { const f = list.friends.find((x) => x.peer === args.p_peer); list = { ...list, friends: list.friends.filter((x) => x !== f), blocked: [...list.blocked, { peer: f.peer, name: f.name }] }; return { ok: true, data: { ok: true } }; }
+            return { ok: true, data: null };
+          } };
+        const account = { enter: async () => ({ ok: true, view: 'home', name: 'Smoke', trusted: true, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted: true, name: 'Smoke' }) };
+        const p = __flappy.scene.getScene('Play');
+        p.onlineNet = net;
+        p.onlineAccount = () => account;
+        p.onlineStatusBeatRef = null;
+        globalThis.__fr = { calls };
+        p.openVersusWindow();
+        return true;
+      })()`);
+      ok(await until(`Boolean(document.getElementById('tour-friends'))`), 'the online home has 🤝 Friends');
+      ok(await until(`document.getElementById('tour-friends-badge')?.textContent === '1'`), 'its badge: one request waiting');
+      ok((await calls()).includes('online_beat:true'), 'linked: this device beats (online_beat true)');
+      await click('tour-friends');
+      ok(await until(`Boolean(document.getElementById('tour-fr-back'))`), 'the Friends screen');
+      const rows = await evaluate(`[0, 1, 2].map((i) => document.getElementById('tour-fr-' + i)?.textContent ?? '')`);
+      ok(rows[0].startsWith('🟢 bobFriend') && rows[0].includes('Online') && rows[1].startsWith('🟡 zedFriend') && rows[1].includes('In a game') && rows[2].startsWith('⚪ AmyFriend') && rows[2].includes('Offline'), `friends online → in a game → offline, dot and word (${rows.join(' | ')})`);
+      ok((await text('tour-fr-in-0'))?.includes('AskedMe') && (await text('tour-fr-out-0'))?.includes('IAsked') && (await text('tour-fr-op-0'))?.includes('Opp7') && (await text('tour-fr-op-1')) === null, 'a request to answer, a request sent, one recent opponent (a friend is not offered)');
+      ok((await text('tour-fr-bl-0')) === null && (await text('tour-fr-blocked'))?.includes('Blocked (1)'), 'Blocked (1), closed');
+      await click('tour-fr-yes-0');
+      ok(await until(`document.getElementById('tour-status')?.textContent === 'You and AskedMe are friends now'`), 'Accept: friends now');
+      ok((await text('tour-fr-add-0')) === null, "an opponent's row shows only its ⋯");
+      await click('tour-fr-op-more-0');
+      await click('tour-fr-add-op-0');
+      ok(await until(`document.getElementById('tour-status')?.textContent === 'Friend request sent to Opp7'`), '⋯ Add friend: the request went');
+      await click('tour-fr-more-btn-0');
+      ok(await until(`Boolean(document.getElementById('tour-fr-block-0'))`), '⋯ shows Remove and Block');
+      await click('tour-fr-block-0');
+      ok(!(await calls()).includes('block_user') && (await text('tour-status'))?.startsWith('Tap Block again'), 'Block asks first');
+      await click('tour-fr-block-0');
+      ok(await until(`document.getElementById('tour-status')?.textContent === 'bobFriend is blocked'`), 'a second tap blocks');
+      await click('tour-fr-back');
+      ok(await until(`Boolean(document.getElementById('tour-create')) && !document.getElementById('tour-friends-badge')`), 'Back: the online home, no request waiting');
+      await click('tour-close');
+      ok(await until(`__fr.calls.includes('online_beat:false')`), '✕ out of 🌐: online_beat false');
+      ok((await calls()).filter((c) => c === 'online_beat:false').length === 1, 'once');
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+    });
+
+    await section('online-invites', async () => {
+      // Invites (plan 39, 4.2), in the real page over Play on a 320 phone (the narrowest the panel takes),
+      // with a stand-in account and transport answering the Tier 3 and 4.1 functions; a topic event is
+      // pushed into the transport's queue (__iv.q) as onlineNet would queue it.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 320, height: 640, deviceScaleFactor: 1, mobile: false });
+      await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+      let sp = null;
+      for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+        await sleep(500);
+        sp = await splashNow().catch(() => null);
+      }
+      if (sp?.enabled) {
+        await splashKey('keydown', ' ');
+        await splashKey('keyup', ' ');
+      }
+      for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+      const ex0 = exceptions.length;
+      const until = async (expr, ms = 5000) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          if (await evaluate(expr)) return true;
+          await sleep(50);
+        }
+        return false;
+      };
+      const text = (id) => evaluate(`document.getElementById('${id}')?.textContent ?? null`);
+      const click = (id) => evaluate(`(document.getElementById('${id}')?.click(), Boolean(document.getElementById('${id}')))`);
+      const calls = () => evaluate(`JSON.stringify(__iv.calls)`).then(JSON.parse);
+      const LONG = 'WWWWWWWWWWWWWWWW';
+      await evaluate(`(() => {
+        const P = (n) => n.toString(16).padStart(2, '0').repeat(16);
+        const U = (n) => String(n).padStart(8, '0') + '-0000-4000-8000-000000000000';
+        const list = { friends: [{ peer: P(1), name: 'zedFriend' }, { peer: P(3), name: 'bobFriend' }, { peer: P(4), name: '${LONG}' }], incoming: [], outgoing: [], blocked: [] };
+        const states = { friends: [{ peer: P(3), state: 'online', name: 'bobFriend' }, { peer: P(4), state: 'online', name: '${LONG}' }, { peer: P(1), state: 'in_game', name: 'zedFriend' }] };
+        const t0 = Date.now();
+        let incoming = [{ invite: U(1), peer: P(4), name: '${LONG}', sent_at: t0 - 40000, expires_at: t0 + 80000 }];
+        const calls = [];
+        const q = [];
+        let sent = 0;
+        const net = { warm: async () => ({ ok: true }), serverNow: () => Date.now(), pump() {}, take: () => q.splice(0), send: () => true, peer: () => null, channelState: () => 'joined', close() { calls.push('close'); }, closeRoom() {}, beacon: () => true,
+          async openRoom(code, o) { calls.push('openRoom:' + code + ':' + o.seat); return { ok: true }; },
+          async openTopic(topic) { calls.push('openTopic:' + topic); return { ok: true }; }, closeTopic() { calls.push('closeTopic'); },
+          async rpc(fn, args) {
+            calls.push(fn);
+            if (fn === 'friend_list') return { ok: true, data: list };
+            if (fn === 'friend_statuses') return { ok: true, data: states };
+            if (fn === 'online_history') return { ok: true, data: { rival: null, recent: [] } };
+            if (fn === 'invite_list') return { ok: true, data: { incoming, outgoing: [], topic: 'user:' + P(10) } };
+            if (fn === 'accept_invite') { incoming = []; return { ok: true, data: { ok: true, code: '482913', status: 'ready', host_name: '${LONG}' } }; }
+            if (fn === 'send_invite') { sent += 1; const t = Date.now(); return { ok: true, data: { ok: true, invite: U(100 + sent), code: '615204', sent_at: t, expires_at: t + 120000 } }; }
+            return { ok: true, data: { ok: true } };
+          } };
+        const account = { enter: async () => ({ ok: true, view: 'home', name: 'Smoke', trusted: true, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted: true, name: 'Smoke' }) };
+        const p = __flappy.scene.getScene('Play');
+        p.onlineNet = net;
+        p.onlineAccount = () => account;
+        p.onlineStatusBeatRef = null;
+        globalThis.__iv = { calls, q, U, P };
+        p.openVersusWindow();
+        return true;
+      })()`);
+      ok(await until(`document.getElementById('tour-friends-inv')?.textContent === '✉️ 1'`), 'the online home: ✉️ 1 on 🤝 Friends');
+      const c0 = await calls();
+      ok(c0.includes('invite_list') && c0.includes(`openTopic:user:${'0a'.repeat(16)}`), 'linked: invite_list, then the topic it names');
+      await click('tour-friends');
+      ok(await until(`Boolean(document.getElementById('tour-fr-inv-0'))`), 'Friends: the ✉️ on the first row');
+      ok((await text('tour-fr-0'))?.includes(LONG) && /^1:[12]\d$/.test((await text('tour-fr-inv-left-0')) ?? ''), `the inviting friend first, with the time left (${await text('tour-fr-inv-left-0')})`);
+      const fit = await evaluate(`(() => {
+        const r = (id) => document.getElementById(id).getBoundingClientRect();
+        const row = r('tour-fr-0'), btn = r('tour-fr-inv-0'), no = r('tour-fr-invno-0'), left = r('tour-fr-inv-left-0');
+        const who = document.querySelector('#tour-fr-0 .who').getBoundingClientRect();
+        const inside = (b) => b.left >= row.left - 0.5 && b.right <= row.right + 0.5;
+        return JSON.stringify({ inside: inside(btn) && inside(no) && inside(left) && left.right <= btn.right + 0.5, whoW: Math.round(who.width), btnW: Math.round(btn.width), wrapped: btn.top >= who.bottom - 1 });
+      })()`).then(JSON.parse);
+      ok(fit.inside && fit.whoW >= 150 && fit.wrapped, `a 16-character name on a 320 phone: the ✉️, its time and ✕ inside the row, under the name, which keeps its width (${JSON.stringify(fit)})`);
+      ok((await text('tour-fr-invite-1')) !== null && (await text('tour-fr-invite-2')) === null, 'Invite on the other 🟢 friend, none on In a game');
+      await evaluate(`(__iv.q.push({ kind: 'user', event: 'invite', invite: { invite: __iv.U(2), peer: __iv.P(3), name: 'bobFriend', sentAt: Date.now(), expiresAt: Date.now() + 120000 } }), true)`);
+      ok(await until(`Boolean(document.getElementById('tour-fr-inv-1'))`), "a topic invite: bobFriend's ✉️ too");
+      await click('tour-fr-inv-0');
+      ok(await until(`Boolean(document.getElementById('tour-ready'))`), 'the ✉️ tapped: the ready screen as their guest');
+      ok((await calls()).includes('openRoom:482913:guest') && !(await calls()).includes('join_room'), 'the channel as the guest; no code typed');
+      await click('tour-leave');
+      ok(await until(`Boolean(document.getElementById('tour-friends'))`), 'Leave: the online home');
+      await click('tour-friends');
+      ok(await until(`Boolean(document.getElementById('tour-fr-invite-1')) || Boolean(document.getElementById('tour-fr-invite-0'))`), 'Friends again');
+      const inviteId = await evaluate(`document.getElementById('tour-fr-invite-0') ? 'tour-fr-invite-0' : 'tour-fr-invite-1'`);
+      await click(inviteId);
+      ok(await until(`Boolean(document.getElementById('tour-inv-ttl'))`), 'Invite: the room screen with the invite');
+      ok((await text('tour-inv'))?.startsWith('Waiting for ') && /^(2:00|1:5\d)$/.test((await text('tour-inv-ttl')) ?? ''), `waiting, the time left (${await text('tour-inv-ttl')})`);
+      await evaluate(`(__iv.q.push({ kind: 'user', event: 'invite_update', update: { invite: __iv.U(101), status: 'declined' } }), true)`);
+      ok(await until(`Boolean(document.getElementById('tour-resend'))`), 'their no: Resend');
+      ok((await text('tour-inv'))?.includes("can't play right now"), 'the line says so');
+      await click('tour-resend');
+      ok(await until(`__iv.calls.filter((c) => c === 'send_invite').length === 2 && Boolean(document.getElementById('tour-inv-ttl'))`), 'Resend: waiting again');
+      ok((await calls()).filter((c) => c.startsWith('openRoom:615204')).length === 1, 'in the same room (one channel)');
+      await click('tour-close');
+      ok(await until(`__iv.calls.includes('leave_room') && Boolean(document.getElementById('tour-create')) && !document.getElementById('tour-inv')`), '✕ on the room screen: leave_room (which cancels the invite), the online home');
+      await click('tour-close');
+      ok(await until(`__iv.calls.includes('close')`), '✕ again, out of 🌐: the transport closed (the topic with it)');
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+    });
+
+    await section('online-join-link', async () => {
+      // The share link (plan 39, 4.3) in the real page: main.js reads ?join=, Play opens the 🌐 window,
+      // the real transport cannot sign in (supabase.co is blocked here), and the code waits for Retry,
+      // which links through a stand-in transport and joins it.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+      await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}&join=482913` });
+      let sp = null;
+      for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+        await sleep(500);
+        sp = await splashNow().catch(() => null);
+      }
+      ok(!(await evaluate('location.search')).includes('join='), `the code is out of the address bar (${await evaluate('location.search')})`);
+      if (sp?.enabled) {
+        await splashKey('keydown', ' ');
+        await splashKey('keyup', ' ');
+      }
+      for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+      const ex0 = exceptions.length;
+      const until = async (expr, ms = 5000) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          if (await evaluate(expr)) return true;
+          await sleep(50);
+        }
+        return false;
+      };
+      ok(await until(`Boolean(document.getElementById('tour-net')) && document.getElementById('tour-online')?.getAttribute('aria-pressed') === 'true'`, 8000), 'the 🌐 window opened by itself, online on');
+      ok(await until(`Boolean(document.getElementById('tour-retry'))`, 20000), 'no network: the sign-in failed, Retry offered');
+      await evaluate(`(() => {
+        const calls = [];
+        const net = { warm: async () => ({ ok: true }), serverNow: () => Date.now(), pump() {}, take: () => [], send: () => true, peer: () => null, channelState: () => 'joined', close() {}, closeRoom() {}, beacon: () => true,
+          async openRoom(code, o) { calls.push('openRoom:' + code + ':' + o.seat); return { ok: true }; }, async openTopic() { return { ok: true }; }, closeTopic() {},
+          async rpc(fn, args) {
+            calls.push(fn === 'join_room' ? 'join_room:' + args.p_code : fn);
+            if (fn === 'join_room') return { ok: true, data: globalThis.__jl.gone ? { ok: false, error: 'no room' } : { ok: true, code: args.p_code, status: 'asked', host_name: 'LinkHost' } };
+            if (fn === 'friend_list') return { ok: true, data: { friends: [], incoming: [], outgoing: [], blocked: [] } };
+            if (fn === 'invite_list') return { ok: true, data: { incoming: [], outgoing: [], topic: null } };
+            return { ok: true, data: { ok: true } };
+          } };
+        const account = { enter: async () => ({ ok: true, view: 'home', name: 'Smoke', trusted: true, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted: true, name: 'Smoke' }) };
+        const p = __flappy.scene.getScene('Play');
+        p.onlineNet = net;
+        p.onlineAccount = () => account;
+        p.onlineStatusBeatRef = null;
+        globalThis.__jl = { calls, gone: false };
+        return true;
+      })()`);
+      await evaluate(`(document.getElementById('tour-retry')?.click(), true)`);
+      ok(await until(`__jl.calls.includes('join_room:482913')`), "Retry: linked, then the link's code joined");
+      ok(await until(`(document.getElementById('tour-knock')?.textContent ?? '').includes('LinkHost')`), 'knocking on the host');
+      ok((await evaluate('JSON.stringify(__jl.calls)')).includes('openRoom:482913:guest'), 'the channel as the guest');
+      await evaluate(`(document.getElementById('tour-close')?.click(), true)`); // leaves the room: the online home
+      await until(`Boolean(document.getElementById('tour-create'))`);
+      await evaluate(`(document.getElementById('tour-close')?.click(), true)`); // out of 🌐
+      ok(await until(`!document.getElementById('tour-net') || document.getElementById('tournament-panel')?.hidden !== false`), 'closed');
+      // A link whose room is gone: the join screen with the code and the link's words.
+      await evaluate(`(globalThis.__jl.gone = true, __flappy.scene.getScene('Play').openVersusWindow({ join: '730155' }), true)`);
+      ok(await until(`(document.getElementById('tour-status')?.textContent ?? '') === 'This invite has expired. Ask your friend for a new one.' && Boolean(document.getElementById('tour-keys'))`), 'a gone room: "This invite has expired", on the join screen');
+      await evaluate(`(document.getElementById('tour-close')?.click(), document.getElementById('tour-close')?.click(), true)`);
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
     });
 
     const f2 = await frame();

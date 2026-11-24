@@ -360,6 +360,7 @@ export const TUNING = {
   // the ghost replays it exactly between keyframes.
   online: {
     keyframeMs: 500, // ms between `pos` keyframes mid-run (2 Hz; flaps go on top and carry the poop's full state). Michael, 19 Nov: the same ghost as 5 Hz for 43% fewer messages (plan 39 item 34)
+    flapMinMs: 200, // ms between `flap` messages at most (5 a second, AUD-144): faster taps fold into one flap sent at the window's end with the poop's state then
     codeTtlMs: 15 * 60 * 1000, // ms a room code lives from its room's last change: mirrors create_room / join_room in db/schema.sql
     clock: {
       samples: 6, // server_now() round trips per sync round (item 15: 5 to 8); the lowest round trip sets the offset
@@ -380,6 +381,35 @@ export const TUNING = {
       claimResendMs: 1000, // ms between repeats of a guest's claim to a line while no verdict has come (a lost claim or verdict; the host answers a repeat with the verdict it gave), up to verdictWaitMs (AUD-098)
       widthResendMs: 500, // ms between repeats of this side's field width from the race's start to its GO, so both reach one width before the count ends (item 14, AUD-097)
       waitOfferMs: 45000, // ms this side waits (ready in a break, or out at the finish) before the race offers Leave or Keep waiting (item 15); Keep waiting starts it over
+    },
+    // The shared pause (plan 39, 2.1, src/onlineRace.js's createRacePause): a disconnect never ends a race; it pauses both until both say Ready.
+    pause: {
+      silenceMs: 2000, // ms without a word from the other side, while it is mid-run or paused, before this side counts it lost and pauses (item 17's 2 s; keyframes come every keyframeMs)
+      heartbeatMs: 1000, // ms between repeats of this side's pause message while it is paused: the one message a second that keeps a paused side from reading as silent (at most half of silenceMs)
+      leaveConfirmMs: 4000, // ms the pause overlay's Leave waits for its second tap (it ends the race for both, with no winner), then it asks again
+    },
+    // Reload resume (plan 39, 2.3, D4): a reload mid-race rejoins the room and both players rewind to the current level's start.
+    resume: {
+      maxAgeMs: 6 * 60 * 60 * 1000, // ms the resume record is good for (wall clock): the server ends a playing room 6 h after its race started
+      beatMs: 1000, // ms between the racing page's beats on its resume record (2.3b, a window timer: Phaser's loop stops in a hidden tab, a 1 s timer still runs)
+      staleMs: 5000, // ms without a beat after which another page may take the race over (2.3b: the page that had it is gone or frozen; a relaunch takes longer); a page that lost it steps aside when it wakes
+    },
+    // The race's report (finish_match, 2.5): both devices report; the first to report hears 'playing'
+    // until the other's report is in, so it asks again.
+    report: {
+      retryMs: [2000, 4000, 8000, 16000, 30000], // ms before each resend after a lost answer (offline, a deadlock, a first 'no match'); then it gives up
+      pollMs: 3000, // ms between the first asks while the other device has not reported yet
+      polls: 10, // quick asks (every pollMs) before they slow to slowPollMs
+      slowPollMs: 15000, // ms between the later asks
+      waitMs: 100000, // ms asking before "not saved yet": the other device's whole resend window (retryMs, a timed-out try before each, a poll of skew; a test ties them) (2.7, AUD-109). A waiting, unpaired device never reports (M1 rule 2)
+    },
+    // Friends and online status (plan 39, 3.3; item 58's "For 3.3"): this device's beat while 🌐 is
+    // open or a race runs, and the Friends screen's dots.
+    status: {
+      beatMs: 20000, // ms between online_beat(true) calls; under half of the schema's c_fresh (60 s), so one lost beat never reads offline (a test ties them)
+      pollMs: 10000, // ms between friend_statuses() reads while the Friends screen shows: a friend's dot changes within about this long
+      badgeMs: 30000, // ms between friend_list() reads for the Friends button's badge while the online home shows
+      opponents: 5, // recent opponents listed on the Friends screen (distinct players from online_history, not friends yet)
     },
     inventoryY0: 268, // px: the purse and bean rows' first centre in an online race, below the opponent's pill (its top 82, bottom 228 with the slow / lost word), not over it
     ghost: {
@@ -404,7 +434,7 @@ export const TUNING = {
   // two-player session is a tournament: two players race the Final alone.
   tournament: {
     minPlayers: 2,
-    minPostPlayers: 3, // the 🏅 board's floor (submit_tournament): two players race the Final alone, no bronze, so they stay on the device
+    minPostPlayers: 2, // the 🏅 board's floor (submit_tournament): two players race the Final alone, gold and silver (plan 39, 2.4b and 2.5)
     maxPlayers: 8,
     levelPipes: [10, 25, 35, 35, 35, 35, 50], // pipe pairs per level in a tournament race (225 in all; a normal run's levels.pipes makes 285)
   },
@@ -573,6 +603,8 @@ export const LEADERBOARD = {
   renameKey: 'flappyPoop.rename', // localStorage key for a rename typed on this device, until a post carries it to the board (else the device adopts the board's name)
   tournamentsKey: 'flappyPoop.tournaments', // localStorage key for finished tournaments (🏅) the board has not confirmed yet (submit_tournament)
   tournamentQueueMax: 20, // finished tournaments kept for a later post; the oldest goes first when full
+  racePostsKey: 'flappyPoop.racePosts', // localStorage key for split-screen race scores (🏆, plan 39 2.5) the board has not confirmed yet (submit_score)
+  racePostQueueMax: 20, // race scores kept for a later post; the oldest goes first when full
   dailyKey: 'flappyPoop.daily', // localStorage key for this device's Daily Dump (🌞) attempt: claimed at the start, rewritten as the score grows
   dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
   dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full
@@ -587,6 +619,8 @@ export const LEADERBOARD = {
   careerKey: 'flappyPoop.career', // localStorage key for this device's lifetime counters and achievements (plan 08): what waits to be sent, the batch in flight, the server's last totals, unlocks and claims
   onlineSessionKey: 'flappyPoop.onlineSession', // localStorage key for this device's anonymous Supabase Auth session (plan 39, 🌐 only): supabase-js keeps it there; a bearer secret, never sent anywhere else nor exported
   onlineRaceKey: 'flappyPoop.onlineRace', // localStorage key for the room code of the online race this device is in (plan 39, 1.8, item 46): set at the race's hand-off, cleared by Leave; a code still there on the next entry to 🌐 is a race left by a reload, so its room is left first (else the server refuses this device a new room for up to 6 h). '.test' suffix on the test project
+  onlineResumeKey: 'flappyPoop.onlineResume', // localStorage key for the online race's resume record (plan 39, 2.3, D4; 2.3b: localStorage, so a relaunched home-screen app or a reopened tab rejoins too): the race's room, round and seat, the pause round, each level's start (score, purse, beans, probiotic, crashes, level wins), its owner (the racing page's tab id) and that page's beat; '.test' on the test project; gone when the race ends, is abandoned or left
+  onlineTabKey: 'flappyPoop.onlineTab', // sessionStorage key for this page's tab id (plan 39, 2.3b): the resume record's owner; a reload keeps it (pagehide marks it closed), a new tab, a relaunch or a duplicated tab gets a new one
   onlineTrustKey: 'flappyPoop.onlineTrust', // localStorage key for whether this device was last seen trusted online (plan 39, 1.6a, M1): true / false, so a demotion while it was away can be told; cleared by Clear, a Load of another player and Remove this device
   streaksKey: 'flappyPoop.streaks', // localStorage key for this device's Singleplayer and Daily Dump day streaks (plan 34): { single, daily }, each { day, streak, best }; never sent, not in the backup
   dailyMaxScore: 10000, // the Daily Dump cap (endless runs); matches daily_scores' CHECK and submit_daily_score() in db/schema.sql

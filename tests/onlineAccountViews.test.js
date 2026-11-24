@@ -4,8 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { El, installDom } from './support/dom.js';
-import { t } from '../src/i18n.js';
-import { accountBody, accountNotes, createAccountState, devicesButton, enterOnline, keypad, pairCodeLeft } from '../src/ui/onlineAccountViews.js';
+import { catalogFor, t } from '../src/i18n.js';
+import { accountBody, accountCss, accountNotes, createAccountState, devicesButton, enterOnline, keypad, pairCodeLeft, KEY_FLASH_MS } from '../src/ui/onlineAccountViews.js';
 
 installDom();
 
@@ -87,11 +87,13 @@ test('the name field: Save claims what was typed; a refusal keeps the field, a l
   assert.equal(k.ui.linked.name, 'FreshPoop');
 });
 
-test('home notes: waiting to pair, a demotion instead, blocked storage', () => {
+test('home notes: a demotion, blocked storage; a device waiting to pair gets none (3.8: it races and its races are saved)', () => {
   const k = harness();
   const ids = (st) => accountNotes(k.ui, { ...createAccountState(), ...st }).map((e) => e.id);
   assert.deepEqual(ids({ trusted: true }), []);
-  assert.deepEqual(ids({ trusted: false }), ['tour-pending']);
+  assert.deepEqual(ids({ trusted: false }), []);
+  assert.equal(catalogFor('en').onlinePendingHome, undefined, 'its string is gone');
+  assert.equal(catalogFor('zh-Hans').onlinePendingHome, undefined);
   assert.deepEqual(ids({ trusted: false, demoted: true }), ['tour-demoted']);
   assert.deepEqual(ids({ trusted: true, blocked: true }), ['tour-blocked']);
 });
@@ -174,4 +176,75 @@ test('the keypad: ⌫ takes the last digit, a seventh is ignored', async () => {
   assert.equal(st.typed, '123456');
   await root.find('tour-key-back').click();
   assert.equal(st.typed, '12345');
+});
+
+test('🏁 Recent races (2.5, Preview F3): beside 📱 Devices on the home; the rival row, one row per race, a private note, Back', async () => {
+  const history = {
+    ok: true,
+    rival: { name: 'JollyPlunger042', meetings: 7, losses: 4 },
+    recent: [
+      { name: 'JollyPlunger042', result: 'won', mine: 412, theirs: 377, days: 0 },
+      { name: 'SirFlushALot', result: 'draw', mine: 260, theirs: 260, days: 1 },
+      { name: 'BeanCounter', result: 'lost', mine: 120, theirs: 351, days: 9 },
+    ],
+  };
+  const k = harness({ races: history }, { ...createAccountState(), view: 'home', trusted: true });
+  const row = devicesButton(k.ui, k.st, k.account);
+  assert.ok(row.find('tour-devices'), '📱 Devices stays');
+  await row.find('tour-races').click();
+  assert.deepEqual(k.calls.map((c) => c[0]), ['races']);
+  assert.equal(k.st.view, 'races');
+  assert.match(text(k.find('tour-rival')), /Biggest online rival.*JollyPlunger042 · lost 4 of 7/);
+  assert.match(text(k.find('tour-race-0')), /JollyPlunger042.*today.*Won 412–377/);
+  assert.match(text(k.find('tour-race-1')), /SirFlushALot.*yesterday.*Draw 260–260/);
+  assert.match(text(k.find('tour-race-2')), /BeanCounter.*9 days ago.*Lost 120–351/);
+  assert.match(text(k.root), /Only you can see this list/);
+  await k.find('tour-races-back').click();
+  assert.equal(k.st.view, 'home');
+});
+
+test('🏁 Recent races: none yet says so; a waiting device is asked to pair; an error stays on the home with its line', async () => {
+  const none = harness({ races: { ok: true, rival: null, recent: [] } }, { ...createAccountState(), view: 'home', trusted: true });
+  await devicesButton(none.ui, none.st, none.account).find('tour-races').click();
+  assert.ok(none.find('tour-races-none'));
+  assert.match(text(none.find('tour-rival')), /—/);
+  const waiting = harness({ races: { ok: false, pending: true } }, { ...createAccountState(), view: 'home', trusted: true });
+  await devicesButton(waiting.ui, waiting.st, waiting.account).find('tour-races').click();
+  assert.equal(waiting.st.view, 'races');
+  assert.equal(waiting.st.trusted, false);
+  assert.match(text(waiting.find('tour-races-pending')), /Pair this device to see your races/);
+  const off = harness({ races: { ok: false, errorKey: 'onlineErrOffline' } }, { ...createAccountState(), view: 'home', trusted: true });
+  await devicesButton(off.ui, off.st, off.account).find('tour-races').click();
+  assert.equal(off.st.view, 'home');
+  assert.deepEqual(off.ui.status, { text: t('en', 'onlineErrOffline'), kind: 'error' });
+});
+
+test('📱 Devices: one day ago reads "yesterday", not "1 days ago" (2.5)', async () => {
+  const rows = [{ uid: 'u-me', me: true, trusted: true, days: 0 }, { uid: 'u-2', me: false, trusted: true, days: 1 }];
+  const k = harness({ devices: { ok: true, rows } }, { ...createAccountState(), view: 'home', trusted: true });
+  await devicesButton(k.ui, k.st, k.account).find('tour-devices').click();
+  assert.match(text(k.find('tour-dev-1')), /last online yesterday/);
+});
+
+test('item 70, N10: a pressed key is light pink after the redraw that replaced it (hit), only that key, and not once KEY_FLASH_MS has passed', async () => {
+  const st = { ...createAccountState(), typed: '' };
+  const root = new El('div');
+  const ui = { setStatus() {}, rerender: () => ((root.children = []), root.append(...keypad(ui, st, 'Go', () => {}))) };
+  ui.rerender();
+  assert.ok(!/\bhit\b/.test(root.find('tour-key-1').className), 'nothing pressed yet');
+  await root.find('tour-key-1').click();
+  assert.match(root.find('tour-key-1').className, /\bhit\b/, 'the redrawn 1 carries hit');
+  assert.ok(!/\bhit\b/.test(root.find('tour-key-2').className), 'only the key pressed');
+  await root.find('tour-key-back').click();
+  assert.match(root.find('tour-key-back').className, /\bhit\b/, '⌫ too');
+  st.hit.at -= KEY_FLASH_MS + 1;
+  ui.rerender();
+  assert.ok(!/\bhit\b/.test(root.find('tour-key-back').className), 'past KEY_FLASH_MS a redraw shows no press');
+  assert.ok(!/\bhit\b/.test(root.find('tour-key-go').className ?? ''), 'the go key never carries it');
+});
+
+test('item 70, N9 and N10: the code boxes keep one height empty or typed; the outline keys\' pressed look beats their transparent background', () => {
+  const css = accountCss('p');
+  assert.match(css, /#p \.boxes span \{[^}]*\bheight: 1\.2em;[^}]*line-height: 1\.2em;/, 'an empty box is as tall as a typed one, so the keys do not move');
+  assert.match(css, /#p \.keys button\.outline:active, #p \.keys button\.outline\.hit \{ background: rgba\(248, 160, 200, 0\.3\); \}/, 'two classes and an id: above button.outline\'s transparent');
 });

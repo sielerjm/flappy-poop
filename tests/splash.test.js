@@ -69,7 +69,7 @@ const BADGE_OF = {
   toilet: 'toilet_win',
   rectum: 'win_game',
 };
-const CHROME_GLYPH = { superQ: '\u2753', streaksAll: '📅🔥', education: '📚', profile: '👤', daily: '🌞', tournament: '🏅', shop: '💰', leaderboard: '🏆', twoPlayer: '👥', userCode: '🔑', controller: '🎮', lowPower: '🔋' };
+const CHROME_GLYPH = { online: '🌐', superQ: '\u2753', streaksAll: '📅🔥', education: '📚', profile: '👤', daily: '🌞', tournament: '🏅', shop: '💰', leaderboard: '🏆', twoPlayer: '👥', userCode: '🔑', controller: '🎮', lowPower: '🔋' };
 // The one shared glyph, by name (Michael's call, 2026-11-11): the controller note and the games badge.
 // The streak card pairs 📅 with 🔥, the game's streak sign (Michael at plan 36's Preview A, 2026-11-18): the pair is
 // its own glyph, so the rule below (whole glyphs) lets it pass while 🔥 alone stays the score_250 badge's.
@@ -313,10 +313,10 @@ test('ringStep: a long frame (Phaser compiling) moves the ring no more than ring
   assert.equal(ringStep(0.2, 1, -10), 0.2);
 });
 
-test('the 📚 card (plan 28, 2.3) and the ❓ challenge card (plan 34) leave the pool when education is switched off (EDUCATION.enabled false); the 📅🔥 streak card (plan 36, the newest feature) stays', async () => {
+test('the 📚 card (plan 28, 2.3) and the ❓ challenge card (plan 34) leave the pool when education is switched off (EDUCATION.enabled false); the 📅🔥 streak card (plan 36) stays', async () => {
   const { splashPool, SPLASH_NOTES } = await import('../src/splash.js');
   const { TUNING } = await import('../src/config.js');
-  assert.deepEqual(SPLASH_NOTES.filter((n) => n.kind === 'feature').slice(0, 3).map((n) => n.id), ['streaksAll', 'superQ', 'education']);
+  assert.deepEqual(SPLASH_NOTES.filter((n) => n.kind === 'feature').slice(0, 4).map((n) => n.id), ['online', 'streaksAll', 'superQ', 'education']);
   const on = splashPool(SPLASH_NOTES, TUNING, { enabled: true }).map((n) => n.id);
   const off = splashPool(SPLASH_NOTES, TUNING, { enabled: false }).map((n) => n.id);
   assert.ok(on.includes('education') && on.includes('superQ') && on.includes('streaksAll'));
@@ -326,7 +326,7 @@ test('the 📚 card (plan 28, 2.3) and the ❓ challenge card (plan 34) leave th
 test('the streak card is NEW again (plan 36, Michael: "show as NEW again"): a device that saw the old card (id streaks) gets streaksAll first, as NEW; the old id leaves its deck', async () => {
   const { splashPool, nextNote } = await import('../src/splash.js');
   const pool = splashPool();
-  const old = { deck: ['streaks', 'fiber', 'bean'], known: ['streaks', 'superQ', 'education', 'profile', 'fiber', 'bean'], seen: ['streaks', 'superQ', 'education', 'profile'], last: 'fiber' };
+  const old = { deck: ['streaks', 'fiber', 'bean'], known: ['online', 'streaks', 'superQ', 'education', 'profile', 'fiber', 'bean'], seen: ['online', 'streaks', 'superQ', 'education', 'profile'], last: 'fiber' };
   const { note, state } = nextNote(old, pool, () => 0.5);
   assert.deepEqual([note.id, note.isNew, note.glyph], ['streaksAll', true, '📅🔥']);
   assert.ok(state.seen.includes('streaksAll') && !state.deck.includes('streaks'), 'seen now; the old id is gone from the deck');
@@ -340,4 +340,21 @@ test('the battery tip (plan 28, 4.7): a hint for every device, 🔋, in Michael\
   assert.deepEqual([n.kind, n.glyph, n.key], ['hint', '🔋', 'splashLowPower']);
   assert.equal(t('en', 'splashLowPower'), 'Battery saver mode or low power mode can impact game performance.');
   assert.ok(t('zh-Hans', 'splashLowPower') && t('zh-Hans', 'splashLowPower') !== t('en', 'splashLowPower'), 'its own Chinese (not the English fallback)');
+});
+
+test('plan 39 (Michael, 24 Nov): the 🌐 online-races card is the newest feature, dealt first as NEW on a fresh device and on one that saw every other card; 👤 profile ages out (featureMax 4)', async () => {
+  const { splashPool, nextNote, SPLASH_NOTES } = await import('../src/splash.js');
+  const { t } = await import('../src/i18n.js');
+  assert.deepEqual([SPLASH_NOTES[0].id, SPLASH_NOTES[0].kind, SPLASH_NOTES[0].glyph, SPLASH_NOTES[0].key], ['online', 'feature', '🌐', 'splashOnline']);
+  const pool = splashPool().map((n) => n.id);
+  assert.ok(pool.includes('online') && !pool.includes('profile'));
+  const fresh = nextNote(null, splashPool(), () => 0.5);
+  assert.deepEqual([fresh.note.id, fresh.note.isNew], ['online', true]);
+  const veteran = { deck: ['fiber'], known: ['streaksAll', 'superQ', 'education', 'profile', 'fiber'], seen: ['streaksAll', 'superQ', 'education', 'profile'], last: 'fiber' };
+  assert.deepEqual([nextNote(veteran, splashPool(), () => 0.5).note.id, nextNote(veteran, splashPool(), () => 0.5).note.isNew], ['online', true]);
+  for (const loc of ['en', 'zh-Hans']) {
+    const text = t(loc, 'splashOnline');
+    assert.ok(text.includes('👥') && text.includes('🌐') && [...text].length <= 100, `${loc}: names 👥 and 🌐, at most 100 characters`);
+  }
+  assert.ok(!t('en', 'splashTwoPlayer').startsWith('On a wide screen'), 'the 👥 tip no longer says wide screens only (👥 shows on phones too)');
 });

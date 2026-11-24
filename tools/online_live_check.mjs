@@ -2,11 +2,17 @@
 // Supabase project after db/schema.sql is pasted there. Four anonymous sessions on this machine (A,
 // A2, B and C) link to throwaway players, race-by-code through a room, and prove that the channel
 // policies admit the two seated devices and refuse everyone else, that public channels are off, that
-// a decline moves the room, that the join cap bites, and that removing a device ends its session.
-// Each session unlinks itself at the end, which deletes its anonymous user, so nothing is left behind
-// but its join attempts (an IP hash, gone within the hour); when that cannot happen (a failed step, a
-// crash, Ctrl-C), the check prints the SQL that removes exactly its users (tagged
-// user_metadata.online_check = '39'; nothing in the schema ever reads user_metadata).
+// a decline moves the room, that the join cap bites, that removing a device ends its session, that
+// the friend and status functions answer a paired device and refuse anon (plan 39, 3.5), and that the
+// invite functions do too and a player's own topic (the handle invite_list gives) admits its paired
+// device and refuses another player's (plan 39, 4.1).
+// Each session unlinks itself at the end, which deletes its anonymous user. Its throwaway players'
+// rows stay, since no function a client may call deletes them: a first trust each (online_trust, 90
+// days), the race (matches) and, after a crash, the online names (online_profiles). So every end of
+// the check (a pass, a failed step, a crash, Ctrl-C) prints the SQL that removes exactly those rows
+// (player ids starting 'chk39') and its users (tagged user_metadata.online_check = '39'; nothing in the
+// schema ever reads user_metadata). What stays after that: its join attempts, an IP hash gone within
+// the hour (plan 39, 5.2b, AUD-140).
 //
 //   node tools/online_live_check.mjs --env <file>   a test project: <file> is {"url": "https://<ref>.supabase.co",
 //                                                   "key": "sb_publishable_..."}, kept outside the repo
@@ -45,7 +51,9 @@ export const STEPS = [
   ['09', 'the race starts: both devices get the same seed and GO time'],
   ['10', 'the join cap: the 6th wrong code is rate limited'],
   ['11', 'removing a device ends its session'],
-  ['12', 'teardown: every session unlinked, every refresh refused'],
+  ['12', 'friends and status: anon refused, a paired device beats and reads its friends, the beacon\'s POST is taken'],
+  ['13', 'invites: anon refused, a paired device lists its invites and joins its own topic, another player is refused there'],
+  ['14', 'teardown: every session unlinked, every refresh refused'],
 ];
 
 /** --help, --live or --env <file>; exactly one of the last two. */
@@ -135,8 +143,23 @@ export function reportLine([idStr, title], { ok, note = '' }) {
   return `${ok ? 'PASS' : 'FAIL'} ${idStr} ${title}${note ? `: ${note}` : ''}`;
 }
 
-/** The SQL that removes exactly this check's users, when a session could not unlink itself. */
-export const TEARDOWN_SQL = "delete from auth.users where raw_user_meta_data ->> 'online_check' = '39';";
+/** Every throwaway player id starts with this (22 characters in all, as a save code's), so TEARDOWN_SQL can find its rows. */
+export const CHECK_ID_PREFIX = 'chk39';
+
+// answer_guest refuses a decline within 2 s of the code's minting (5.2b, AUD-136); step 8 waits this
+// long after minting before it declines (plan 39, 5.3b).
+export const DECLINE_WAIT_MS = 2500;
+
+/**
+ * The SQL that removes exactly this check's users and its throwaway players' rows (AUD-140): the
+ * users first (their devices go with them), then the races, the first trusts and the online names.
+ */
+export const TEARDOWN_SQL = [
+  "delete from auth.users where raw_user_meta_data ->> 'online_check' = '39';",
+  `delete from public.matches where host_player like '${CHECK_ID_PREFIX}%' or guest_player like '${CHECK_ID_PREFIX}%';`,
+  `delete from public.online_trust where player_id like '${CHECK_ID_PREFIX}%';`,
+  `delete from public.online_profiles where player_id like '${CHECK_ID_PREFIX}%';`,
+].join('\n  ');
 
 // ---------------------------------------------------------------------------
 // The run (talks to the project; not unit tested).
@@ -207,7 +230,7 @@ async function refreshRefused(u) {
   return isRefusal(error);
 }
 
-const playerId = () => randomBytes(16).toString('base64url');
+const playerId = () => `${CHECK_ID_PREFIX}${randomBytes(13).toString('base64url')}`.slice(0, 22);
 const checkName = () => `zzchk${randomBytes(4).toString('hex').slice(0, 6)}`;
 
 async function run(t, print) {
@@ -312,9 +335,11 @@ async function run(t, print) {
 
   await step(8, async () => {
     const code2 = (await must(S.A2, 'create_room')).code;
+    const minted = Date.now();
     await join(S.A2, `room:${code2}`);
     const asked = await must(S.C, 'join_room', { p_code: code2 });
     const stale = await join(S.C, `room:${code2}`);
+    await sleep(Math.max(0, minted + DECLINE_WAIT_MS - Date.now()));
     const moved = await must(S.A2, 'answer_guest', { p_code: code2, p_accept: false });
     const told = await waitFor(S.C, (m) => m.event === 'answer' && m.payload?.accept === false);
     await S.A2.c.removeChannel(S.A2.channels.get(`room:${code2}`));
@@ -350,8 +375,47 @@ async function run(t, print) {
     return { ok: Boolean(after.error) && refused, note: `A2 ${after.error ? after.error.message : 'still answered'}, refresh ${refused ? 'refused' : 'still works'}` };
   });
 
-  let leftBehind = false;
+  // 3.5 (AUD-120): what PGlite cannot reach for the friend and status functions: PostgREST's schema
+  // cache and grants on a real project, and the beacon (onlineNet.beacon: pagehide's keepalive POST of
+  // online_beat(false) with the Bearer token) with the CORS preflight a browser sends before it.
   await step(12, async () => {
+    const anon = { name: 'anon', c: makeClient(t) };
+    const refused = (r) => Boolean(r.error) && (r.status === 401 || r.error.code === '42501');
+    const list = await rpc(anon, 'friend_list');
+    const beatAnon = await rpc(anon, 'online_beat', { p_here: true });
+    const beat = await must(S.C, 'online_beat', { p_here: true });
+    const states = await must(S.C, 'friend_statuses');
+    const endpoint = `${t.url}/rest/v1/rpc/online_beat`;
+    const pre = await fetch(endpoint, { method: 'OPTIONS', headers: { Origin: 'https://example.org', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'apikey,authorization,content-type' } });
+    const allowed = (pre.headers.get('access-control-allow-headers') ?? '').toLowerCase();
+    const preOk = pre.ok && Boolean(pre.headers.get('access-control-allow-origin')) && (allowed === '*' || ['apikey', 'authorization', 'content-type'].every((x) => allowed.includes(x)));
+    const post = await fetch(endpoint, { method: 'POST', keepalive: true, headers: { apikey: t.key, Authorization: `Bearer ${S.C.session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_here: false }) });
+    const body = await post.json().catch(() => null);
+    const ok = refused(list) && refused(beatAnon) && beat?.ok === true && Array.isArray(states?.friends) && states.friends.length === 0 && preOk && post.ok && body?.ok === true;
+    return { ok, note: `anon friend_list ${list.error ? `${list.status} ${list.error.code}` : 'answered'}, anon online_beat ${beatAnon.error ? `${beatAnon.status} ${beatAnon.error.code}` : 'answered'}; C beat ${beat?.ok}, friends ${Array.isArray(states?.friends) ? states.friends.length : 'none'}; preflight ${pre.status}${preOk ? '' : ` (allow-headers '${allowed}')`}, beacon ${post.status} ${body?.ok === true ? 'ok' : JSON.stringify(body)?.slice(0, 60)}` };
+  });
+
+  // 4.1: what PGlite cannot reach for invites: PostgREST's grants and schema cache for the five
+  // functions, and real Realtime's policy on a player's own topic (online_can: the handle invite_list
+  // gives, read by the player's paired devices only), where the server alone sends. From C (paired, in no
+  // room); B is another player's device.
+  await step(13, async () => {
+    const anon = { name: 'anon', c: makeClient(t) };
+    const refused = (r) => Boolean(r.error) && (r.status === 401 || r.error.code === '42501');
+    const listAnon = await rpc(anon, 'invite_list');
+    const sendAnon = await rpc(anon, 'send_invite', { p_peer: '0'.repeat(32) });
+    const list = await must(S.C, 'invite_list');
+    const stray = await must(S.C, 'send_invite', { p_peer: 'f'.repeat(32) });
+    const named = typeof list?.topic === 'string' && /^user:[0-9a-f]{32}$/.test(list.topic);
+    const own = named ? await join(S.C, list.topic) : { kind: 'no topic' };
+    const other = named ? await join(S.B, list.topic) : { kind: 'no topic' };
+    const ok = refused(listAnon) && refused(sendAnon) && Array.isArray(list?.incoming) && list.incoming.length === 0
+      && Array.isArray(list?.outgoing) && named && stray?.ok === false && stray.error === 'unavailable' && own.kind === 'joined' && other.kind === 'refused';
+    return { ok, note: `anon invite_list ${listAnon.error ? `${listAnon.status} ${listAnon.error.code}` : 'answered'}, anon send_invite ${sendAnon.error ? `${sendAnon.status} ${sendAnon.error.code}` : 'answered'}; C lists ${Array.isArray(list?.incoming) ? list.incoming.length : 'nothing'}, a stray handle ${stray?.error ?? JSON.stringify(stray)}; C on its own topic ${own.kind}, B on C's ${other.kind}` };
+  });
+
+  let leftBehind = false;
+  await step(14, async () => {
     await rpc(S.A, 'leave_room', { p_code: S.room });
     const notes = [];
     for (const u of users) {
@@ -366,7 +430,11 @@ async function run(t, print) {
     }
     return { ok: !leftBehind, note: leftBehind ? notes.join('; ') : 'left behind: none' };
   });
-  if (leftBehind) print(`Some users could not be removed. In the SQL editor of this project, run:\n  ${TEARDOWN_SQL}`);
+  print(
+    leftBehind
+      ? `Some users could not be removed. In the SQL editor of this project, run:\n  ${TEARDOWN_SQL}`
+      : `Its throwaway players' trust, race and name rows stay until removed. In the SQL editor of this project, run:\n  ${TEARDOWN_SQL}`,
+  );
   return results;
 }
 

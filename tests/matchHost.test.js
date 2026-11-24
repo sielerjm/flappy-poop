@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { El, installDom } from './support/dom.js';
-import { playScene, registry } from './support/scenes.js';
+import { absorb, playScene, registry } from './support/scenes.js';
 import { FIELD, TUNING as T } from '../src/config.js';
 
 const body = installDom();
@@ -66,7 +66,7 @@ const el = (id) => body.find(id);
  * level runs); the rest are methods. The pad's two (onPadSelect / onPadBack) come through padTop's
  * 'versus' top, the join screen or the result panel.
  */
-const HOST_METHODS = ['anyLive', 'bothInBreak', 'claimLevelFinish', 'halfScene', 'isPaused', 'isReady', 'onJoinInput', 'onLevelReached', 'onLevelTap', 'onRunEnded', 'onShopChanged', 'openPeek', 'setPaused', 'togglePause'];
+const HOST_METHODS = ['anyLive', 'bothInBreak', 'claimLevelFinish', 'halfScene', 'isPaused', 'isReady', 'onJoinInput', 'onLevelReached', 'onLevelTap', 'onRunEnded', 'onShopChanged', 'openPeek', 'pauseOverBreak', 'setPaused', 'togglePause'];
 const HOST_FIELDS = ['levelStage'];
 const HOST_PAD = ['onPadSelect', 'onPadBack'];
 
@@ -236,6 +236,23 @@ test('launch with 👥 on: the split screen where two halves fit (the Versus sce
   closeTournamentPanel();
 });
 
+// 5.1 (Appendix A: "🌐 only appears when two-player is on; local split-screen unchanged with 🌐 off"):
+// 🌐 lives in the tournament window, and with 👥 off Play never opens it, wide or phone: the tap
+// starts a one-player run, as it always has (no Versus, no window, nothing online).
+test('5.1 launch with 👥 off: a one-player run at every size, never the Versus scene nor the window that holds 🌐', () => {
+  for (const fits of [true, false]) {
+    const started = [];
+    const game = fakeGame({ versus: { leave() {} }, active: false });
+    const s = playScene({ launching: false, state: 'ready', versusOn: false, match: null, focus: { hide() {} }, scene: { start: (k, d) => started.push([k, d]) }, game, locale: 'en', isTestMode: () => false, getSaveState: () => ({ name: '' }), educationOn: false, bob: absorb(), poop: {}, tweens: absorb(), setReadyUiVisible() {}, setPoopTexture() {} });
+    s.splitFits = () => fits;
+    s.versusOffered = () => true;
+    s.launch();
+    assert.deepEqual(started, [], `${fits ? 'wide' : 'phone'}: no Versus`);
+    assert.equal(isTournamentPanelOpen(), false, `${fits ? 'wide' : 'phone'}: no window, so no 🌐`);
+    assert.equal(s.launching, true, `${fits ? 'wide' : 'phone'}: the run starts`);
+  }
+});
+
 // Plan 39, 1.7c (item 45's finding): Play steps the level on before it asks its host who was first, so
 // Versus took finalFirst from the stepped-on level and gave it to the first over the line before the
 // final one too. Play now names the line it crossed; Versus reads finalFirst from it.
@@ -262,4 +279,32 @@ test('split screen (1.7c): finalFirst goes to the first out of the final level, 
   halves[1].level = last;
   halves[1].onFinishCrossed();
   assert.deepEqual(match.slots.map((s) => [s.levelWins, Boolean(s.finalFirst)]), [[1, true], [1, false]], 'one finalFirst, the first out\'s');
+});
+
+test('item 70, N3: under an online race\'s pause overlay over a level break, the shop pill neither shows nor opens, and an open shop sells nothing', () => {
+  const calls = [];
+  const host = { pauseOverBreak: () => over, isReady: () => false, levelStage: 'break', isPaused: () => over, setPaused: () => {} };
+  let over = false;
+  const scene = { get: (k) => ({ OnlineRace: host })[k] ?? null };
+  const s = playScene({ match: { ...createMatch(1), hostKey: 'OnlineRace', status: 'playing' }, player: 1, scene, state: 'paused', levelBreak: true, shopOpen: false, superQHold: false });
+  assert.equal(s.shopButtonShown(), true, 'a level break with no pause: the 💰 pill');
+  over = true;
+  assert.equal(s.shopButtonShown(), false, 'the pause overlay up: no pill under it');
+  // The shop already open when the pause came: a tap on a row neither buys nor presses ✕.
+  const row = { id: 'fiber', x: 360, y: 700, width: 400, height: 90 };
+  s.shopOpen = true;
+  s.shopBoxes = { close: { x: 600, y: 400, width: 60, height: 60 }, rows: [row], panel: { x: 360, y: 700, width: 500, height: 600 } };
+  s.syncChrome = () => {};
+  s.chromeArgs = () => ({ overlay: null });
+  const doc = globalThis.document;
+  globalThis.document = { ...doc, addEventListener() {}, removeEventListener() {} }; // flap's audio unlock
+  s.shopBuy = (id) => calls.push(['buy', id]);
+  s.handleChrome = (input) => calls.push(['chrome', input]);
+  s.flap({ x: row.x, y: row.y });
+  assert.deepEqual(calls, [['chrome', 'tap']], 'the tap is the overlay\'s (Ready), not the row\'s');
+  over = false;
+  calls.length = 0;
+  s.flap({ x: row.x, y: row.y });
+  assert.deepEqual(calls, [['buy', 'fiber']], 'no pause: the row sells as before');
+  globalThis.document = doc;
 });

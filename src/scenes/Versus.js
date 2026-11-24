@@ -387,6 +387,11 @@ export class Versus extends Phaser.Scene {
     return this.pausedHalves.size > 0;
   }
 
+  /** The online race's pause overlay over a break hides the shop (OnlineRace.pauseOverBreak); split screen has none (item 70, N3). */
+  pauseOverBreak() {
+    return false;
+  }
+
   /** A half is still in its run: playing or respawning (not paused, not in a level break, not finished). */
   anyLive() {
     return this.halves().some((half) => half?.state === 'playing' || half?.state === 'respawn');
@@ -447,7 +452,7 @@ export class Versus extends Phaser.Scene {
       this.add.text(x - 80, cy + 90, `🏁 ×${slot.levelWins ?? 0}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
       this.add.text(x + 80, cy + 90, `💀 ×${slot.deaths ?? 0}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
     });
-    this.add.text(cx, cy + 160, t(this.locale, 'versusNotSaved'), { ...STYLE, fontSize: '26px', color: GOLD, strokeThickness: 6, wordWrap: { width: 560, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
+    this.add.text(cx, cy + 160, t(this.locale, 'versusBoardLine'), { ...STYLE, fontSize: '26px', color: GOLD, strokeThickness: 6, wordWrap: { width: 560, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
     // Continue on the left | Bracket on the right, on the game-over panel's row.
     this.buttons = overButtonsLayout(cx, cy, T, { share: true });
     this.rematchButton = createButton(this, this.buttons.share, t(this.locale, 'tournamentContinue'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
@@ -532,7 +537,9 @@ export class Versus extends Phaser.Scene {
     // flap mashed into it) must not hand the race on unseen.
     if (this.handedOff || this.match.status !== 'over' || !this.buttons || !canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs)) return;
     this.handedOff = true;
-    const detail = { then, outcome: this.outcome, slots: this.match.slots.map((s) => ({ score: s.score, deaths: s.deaths, levelWins: s.levelWins, finalFirst: s.finalFirst })) };
+    // level: each racer's 🏆 post (racePosts; T2-review). runs: each half's race summary (plan 39, 2.8; Play.endRun),
+    // beside the slots so the tournament never stores them; the race's posts queue them (Play.queueRacePosts).
+    const detail = { then, outcome: this.outcome, slots: this.match.slots.map((s) => ({ score: s.score, deaths: s.deaths, levelWins: s.levelWins, finalFirst: s.finalFirst, level: s.level })), runs: this.match.slots.map((s) => s.run ?? null) };
     if (this.game.events.listenerCount('tournament-race') > 0) this.game.events.emit('tournament-race', detail);
     else this.leave();
   }

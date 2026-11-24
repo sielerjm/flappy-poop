@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createOnlineNet, ONLINE_RPCS } from '../src/onlineNet.js';
+import { createRaceReporter } from '../src/onlineRace.js';
 import { presencePayload } from '../src/online.js';
 import { submitScore, fetchTop, fetchRank, mergePlayers, checkNameAvailable, fetchPlayerName, submitTournament, fetchTournamentBoard, submitDailyScore, fetchDailyBoard } from '../src/leaderboard.js';
 
@@ -195,7 +196,7 @@ function fakeClient(clock, script = {}) {
 }
 
 /** A net over a fake client on a virtual clock. */
-function setup({ script = {}, ...opts } = {}) {
+function setup({ script = {}, loadGate = null, ...opts } = {}) {
   const clock = fakeTimers();
   const created = [];
   let loads = 0;
@@ -211,6 +212,7 @@ function setup({ script = {}, ...opts } = {}) {
   const net = createOnlineNet({
     load: async () => {
       loads += 1;
+      if (loadGate) await loadGate; // 5.2b: a slow first load, still out when 🌐 closes
       return lib;
     },
     config: CONFIG,
@@ -272,13 +274,21 @@ test('the net knobs: timeouts, a refresh margin inside the token life, rising ba
   assert.equal(keys.filter((k) => k === LEADERBOARD.onlineSessionKey).length, 1, 'its own storage key');
 });
 
-test('no file in src/ names the Authorization header or a Bearer token: only supabase-js, inside onlineNet, sets it', () => {
+test('no file in src/ names the Authorization header or a Bearer token: only supabase-js, inside onlineNet, sets it, and onlineNet\'s beacon (3.3: pagehide\'s keepalive, online functions only)', () => {
   const walk = (d) => readdirSync(d).flatMap((n) => (statSync(join(d, n)).isDirectory() ? walk(join(d, n)) : [join(d, n)]));
   const code = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const TOKEN = /\bAuthorization\b|\bBearer\b/i;
   const hits = walk(join(ROOT, 'src'))
     .filter((f) => f.endsWith('.js'))
-    .filter((f) => /\bAuthorization\b|\bBearer\b/i.test(code(readFileSync(f, 'utf8'))));
-  assert.deepEqual(hits, []);
+    .filter((f) => TOKEN.test(code(readFileSync(f, 'utf8'))));
+  assert.deepEqual(hits.map((f) => f.slice(ROOT.length).replace(/^\/+/, '')), ['src/onlineNet.js']);
+  // In onlineNet, the one place is beacon(), which refuses anything but ONLINE_RPCS (its own test below).
+  const net = code(read('src/onlineNet.js'));
+  const start = net.indexOf('function beacon(');
+  const end = net.indexOf('\n  }\n', start);
+  assert.ok(start > 0 && end > start);
+  assert.equal(TOKEN.test(net.slice(0, start) + net.slice(end)), false, 'nowhere else in onlineNet');
+  assert.match(net.slice(start, end), /ONLINE_RPCS\.includes\(fn\)/);
 });
 
 // --- sign-in -------------------------------------------------------------------------------------
@@ -360,6 +370,40 @@ test('a stored session the server refuses (a removed device) is dropped on this 
   assert.deepEqual(s.client().calls.find((c) => c[0] === 'signOut'), ['signOut', { scope: 'local' }], 'local only: nothing else is signed out');
 });
 
+test('5.2b AUD-146: signIn({ create: false }) reuses a stored session only: a dead one is dropped and no new anonymous user is made', async () => {
+  const s = setup({ script: { stored: {}, getUser: () => ({ data: { user: null }, error: { status: 403, code: 'user_not_found', message: 'User not found' } }) } });
+  assert.deepEqual(await s.net.signIn({ create: false }), { ok: false, error: 'signed out' });
+  assert.ok(s.client().names().includes('signOut'), 'the dead session is dropped on this device');
+  assert.ok(!s.client().names().includes('signInAnonymously'), 'no new anonymous user only to sign it out');
+  assert.ok(!s.client().names().includes('startAutoRefresh'));
+  const t = setup({ script: { stored: {} } });
+  assert.deepEqual(await t.net.signIn({ create: false }), { ok: true, uid: UID }, 'a live stored session is used');
+  const u = setup();
+  assert.deepEqual(await u.net.signIn({ create: false }), { ok: false, error: 'signed out' }, 'none stored: none made');
+  assert.ok(!u.client().names().includes('signInAnonymously'));
+});
+
+test('5.2b AUD-145: 🌐 closed while the first load and sign-in are out: their late answers start no token ticker, socket or clock; the next entry starts them', async () => {
+  let open;
+  const s = setup({ loadGate: new Promise((r) => (open = r)) });
+  const release = s.net.lease(); // startOnline: the window's lease, warm() and enterOnline's signIn
+  const warming = s.net.warm();
+  const signing = s.net.signIn();
+  release(); // ✕ or 🌐 off during Connecting: stopOnline closes the transport
+  open();
+  assert.equal((await signing).ok, true, 'the sign-in itself lands');
+  await warming;
+  await flush();
+  s.net.pump();
+  await flush();
+  const names = s.client().names();
+  assert.deepEqual(names.filter((n) => n === 'startAutoRefresh' || n === 'connect'), [], `nothing on after close (${names.join(' ')})`);
+  assert.ok(!s.client().calls.some((c) => c[0] === 'rpc' && c[1] === 'server_now'), 'no clock round trip outside online mode');
+  await s.net.warm();
+  assert.ok(s.client().names().includes('startAutoRefresh') && s.client().names().includes('connect'), 'the next 🌐 entry starts both');
+  assert.equal(s.client().names().filter((n) => n === 'signInAnonymously').length, 1, 'one anonymous user: the next entry reuses its session');
+});
+
 test('offline while checking a stored session: the session is kept, nothing is replaced', async () => {
   const s = setup({ script: { stored: {}, getUser: () => ({ data: { user: null }, error: { name: 'AuthRetryableFetchError', status: 0, message: 'fetch failed' } }) } });
   assert.deepEqual(await s.net.signIn(), { ok: true, uid: UID });
@@ -415,6 +459,26 @@ test("rpc results: the data; the server's plain message; signed out, refused, of
   const slow = s.net.rpc('server_now');
   await s.clock.advance(N.rpcTimeoutMs);
   assert.deepEqual(await slow, { ok: false, error: 'offline' });
+});
+
+test('2.7, AUD-111: a deadlock in finish_match (SQLSTATE 40P01; PostgREST answers 40* with HTTP 500) reaches the race reporter as offline, so it sends the report again', async () => {
+  let tries = 0;
+  const s = setup({ script: { rpc: (fn) => (fn === 'finish_match' && ++tries === 1 ? { data: null, error: { code: '40P01', message: 'deadlock detected' }, status: 500 } : { data: { status: 'agreed', counted: true }, error: null, status: 200 }) } });
+  await s.net.signIn();
+  assert.deepEqual(await s.net.rpc('finish_match', { p_code: CODE, p_round: 1, p_result: {} }), { ok: false, error: 'offline', status: 500 });
+  let at = 0;
+  const r = createRaceReporter({ rpc: (fn, args) => s.net.rpc(fn, args), code: CODE, round: 1, result: {}, now: () => at });
+  const step = async (ms) => {
+    at += ms;
+    r.tick();
+    for (let i = 0; i < 5; i += 1) await new Promise((res) => setImmediate(res));
+  };
+  tries = 0;
+  await step(0);
+  assert.equal(r.state().phase, 'saving', 'the deadlock is a lost answer');
+  await step(T.online.report.retryMs[0]);
+  assert.deepEqual(r.state(), { phase: 'done', status: 'agreed', counted: true, error: null });
+  assert.equal(tries, 2);
 });
 
 test("the server's plain messages pass through as they are (the lobby and the sign-in screen say them)", async () => {
@@ -966,4 +1030,163 @@ test("signOut (Clear, Load another code): this device's session is forgotten her
   assert.equal(ch.removed, true);
   assert.deepEqual(s.client().calls.find((c) => c[0] === 'signOut'), ['signOut', { scope: 'local' }]);
   assert.deepEqual(await s.net.rpc('room_state', { p_code: CODE }), { ok: false, error: 'signed out' });
+});
+
+test('3.3 beacon: an online function as a keepalive POST with the session token (pagehide\'s online_beat(false)); nothing before a sign-in or for any other function', async () => {
+  const sent = [];
+  const s = setup({ fetch: (url, init) => (sent.push({ url, init }), Promise.resolve({ ok: true })) });
+  assert.equal(s.net.beacon('online_beat', { p_here: false }), false, 'signed out: nothing to send it with');
+  assert.equal((await s.net.signIn()).ok, true);
+  assert.equal(s.net.beacon('submit_score', {}), false, 'only the online functions carry the token');
+  assert.equal(s.net.beacon('online_beat', { p_here: false }), true);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, 'https://abcdefghijklmnop.supabase.co/rest/v1/rpc/online_beat');
+  assert.equal(sent[0].init.method, 'POST');
+  assert.equal(sent[0].init.keepalive, true);
+  assert.equal(sent[0].init.headers.Authorization, 'Bearer tok-1');
+  assert.equal(sent[0].init.headers.apikey, CONFIG.publishableKey);
+  assert.deepEqual(JSON.parse(sent[0].init.body), { p_here: false });
+});
+
+test('T3-review AUD-112: the beacon carries the token the client refreshed to, and sends nothing on an expired one', async () => {
+  const lib = realSupabase();
+  const calls = [];
+  let n = 0;
+  const user = { id: UID, aud: 'authenticated', role: 'authenticated', is_anonymous: true, app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
+  const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  const f = async (input, init = {}) => {
+    const url = String(typeof input === 'string' ? input : input.url);
+    calls.push({ url, headers: Object.fromEntries(new Headers(init.headers ?? input.headers)), keepalive: init.keepalive });
+    if (url.endsWith('/auth/v1/signup') || url.includes('/auth/v1/token')) {
+      n += 1;
+      const life = n === 1 ? 10 : 3600; // the first token ends inside supabase-js's margin: its next read refreshes
+      const exp = Math.floor(Date.now() / 1000) + life;
+      return json(200, { access_token: `${jwt(UID, exp)}.${n}`, token_type: 'bearer', expires_in: life, expires_at: exp, refresh_token: `refresh-${n}`, user });
+    }
+    if (url.endsWith('/auth/v1/user')) return json(200, user);
+    if (url.includes('/rest/v1/')) return new Response(null, { status: 204 });
+    return json(404, {});
+  };
+  let clock = Date.now();
+  const net = createOnlineNet({ load: async () => lib, config: CONFIG, storage: memStorage(), fetch: f, netsim: null, now: () => clock });
+  assert.equal((await net.signIn()).ok, true);
+  assert.equal((await net.rpc('online_beat', { p_here: true })).ok, true);
+  assert.ok(calls.some((c) => c.url.includes('/auth/v1/token')), 'the client refreshed its token');
+  const rpcTok = calls.filter((c) => c.url.endsWith('/rest/v1/rpc/online_beat') && !c.keepalive).at(-1).headers.authorization;
+  assert.equal(net.beacon('online_beat', { p_here: false }), true);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(calls.filter((c) => c.keepalive).at(-1).headers.authorization, rpcTok, 'the token the client now uses, not the one from the sign-in');
+  // Two hours on with no refresh: the held token has ended, so the server would answer 401. Send nothing.
+  clock += 2 * 3600 * 1000;
+  const before = calls.length;
+  assert.equal(net.beacon('online_beat', { p_here: false }), false, 'an expired token is not sent');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(calls.length, before);
+  net.close();
+});
+
+// --- 4.2: the player's own topic (invites) ----------------------------------------------------------
+
+const TOPIC = `user:${'5e'.repeat(16)}`;
+const INV = (over = {}) => ({ invite: '00000001-0000-4000-8000-000000000000', peer: 'ab'.repeat(16), name: 'SirFlushALot', sent_at: 1_763_550_000_000, expires_at: 1_763_550_120_000, ...over });
+
+test('4.2 openTopic: the topic invite_list names, private, no echo, no ack, no presence (writes are refused there); the token refreshed first; joined says so', async () => {
+  const s = setup();
+  await s.net.signIn();
+  const p = s.net.openTopic(TOPIC);
+  await flush();
+  const ch = s.client().channels.at(-1);
+  assert.equal(ch.topic, TOPIC);
+  assert.deepEqual(ch.options, { config: { private: true, broadcast: { self: false, ack: false } } });
+  assert.deepEqual(await p, { ok: true });
+  assert.equal(s.net.topicState(), 'joining');
+  ch.status('SUBSCRIBED');
+  assert.equal(s.net.topicState(), 'joined');
+  assert.deepEqual(s.net.take(), [{ kind: 'user', event: 'joined' }]);
+  assert.deepEqual(ch.tracks, [], 'nothing tracked');
+  const names = s.client().names();
+  assert.ok(names.lastIndexOf('setAuth') >= 0 && names.lastIndexOf('setAuth') < names.lastIndexOf('channel'), 'Realtime has the token before the join');
+  assert.deepEqual(await s.net.openTopic(TOPIC), { ok: true });
+  assert.equal(s.client().channels.length, 1, 'the same topic again: one channel');
+});
+
+test("4.2 the topic's events: invite and invite_update parsed and queued as { kind: 'user' }; junk and other names dropped; a rejoin says joined again (the panel reads invite_list)", async () => {
+  const s = setup();
+  await s.net.signIn();
+  s.net.openTopic(TOPIC);
+  await flush();
+  const ch = s.client().channels.at(-1);
+  ch.status('SUBSCRIBED');
+  s.net.take();
+  ch.broadcast('invite', INV());
+  ch.broadcast('invite', INV({ peer: 'nope' }));
+  ch.broadcast('invite_update', { invite: INV().invite, status: 'declined' });
+  ch.broadcast('invite_update', { invite: INV().invite, status: 'expired' });
+  ch.broadcast('status', { code: CODE });
+  assert.deepEqual(s.net.take(), [
+    { kind: 'user', event: 'invite', invite: { invite: INV().invite, peer: INV().peer, name: 'SirFlushALot', sentAt: INV().sent_at, expiresAt: INV().expires_at } },
+    { kind: 'user', event: 'invite_update', update: { invite: INV().invite, status: 'declined' } },
+  ]);
+  ch.status('SUBSCRIBED');
+  assert.deepEqual(s.net.take(), [{ kind: 'user', event: 'joined' }]);
+});
+
+test('4.2 a bad topic, or one not from invite_list (never built from the save), opens nothing; signed out opens nothing', async () => {
+  const s = setup();
+  await s.net.signIn();
+  for (const bad of [null, 'user:abc', `room:${CODE}`, `user:${'5E'.repeat(16)}`, `${TOPIC}x`]) assert.deepEqual(await s.net.openTopic(bad), { ok: false, error: 'bad topic' }, String(bad));
+  assert.equal(s.client().channels.length, 0);
+  const out = setup();
+  assert.equal((await out.net.openTopic(TOPIC)).ok, false);
+  assert.equal(out.net.topicState(), 'none');
+});
+
+test('4.2 refused (Unauthorized: a device that dropped to pending) or closed: removed, and closed said once; closeTopic and close() remove it; a room channel is untouched', async () => {
+  const s = setup();
+  const { ch: roomCh } = await joined(s);
+  s.net.take();
+  s.net.openTopic(TOPIC);
+  await flush();
+  const ch = s.client().channels.at(-1);
+  ch.status('CHANNEL_ERROR', 'Unauthorized: You do not have permissions to read from this Channel topic');
+  assert.equal(ch.removed, true);
+  assert.equal(s.net.topicState(), 'none');
+  assert.deepEqual(s.net.take(), [{ kind: 'user', event: 'closed' }]);
+  assert.notEqual(roomCh.removed, true);
+  s.net.openTopic(TOPIC);
+  await flush();
+  const ch2 = s.client().channels.at(-1);
+  ch2.status('SUBSCRIBED');
+  s.net.closeTopic();
+  assert.equal(ch2.removed, true);
+  assert.notEqual(roomCh.removed, true, 'closeTopic leaves the room alone');
+  s.net.openTopic(TOPIC);
+  await flush();
+  const ch3 = s.client().channels.at(-1);
+  s.net.close();
+  assert.equal(ch3.removed, true, 'leaving 🌐 closes it');
+  assert.equal(s.net.topicState(), 'none');
+});
+
+test('4.2 closeTopic while its join waits for a refresh: nothing opens', async () => {
+  let release;
+  const s = setup({ script: { stored: { life: Math.floor(N.refreshMarginMs / 1000) - 5 }, refresh: () => new Promise((r) => (release = () => r({ data: { session: null }, error: null }))) } });
+  await s.net.signIn();
+  const p = s.net.openTopic(TOPIC);
+  await flush();
+  s.net.closeTopic();
+  release?.();
+  await p;
+  assert.equal(s.client().channels.filter((c) => c.topic === TOPIC).length, 0);
+});
+
+test('T4-review AUD-127: lease() → release(): the transport closes only if no later lease was taken (a 🌐 window opened while an earlier one, or a race, still waited for leave_room)', async () => {
+  const s = setup();
+  const { ch } = await joined(s);
+  const first = s.net.lease();
+  const second = s.net.lease();
+  first();
+  assert.notEqual(ch.removed, true, 'a later lease keeps it open');
+  second();
+  assert.equal(ch.removed, true, 'the latest one closes it');
 });

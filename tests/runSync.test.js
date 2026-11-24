@@ -87,7 +87,7 @@ test('waitsForRun matches a 🏆 post on 🚽, score and level and a 🌞 post o
 
 test('a post waits only while its player\'s last run send had an answer', () => {
   const body = PLAY.slice(PLAY.indexOf('  syncLeaderboard() {'), PLAY.indexOf('  fetchBoardBests(id) {'));
-  assert.equal((body.match(/!this\.runsUnsent\?\.has\(/g) ?? []).length, 2, 'the 🏆 and the 🌞 waits both check it');
+  assert.equal((body.match(/!this\.runsUnsent\?\.has\(/g) ?? []).length, 3, 'the 🏆, the 🌞 and the race post\'s waits (plan 39, 2.8; postRace) all check it');
 });
 
 test('syncLeaderboard sends the runs before the Daily posts in both paths, and before the score posts', () => {

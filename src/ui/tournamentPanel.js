@@ -13,10 +13,10 @@
 // The tournament itself lives in the game registry ('tournament': { tour, matchId, posted,
 // tournamentId }) so it survives the Versus restarts between races; each race's result comes
 // back on game.events ('tournament-race', from Versus.continueTournament: then 'next' starts the
-// next race at once, 'bracket' shows the bracket). When the Final is recorded, a tournament of 3+
-// players with any linked one (postable) is queued once for the 🏅 board (Play.tournamentQueue →
-// submit_tournament) and the podium says how that went; guests are never sent, two-player
-// tournaments stay on this device. Abandon saves nothing and goes back to the lobby.
+// next race at once, 'bracket' shows the bracket). When the Final is recorded, a tournament with any
+// linked player (postable; two players since plan 39's 2.5: gold and silver) is queued once for the
+// 🏅 board (Play.tournamentQueue → submit_tournament) and the podium says how that went; guests are
+// never sent. Abandon saves nothing and goes back to the lobby.
 // A controller walks the panel's buttons (tournamentPadAction, from Play.onPadAction): the d-pad
 // moves a gold ring (focusNearest on the buttons' rects, else list order), A presses, B is Esc.
 // 🌐 online (plan 39, 1.6c; Previews A and B, items 36 and 37): over a running Versus the lobby has
@@ -26,20 +26,27 @@
 // onlineAccountViews.js); the online home and the room are src/onlineLobby.js, drawn by
 // onlineLobbyViews.js and polled on a timer while 🌐 is on. ✕ inside an online view goes back to the
 // online home, a second ✕ leaves; leaving 🌐 (off, ✕, any close) leaves the room and ends online play.
+// 3.3: once linked, this device's status beat runs (Play.onlineStatusBeat) until online play ends,
+// kept only through the race's hand-off; the online home's 🤝 Friends opens the Friends screen
+// (onlineFriendsViews.js), its badge and dots read on the poll timer.
 
 import { FIELD, LEADERBOARD, TUNING as T } from '../config.js';
 import { browserStorage } from '../store.js';
 import { t } from '../i18n.js';
 import { createRng, fieldWidth, focusNearest, focusStep } from '../logic.js';
 import { createOnlineLobby } from '../onlineLobby.js';
-import { ONLINE_HOST_KEY, raceStartPlan } from '../onlineRace.js';
+import { parseCode } from '../online.js';
+import { ONLINE_HOST_KEY, raceStartPlan, resumePlan } from '../onlineRace.js';
 import { createMatch } from '../versus.js';
-import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost, tournamentPayload, postable, seedSlots, canReseed, reseed, reshuffle } from '../tournament.js';
+import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost, tournamentPayload, postable, racePosts, seedSlots, canReseed, reseed, reshuffle } from '../tournament.js';
 import { ensureId, newId } from '../save.js';
 import { rollGuestName } from '../tournamentNames.js';
 import { panelFrameCss } from './panelFrame.js';
 import { accountBody, accountCss, accountNotes, createAccountState, devicesButton, enterOnline, h as viewH, pairCodeLeft } from './onlineAccountViews.js';
 import { lobbyBody, lobbyCss, lobbyMessage, lobbyTick, netSwitch } from './onlineLobbyViews.js';
+import { friendsBody, friendsButton, friendsCss, inviteTick, openFriends, pollFriends, refreshBadge } from './onlineFriendsViews.js';
+import { createOnlineFriends } from '../onlineFriends.js';
+import { createInvites } from '../onlineInvites.js';
 
 const PANEL_ID = 'tournament-panel';
 const REGISTRY_KEY = 'tournament';
@@ -91,7 +98,7 @@ ${panelFrameCss(PANEL_ID, { width: 560 })}
 #${PANEL_ID} .help p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; }
 #${PANEL_ID} .status { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; color: #c9b8dc; }
 #${PANEL_ID} .status.error { color: #ff8da8; }
-${accountCss(PANEL_ID)}${lobbyCss(PANEL_ID)}`;
+${accountCss(PANEL_ID)}${lobbyCss(PANEL_ID)}${friendsCss(PANEL_ID)}`;
 
 /** How often the 🌐 lobby reads what the transport received (a DOM panel, not a frame). */
 const ONLINE_POLL_MS = 200;
@@ -572,6 +579,7 @@ function onRace(detail) {
   const play = game.scene.getScene('Play');
   let next = state;
   if (state.matchId) {
+    queueRacePosts(state, detail.slots, play, detail.runs);
     recordResult(state.tour, state.matchId, detail.outcome.winner, { by: detail.outcome.by, slots: detail.slots });
     next = { ...state, matchId: null };
     if (placings(state.tour) && !state.posted) next = { ...next, ...queueFinished(state.tour, play) };
@@ -585,11 +593,19 @@ function onRace(detail) {
 }
 
 /**
- * The Final is in: queue the tournament for the 🏅 board once (postable: 3+ players, someone
- * linked) and start a sync; the podium's line follows it. { posted: 'queued' | 'none' | 'two', tournamentId }.
+ * Plan 39, 2.5 (item 42(c)): each racer of this race with a player id posts their race score to 🏆
+ * (Play.racePostQueue → submit_score at the next sync, the board's own rules), with their half's run
+ * queued first (2.8, Play.queueRacePosts); guests post nothing.
+ */
+function queueRacePosts(state, slots, play, runs = null) {
+  play?.queueRacePosts?.(racePosts(state.tour, state.matchId, slots, runs));
+}
+
+/**
+ * The Final is in: queue the tournament for the 🏅 board once (postable: 2+ players, someone
+ * linked) and start a sync; the podium's line follows it. { posted: 'queued' | 'none', tournamentId }.
  */
 function queueFinished(tour, play) {
-  if (tour.players.length < T.tournament.minPostPlayers) return { posted: 'two' };
   const host = postable(tour) ? hostSave(play) : null;
   if (!host?.id || !play?.tournamentQueue) return { posted: 'none' };
   const tournamentId = newId();
@@ -605,11 +621,10 @@ function queueFinished(tour, play) {
   return { posted: 'queued', tournamentId };
 }
 
-/** The podium's line about the 🏅 board: saving, saved, saved for later, refused, nothing to save, or a two-player tournament. */
+/** The podium's line about the 🏅 board: saving, saved, saved for later, refused, or nothing to save. */
 function savedText(game) {
   const state = tournamentState(game);
   if (!state?.posted) return '';
-  if (state.posted === 'two') return tr('tournamentSaveTwo');
   if (state.posted === 'none') return tr('tournamentSaveNone');
   const out = game.scene.getScene('Play')?.tournamentQueue?.outcome(state.tournamentId);
   if (out === 'sent') return tr('tournamentSaveSent');
@@ -655,9 +670,11 @@ function showHelp() {
   view = 'help';
   pasting = -1;
   setStatus('');
+  // 🌐 on (plan 39, Michael 24 Nov): how to invite and join first, then a line on tournaments; 🌐 off: the tournament's own.
+  const [titleKey, bodyKey] = online?.on ? ['onlineHowTitle', 'onlineHowBody'] : ['tournamentHowTitle', 'tournamentHowBody']; // named whole: tests/orphans.test.js reads them
   const ok = h('button', { type: 'button', id: 'tour-help-ok', 'data-primary': '' }, tr('tournamentGotIt'));
   ok.addEventListener('click', () => leaveHelp());
-  show(tr('tournamentHowTitle'), { close: true }, h('div', { class: 'help', id: 'tour-help' }, ...tr('tournamentHowBody').split('\n').map((line) => h('p', {}, line))), h('div', { class: 'actions' }, ok));
+  show(tr(titleKey), { close: true }, h('div', { class: 'help', id: 'tour-help' }, ...tr(bodyKey).split('\n').map((line) => h('p', {}, line))), h('div', { class: 'actions' }, ok));
 }
 
 function leaveHelp() {
@@ -732,15 +749,38 @@ export function tournamentPadAction(action) {
 // ---------------------------------------------------------------------------
 // 🌐 online (plan 39, 1.6c)
 
+/** Which online screen shows: the account view and the lobby's screen (3.6, AUD-115). */
+const screenKey = (o) => `${o.st.view}|${o.lobby?.state?.screen ?? ''}`;
+
 /** What the sign-in screens need from the panel (onlineAccountViews.js's `ui`). */
 function accountUi() {
   return {
     tr,
     rerender: () => renderLobby(),
+    // 3.6 (T3-review AUD-115): taken as a call goes out; true while the same 🌐 session is on and the
+    // same screen shows, so a late answer never draws over a screen the player has moved to.
+    mark: () => {
+      const o = online;
+      const at = o ? screenKey(o) : null;
+      return () => Boolean(o) && online === o && o.on && !view && screenKey(o) === at;
+    },
     setStatus,
     now: () => Date.now(),
     confirmMs: T.saveClearConfirmMs,
     onLinked: (r) => startLobby(r),
+    onPaired: () => {
+      if (!online?.on) return;
+      statusBeat()?.start(); // 3.3: a device just paired starts beating (a waiting one's beat stops itself); never with 🌐 off (3.6)
+      loadInvites(online); // 4.2: and hears its invites from now on
+    },
+    // 4.2: invites, read and shown only in online mode (the beat's rule).
+    invites: online?.invites ?? null,
+    serverNow: () => online?.net?.serverNow?.() ?? Date.now(),
+    refreshInvites: () => (online ? loadInvites(online) : null),
+    canInvite: () => online?.lobby?.canInvite?.() ?? false,
+    invite: (x) => sendInvite(online, x),
+    acceptInvite: (inv) => acceptInvite(online, inv),
+    declineInvite: (inv) => declineInvite(online, inv),
   };
 }
 
@@ -751,8 +791,9 @@ function lobbyUi() {
     ...aui,
     me: online?.st.name ?? '',
     project: ctx.play?.onlineProjectName?.() ?? null, // a dev host's 'live' / 'test' for the no-room hint (item 43)
-    homeExtras: () => ({ notes: accountNotes(aui, online.st), devices: devicesButton(aui, online.st, online.account) }),
+    homeExtras: () => ({ notes: accountNotes(aui, online.st), devices: devicesButton(aui, online.st, online.account), friends: online.friends ? friendsButton(aui, online.st, online.friends) : null }),
     share: (text, code) => shareCode(text, code),
+    resend: (inv) => sendInvite(online, inv, { resend: true }),
   };
 }
 
@@ -762,19 +803,65 @@ function lobbyUi() {
  */
 function shareCode(text, code) {
   const nav = globalThis.navigator;
+  const value = text || code;
+  const done = () => online && setStatus(tr(text ? 'onlineLinkCopied' : 'onlineCopied'), 'ok');
+  // Michael, 22 Nov: with no share sheet and no clipboard API (a page that is not a secure context,
+  // such as a phone on the Mac's LAN address), copy the old way, inside the tap; with no way to copy
+  // at all, show the text itself so it can be copied by hand. Never a silent button.
+  const fallback = () => {
+    if (copyInTap(value)) done();
+    else if (online) setStatus(value, '');
+  };
   if (text && typeof nav?.share === 'function') {
-    Promise.resolve()
-      .then(() => nav.share({ text }))
-      .catch(() => {});
+    let shared;
+    try {
+      shared = nav.share({ text }); // inside the tap (rule 9): nothing awaited before it
+    } catch {
+      fallback();
+      return;
+    }
+    Promise.resolve(shared).catch((e) => {
+      if (e?.name !== 'AbortError') fallback(); // the player closing the sheet is not a failure
+    });
     return;
   }
+  // 4.3: Share with no share sheet copies the share text, whose link joins the room; Copy the code alone.
   const clip = nav?.clipboard;
   if (clip && typeof clip.writeText === 'function') {
-    clip.writeText(code).then(
-      () => online && setStatus(tr('onlineCopied'), 'ok'),
-      () => {},
-    );
+    let wrote;
+    try {
+      wrote = clip.writeText(value); // inside the tap too: Safari refuses a later write
+    } catch {
+      fallback();
+      return;
+    }
+    Promise.resolve(wrote).then(done, fallback);
+    return;
   }
+  fallback();
+}
+
+/** The pre-clipboard-API copy: a hidden textarea selected and execCommand('copy'), inside the tap. True when it copied. */
+function copyInTap(value) {
+  const doc = globalThis.document;
+  if (typeof doc?.execCommand !== 'function' || typeof doc.createElement !== 'function' || !doc.body) return false;
+  const box = doc.createElement('textarea');
+  box.value = value;
+  box.setAttribute('readonly', '');
+  box.setAttribute('aria-hidden', 'true');
+  box.setAttribute('style', 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;');
+  doc.body.appendChild(box);
+  let ok = false;
+  try {
+    box.focus?.();
+    box.select?.();
+    box.setSelectionRange?.(0, value.length); // iOS Safari selects only through this
+    ok = doc.execCommand('copy') === true;
+  } catch {
+    ok = false;
+  }
+  box.remove?.();
+  return ok;
 }
 
 function renderOnline() {
@@ -782,7 +869,12 @@ function renderOnline() {
   const title = `${tr('onlineTitle')}${ctx.play?.onlineTestProject?.() ? ' 🧪' : ''}`; // 🧪: a dev host on the test project (item 38)
   const sw = netSwitch({ tr }, online, toggleOnline);
   if (st.view === 'home' && online.lobby) {
-    show(title, { close: true }, sw, ...lobbyBody(lobbyUi(), online.lobby));
+    // ? only on the online home (no room yet): the help view holds the poll's re-render, so a room's knock or Ready must not wait behind it.
+    show(title, { close: true, help: online.lobby.state?.screen === 'home' }, sw, ...lobbyBody(lobbyUi(), online.lobby));
+    return;
+  }
+  if (st.view === 'friends' && online.friends) {
+    show(title, { close: true }, sw, ...friendsBody(accountUi(), st, online.friends, () => backHome(online)));
     return;
   }
   if (st.view === 'failed' || st.view === 'left' || (st.view === 'home' && !online.lobby)) {
@@ -810,6 +902,12 @@ function startOnline() {
     setStatus(tr('onlineErrGeneric'), 'error');
     return;
   }
+  const net = o.net;
+  // T4-review AUD-127: this window's hold on the shared transport; its release closes it only if no later
+  // window (or race) took one meanwhile (stopOnline's close waits for leave_room's answer).
+  o.release = net.lease?.() ?? null;
+  o.friends = createOnlineFriends({ rpc: (fn, args) => net.rpc(fn, args), max: T.online.status.opponents });
+  o.invites = createInvites({ rpc: (fn, args) => net.rpc(fn, args), now: () => net.serverNow() });
   o.net.warm?.().catch?.(() => {});
   enterOnline(accountUi(), o.st, o.account).catch(() => {
     if (online !== o) return;
@@ -822,16 +920,221 @@ function startOnline() {
 /** Linked: the lobby for this player, polled while 🌐 is on. */
 function startLobby(r) {
   const o = online;
-  if (!o || !o.net) return;
+  // T3-review AUD-113: a link that answers after 🌐 was switched off starts nothing (no beat, poll or race).
+  if (!o || !o.net || !o.on) return;
   // Both ready: the host starts the race (set_room_status), and a room in 'playing' hands off (1.7a).
-  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start(), memory: raceMemory() });
+  // 2.3, D4: a race this page left by a reload (its resume record) is rejoined first. 2.3b: a relaunch's
+  // too (the record is in localStorage): one that is this page's or free is claimed and rejoined; one
+  // another page is beating is that page's race, neither rejoined nor left (item 46's leave on entry
+  // included: the lobby gets it as `resume`, and raceMemory hides its code), and looked at once more.
+  const store = o.lobby ? null : raceResume();
+  let record = store?.get?.() ?? null;
+  const live = Boolean(record) && store.owner?.() === 'live';
+  if (record && !live) record = store.claim?.() ?? record;
+  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start(), memory: raceMemory(), resume: record, onUser: (item) => onUserItem(o, item) });
   if (o.poll === null) o.poll = ctx.timers.setInterval(() => pollOnline(o), ONLINE_POLL_MS);
+  // 3.3: in online mode from here: this device's status beat (item 58), and the Friends button's badge.
+  // T3-review AUD-114: not while another page races (one device, one beat row): that page beats, and
+  // this page's ✕ or pagehide would delete its row. lookAgain starts it once the race is claimed here.
+  if (!live) statusBeat()?.start();
+  updateBadge(o);
+  // 4.2: the missed-broadcast read on entering online mode, then the player's topic. T4-review AUD-131:
+  // not while a reload rejoins its race (no invites in a race); rejoinRace reads them if it is over.
+  if (!record || live) loadInvites(o);
+  if (live) {
+    o.lobby.notice?.('onlineRaceElsewhere');
+    o.look = ctx.timers.setTimeout?.(() => lookAgain(o), T.online.resume.staleMs) ?? null;
+  } else if (record) rejoinRace(o, record);
+  else if (o.join) joinFromLink(o);
   renderLobby();
+  if (live) {
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+  }
+}
+
+/**
+ * 4.3: the share link's code (openTournamentPanel's `join`), kept through the sign-in, the name and a
+ * Retry, joined once this device is linked; a room gone reads "This invite has expired".
+ */
+function joinFromLink(o) {
+  const code = o.join;
+  o.join = null;
+  o.lobby.joinCode(code, { link: true }).then(() => {
+    if (online !== o || !o.lobby || o.st.view !== 'home' || view) return;
+    renderLobby();
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+  });
+}
+
+/**
+ * 2.3b: once, online.resume.staleMs after the window found another page racing: that page may just
+ * have died (its beat stopped), so the race is free to claim and rejoin from here, unless this window
+ * has moved on to a room of its own.
+ */
+function lookAgain(o) {
+  o.look = null;
+  if (online !== o || !o.lobby) return;
+  const phase = o.lobby.state.room.phase;
+  if (phase !== 'idle' && phase !== 'closed') return;
+  const record = raceResume()?.claim?.() ?? null; // null while the other page still beats, or with no record
+  if (!record) {
+    o.join = null; // T4-review AUD-128: a share link opened meanwhile is not kept for a later Retry
+    return;
+  }
+  statusBeat()?.start(); // AUD-114: this page races now
+  rejoinRace(o, record);
+  if (o.st.view !== 'home' || view) return;
+  renderLobby();
+  const m = lobbyMessage(lobbyUi(), o.lobby);
+  setStatus(m?.text ?? '', m?.kind ?? '');
+}
+
+/**
+ * 2.3, D4: the race a reload left. The lobby asks room_state and opens the channel as this seat;
+ * the poll then hands it to the race, rewound (handOffRace). A race that is over is forgotten and
+ * said so on the online home; a failure to reach the server keeps the record for the next entry.
+ */
+function rejoinRace(o, record) {
+  o.resume = record;
+  o.lobby.rejoin(record).then((res) => {
+    if (online !== o || res?.ok) return;
+    o.resume = null; // over: the lobby's memory clear also cleared the record (raceMemory)
+    if (!o.lobby || res?.error === 'you left') return;
+    loadInvites(o); // T4-review AUD-131: on the online home now, so its invites
+    // T4-review AUD-128: a share link opened on this page is joined once its stale race is found over;
+    // a race that could not be reached may still run, so the link is dropped (never kept for a Retry).
+    if (res?.over && o.join) {
+      joinFromLink(o);
+      return;
+    }
+    o.join = null;
+    if (o.st.view !== 'home') return;
+    renderLobby();
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+  });
+}
+
+/** The resume record's store (2.3; 2.3b: Play.raceResumeStore, localStorage seen from this page's tab id, per project), or null. */
+function raceResume() {
+  return ctx?.play?.raceResumeStore?.() ?? null;
+}
+
+/** 3.3: the Play scene's status beat (src/onlineFriends.js), or null. */
+function statusBeat() {
+  return ctx?.play?.onlineStatusBeat?.() ?? null;
+}
+
+/** 3.3: the Friends button's badge read again, the home redrawn when it changed (and still shows). */
+function updateBadge(o) {
+  refreshBadge(o.st, o.friends)
+    .then((changed) => {
+      if (changed && online === o && o.on && o.st.view === 'home' && o.lobby?.state.screen === 'home' && !view) renderLobby();
+    })
+    .catch(() => {});
+}
+
+/** 4.2: the ✉️ shows where it can be seen now: the Friends screen, or the online home (the Friends button's count). */
+function redrawInvites(o) {
+  if (online !== o || !o.on || view) return;
+  if (o.st.view === 'friends' || (o.st.view === 'home' && o.lobby?.state.screen === 'home')) renderLobby();
+}
+
+/** 4.2: invite_list() (entering 🌐, Friends, the topic joined again), then the topic it names. */
+async function loadInvites(o) {
+  const net = o?.net;
+  if (!o?.invites || !net) return;
+  const r = await o.invites.load();
+  if (online !== o || o.net !== net || !o.on) return;
+  if (r.ok && r.topic) net.openTopic?.(r.topic);
+  if (r.changed) redrawInvites(o);
+}
+
+/** 4.2: an item from the player's topic (the lobby hands it on from its poll). */
+function onUserItem(o, item) {
+  if (online !== o) return;
+  if (item.event === 'joined') {
+    loadInvites(o);
+    return;
+  }
+  if (o.invites?.onEvent(item)) redrawInvites(o);
+}
+
+/**
+ * 4.2: Invite on a 🟢 friend's row, or Resend on the host's code screen: the room's screen (Connecting
+ * while send_invite runs); a refusal goes back to where the tap was, with its words.
+ */
+async function sendInvite(o, x, { resend = false } = {}) {
+  if (!o?.lobby || online !== o || !o.on) return;
+  const from = o.st.view;
+  o.st.view = 'home';
+  setStatus('');
+  const call = o.lobby.invite(x.peer, x.name); // T4-review AUD-124: its Connecting is set first, then drawn
+  renderLobby();
+  const res = await call;
+  if (online !== o || !o.on || res.error === 'you left') return;
+  if (!res.ok && !resend && from === 'friends') o.st.view = 'friends';
+  renderLobby();
+  if (!res.ok) setStatus(tr(res.errorKey).replace('{name}', x.name), 'error');
+  else {
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+  }
+}
+
+/** 4.2: a friend's ✉️ tapped: Connecting, then the ready screen as their guest; a refusal back on Friends with its words. */
+async function acceptInvite(o, inv) {
+  if (!o?.lobby || !o.invites || online !== o || !o.on) return;
+  o.st.view = 'home';
+  setStatus('');
+  const call = o.lobby.acceptInvite(() => o.invites.accept(inv.invite)); // T4-review AUD-124: Connecting drawn
+  renderLobby();
+  const res = await call;
+  if (online !== o || !o.on || res.error === 'you left') return;
+  if (res.ok) {
+    renderLobby();
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+    return;
+  }
+  o.st.view = 'friends';
+  await openFriends(accountUi(), o.st, o.friends, { keepStatus: true });
+  if (online === o) setStatus(tr(res.errorKey ?? 'onlineErrGeneric').replace('{name}', inv.name), 'error');
+}
+
+/** 4.2: ✕ on a friend's ✉️: decline_invite; the ✉️ goes at once. */
+function declineInvite(o, inv) {
+  if (!o?.invites || online !== o) return;
+  o.invites.decline(inv.invite).catch?.(() => {});
+  setStatus('');
+  renderLobby();
+}
+
+/** Back to the online home from the Friends screen (its Back, or ✕), the badge read again. */
+function backHome(o) {
+  o.st.view = 'home';
+  setStatus('');
+  renderLobby();
+  updateBadge(o);
 }
 
 function pollOnline(o) {
   if (online !== o || !o.lobby || !ctx) return;
   o.ticks += 1;
+  // 3.3: the Friends screen's dots every status.pollMs; the home's badge every status.badgeMs.
+  if (o.on && !view && o.st.view === 'friends' && o.ticks % Math.round(T.online.status.pollMs / ONLINE_POLL_MS) === 0) pollFriends(accountUi(), o.st, o.friends).catch(() => {});
+  if (o.on && !view && o.st.view === 'home' && o.ticks % Math.round(T.online.status.badgeMs / ONLINE_POLL_MS) === 0) {
+    updateBadge(o);
+    // T4-review AUD-130: a topic that closed (refused, or closed by the server) is read again here, where a player waits for ✉️.
+    if (o.net?.topicState?.() === 'none' && o.lobby?.state.screen === 'home') loadInvites(o);
+  }
+  // 4.2: an invite past its time drops by itself (no message); the rings tick in place once a second.
+  if (o.on && !view && o.ticks % Math.round(1000 / ONLINE_POLL_MS) === 0 && o.invites) {
+    if (o.invites.prune()) redrawInvites(o);
+    else if (o.st.view === 'friends') inviteTick(accountUi());
+  }
   const changed = o.lobby.poll();
   if (o.lobby.state.room.phase === 'playing' && handOffRace(o)) return;
   if (!o.on || view) return;
@@ -858,6 +1161,7 @@ function raceMemory() {
   const store = () => browserStorage();
   return {
     get() {
+      if (raceResume()?.owner?.() === 'live') return null; // 2.3b: another page races in that room: never leave it from here
       try {
         return store()?.getItem(key) ?? null;
       } catch {
@@ -873,6 +1177,7 @@ function raceMemory() {
       try {
         store()?.removeItem(key);
       } catch {}
+      raceResume()?.clear?.(); // a race left (or over) has nothing to resume either (2.3)
     },
   };
 }
@@ -893,11 +1198,18 @@ function handOffRace(o) {
   const play = ctx?.play;
   if (!plan || !play?.scene) return false;
   const { lobby, net } = o;
+  // 2.3: a rejoined race starts rewound at its record's level start (resumePlan); every race gets the tab's store to keep its own.
+  const resume = o.resume ? (resumePlan(o.resume, lobby.state.room) ?? undefined) : undefined;
+  const store = raceResume() ?? undefined;
+  o.resume = null;
   lobby.remember?.(); // item 46: a reload from here on leaves this room on the next entry
   if (o.poll !== null) ctx.timers.clearInterval(o.poll);
   o.poll = null;
   o.lobby = null; // closing must not leave the room or close the transport: the race has them
+  net.closeTopic?.(); // 4.2: no invites in a race (the player reads 🟡 In a game); the next 🌐 entry reads them again
   o.net = null;
+  o.release = null; // T4-review AUD-127: the race takes its own lease; this window's must not close its transport
+  o.handed = true; // 3.3: the race keeps this device's status beat (it reads in a game now)
   // Over a running Versus (wide screens: 👥 starts split screen, 🌐 is switched on in its lobby):
   // its match left and both its scenes stopped, so only the race draws. Not Versus.leave(): that
   // starts a plain Play, which the race is about to launch itself. Read before the close clears ctx.
@@ -909,7 +1221,7 @@ function handOffRace(o) {
     game.scene.stop('PlayB');
     game.scene.stop('Versus');
   }
-  play.scene.start(ONLINE_HOST_KEY, { net, lobby, plan });
+  play.scene.start(ONLINE_HOST_KEY, { net, lobby, plan, store, resume });
   return true;
 }
 
@@ -919,11 +1231,20 @@ function stopOnline() {
   if (!o) return;
   if (o.poll !== null) ctx?.timers?.clearInterval(o.poll);
   o.poll = null;
+  if (o.look) ctx?.timers?.clearTimeout?.(o.look);
+  o.look = null;
+  if (!o.handed) ctx?.play?.onlineStatusBeatRef?.stop(); // 3.3: out of online mode: friends see offline at once; only a beat that exists (AUD-122)
   const lobby = o.lobby;
   o.lobby = null;
+  // T4-review AUD-127: out of online mode the player's topic closes now, not when leave_room answers;
+  // the transport's close waits for it, through this window's lease (a window opened meanwhile keeps it).
+  const net = o.net;
+  const release = o.release ?? (() => net?.close?.());
+  o.release = null;
+  net?.closeTopic?.();
   Promise.resolve(lobby?.leave())
     .catch(() => {})
-    .finally(() => o.net?.close?.());
+    .finally(release);
   o.st = createAccountState();
 }
 
@@ -952,6 +1273,10 @@ function onlineBack() {
     renderLobby();
     return true;
   }
+  if (st.view === 'friends') {
+    backHome(online);
+    return true;
+  }
   if (st.view !== 'home' || !lobby || lobby.state.screen === 'home') return false;
   const done = lobby.state.screen === 'join' ? lobby.back() : lobby.leave();
   Promise.resolve(done).then(() => {
@@ -970,6 +1295,9 @@ function keypadKey(e) {
   const key = id && globalThis.document.getElementById(id);
   if (!key || key.disabled) return;
   e.preventDefault?.();
+  // A held Enter's auto-repeat is not another Go (plan 39, 5.2b, AUD-142): each would send the code
+  // again and a refused one spends a counted try. Held digits and Backspace repeat as typing does.
+  if (e.repeat && id === 'tour-key-go') return;
   return key.click();
 }
 
@@ -1038,7 +1366,8 @@ function render() {
  * plan 39, 1.6b): the lobby when no tournament is running, else the
  * bracket (seeding until its first race), or the podium once the Final is decided. `view`
  * 'help' shows the help card, 'peek' the bracket read-only over a race (its level break).
- * @param {{ game: object, locale: string, play: object, view?: 'help' | 'peek' | null }} options
+ * @param {{ game: object, locale: string, play: object, view?: 'help' | 'peek' | null, join?: string }} options
+ * `join` (4.3): a share link's room code, joined once the 🌐 window has signed in and linked.
  */
 export function openTournamentPanel(options) {
   if (typeof document === 'undefined') return;
@@ -1056,7 +1385,7 @@ export function openTournamentPanel(options) {
   ctx.timers = options.timers ?? globalThis;
   if (!online && !tournamentState(ctx.game) && !view) {
     const forced = !versus(ctx.game); // over Play: no split screen to race on here
-    online = { on: forced, forced, st: createAccountState(), account: null, net: null, lobby: null, poll: null, ticks: 0 };
+    online = { on: forced, forced, st: createAccountState(), account: null, net: null, friends: null, lobby: null, poll: null, ticks: 0, resume: null, look: null, handed: false, join: parseCode(options.join), release: null };
     if (forced) startOnline();
   }
   if (!tournamentState(ctx.game) && players.length < T.tournament.minPlayers) {

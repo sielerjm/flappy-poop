@@ -8,8 +8,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeGame, installPanelDom, textOf } from './support/panelDom.js';
 import { fakeStorage } from './support/scenes.js';
-import { LEADERBOARD } from '../src/config.js';
+import { LEADERBOARD, TUNING } from '../src/config.js';
 import { t } from '../src/i18n.js';
+import { createResumeStore, resumeKey } from '../src/onlineRace.js';
 
 const body = installPanelDom();
 const { openTournamentPanel, isTournamentPanelOpen, closeTournamentPanel } = await import('../src/ui/tournamentPanel.js');
@@ -53,9 +54,10 @@ function setup({ versus = null, active = false, project = undefined, enter = { o
   const play = { getSaveState: () => ({ name: 'PlopMaster', id: 'p1' }), onlineAccount: () => account, onlineNet: net, onlineTestProject: () => project === 'test', ...(project === undefined ? {} : { onlineProjectName: () => project }) };
   const game = fakeGame({ versus, active, play });
   const ticks = [];
-  const timers = { setInterval: (fn) => (ticks.push(fn), ticks.length), clearInterval: () => {} };
+  const later = [];
+  const timers = { setInterval: (fn) => (ticks.push(fn), ticks.length), clearInterval: () => {}, setTimeout: (fn, ms) => (later.push({ fn, ms }), later.length), clearTimeout: () => {} };
   const poll = () => ticks.forEach((fn) => fn());
-  return { net, account, entered, play, game, timers, poll, open: () => openTournamentPanel({ game, locale: 'en', play, timers }) };
+  return { net, account, entered, play, game, timers, poll, later, open: () => openTournamentPanel({ game, locale: 'en', play, timers }) };
 }
 
 test('over Play (no Versus): the 🌐 views at once, the switch locked on with its reason, the transport warmed, signed in and linked, the online home', async () => {
@@ -64,7 +66,7 @@ test('over Play (no Versus): the 🌐 views at once, the switch locked on with i
   assert.equal(el('tour-title').textContent, t('en', 'onlineTitle'));
   assert.equal(el('tour-online').disabled, true);
   assert.equal(el('tour-online').getAttribute('aria-pressed'), 'true');
-  assert.ok(textOf(el('tour-net')).includes(t('en', 'onlineForced')));
+  assert.ok(textOf(el('tour-net')).includes(t('en', 'onlineSwitchOnSub')), 'item 70, N4: locked on, read as on');
   assert.equal(el('tour-start'), null, 'no local lobby: it has nowhere to race over Play');
   await flush();
   assert.deepEqual(k.net.calls.filter((c) => c[0] === 'warm'), [['warm']], 'pre-warm on entering 🌐 (item 16)');
@@ -164,6 +166,30 @@ test('the room code types from the keyboard (digits, Backspace, Enter) and from 
   await el('tour-join').click();
   await root.fire('paste', { clipboardData: { getData: () => '730 155' } });
   assert.equal(textOf(el('tour-boxes')), '730155');
+  closeTournamentPanel();
+});
+
+test('5.2b AUD-142: a held Enter on a refused code is one join: its auto-repeats send nothing, a fresh press tries again', async () => {
+  const k = setup({ answers: { join_room: { ok: false, error: 'no room' } } });
+  k.open();
+  await flush();
+  await el('tour-join').click();
+  const root = el('tournament-panel');
+  for (const key of ['4', '8', '2', '9', '1', '3']) await root.fire('keydown', { key });
+  const joins = () => k.net.calls.filter((c) => c[1] === 'join_room').length;
+  await root.fire('keydown', { key: 'Enter' });
+  await flush();
+  assert.equal(joins(), 1, 'the press');
+  assert.equal(textOf(el('tour-boxes')), '482913', 'the code is kept after "no room"');
+  assert.equal(el('tour-key-go').disabled, false, 'and Go is lit again');
+  for (let i = 0; i < 10; i += 1) {
+    await root.fire('keydown', { key: 'Enter', repeat: true });
+    await flush();
+  }
+  assert.equal(joins(), 1, 'the held key\'s repeats spend no counted try');
+  await root.fire('keydown', { key: 'Enter' });
+  await flush();
+  assert.equal(joins(), 2, 'a fresh press is a deliberate retry');
   closeTournamentPanel();
 });
 
@@ -310,4 +336,262 @@ test('a race left by a reload (item 46): the hand-off remembers the room code (p
   } finally {
     delete globalThis.localStorage;
   }
+});
+
+// --- 2.3: a reload's race (D4) --------------------------------------------------------------------
+
+const START_SNAP = { level: 1, score: 0, coins: 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 0 };
+const LV2_SNAP = { level: 2, score: 31, coins: 3, beans: 1, probiotic: 0, postbiotic: false, deaths: 1, levelWins: 1 };
+function resumeStoreOf(rec) {
+  const store = { rec, get: () => store.rec, set: (r) => (store.rec = r), clear: () => (store.rec = null) };
+  return store;
+}
+
+test("2.3 a reload's race: entering 🌐 rejoins it (room_state, its channel as its seat, nothing left) and hands it to OnlineRace rewound at the record's level", async () => {
+  const rec = { v: 1, code: '482913', round: 1, seat: 'guest', pauseRound: 1, levels: { 1: START_SNAP, 2: LV2_SNAP }, wall: Date.now() };
+  const k = setup({ answers: { room_state: { ok: true, data: { ok: true, code: '482913', status: 'playing', seat: 'guest', host_name: 'SirFlushALot', guest_name: 'PlopMaster', seed: 4242, start_ms: 990_000, round: 1 } } } });
+  const store = resumeStoreOf(rec);
+  k.play.raceResumeStore = () => store;
+  const started = [];
+  k.play.scene = { start: (key, data) => started.push([key, data]) };
+  k.open();
+  await flush();
+  await flush();
+  k.poll();
+  const rpcNames = k.net.calls.filter((c) => c[0] === 'rpc').map((c) => c[1]);
+  assert.ok(rpcNames.includes('room_state'), rpcNames.join());
+  assert.ok(!rpcNames.includes('leave_room') && !rpcNames.includes('create_room'), rpcNames.join());
+  assert.deepEqual(k.net.calls.filter((c) => c[0] === 'openRoom').map((c) => [c[1], c[2].seat]), [['482913', 'guest']]);
+  assert.equal(started.length, 1);
+  const [key, data] = started[0];
+  assert.equal(key, 'OnlineRace');
+  assert.deepEqual([data.plan.seat, data.plan.round, data.plan.seed], ['guest', 1, 4242]);
+  assert.deepEqual(data.resume, { level: 2, levels: { 1: START_SNAP, 2: LV2_SNAP }, pauseRound: 1, by: 'me' });
+  assert.equal(data.store, store);
+  closeTournamentPanel();
+});
+
+test("2.7, AUD-108: a reload's race is handed to OnlineRace only once its channel is open; a channel that never opens hands nothing off, leaves nothing and keeps the record", async () => {
+  for (const answer of [{ ok: true }, { ok: false, error: 'timeout' }]) {
+    const rec = { v: 1, code: '482913', round: 1, seat: 'guest', pauseRound: 1, levels: { 1: START_SNAP, 2: LV2_SNAP }, wall: Date.now() };
+    const k = setup({ answers: { room_state: { ok: true, data: { ok: true, code: '482913', status: 'playing', seat: 'guest', host_name: 'SirFlushALot', guest_name: 'PlopMaster', seed: 4242, start_ms: 990_000, round: 1 } } } });
+    let resolveOpen;
+    k.net.openRoom = (code, opts) => (k.net.calls.push(['openRoom', code, opts]), new Promise((r) => (resolveOpen = r)));
+    const store = resumeStoreOf(rec);
+    k.play.raceResumeStore = () => store;
+    const started = [];
+    k.play.scene = { start: (key, data) => started.push([key, data]) };
+    k.open();
+    await flush();
+    await flush();
+    assert.equal(k.net.calls.filter((c) => c[0] === 'openRoom').length, 1, 'the channel is opening');
+    k.poll();
+    k.poll();
+    assert.equal(started.length, 0, 'no hand-off while the channel opens');
+    resolveOpen(answer);
+    await flush();
+    await flush();
+    k.poll();
+    assert.equal(started.length, answer.ok ? 1 : 0, JSON.stringify(answer));
+    assert.ok(!k.net.calls.some((c) => c[0] === 'rpc' && c[1] === 'leave_room'), 'the race is never left');
+    if (!answer.ok) assert.equal(store.rec, rec, 'the record waits for the next entry');
+    closeTournamentPanel();
+  }
+});
+
+test("2.3 a reload's race that is over: the window says so, forgets it, and stays on the online home", async () => {
+  const rec = { v: 1, code: '482913', round: 1, seat: 'guest', pauseRound: 0, levels: { 1: START_SNAP }, wall: Date.now() };
+  const k = setup({ answers: { room_state: { ok: false, error: 'no room' } } });
+  const store = resumeStoreOf(rec);
+  k.play.raceResumeStore = () => store;
+  const started = [];
+  k.play.scene = { start: (key, data) => started.push([key, data]) };
+  k.open();
+  await flush();
+  await flush();
+  k.poll();
+  assert.equal(store.rec, null, 'forgotten');
+  assert.equal(started.length, 0);
+  assert.equal(el('tour-status').textContent, t('en', 'onlineRaceOver'));
+  assert.ok(el('tour-create'), 'the online home');
+  closeTournamentPanel();
+});
+
+test('2.3 a fresh race hands OnlineRace the tab\'s resume store too (it writes the record)', async () => {
+  const playing = { ok: true, code: '482913', status: 'playing', seat: 'host', host_name: 'PlopMaster', guest_name: 'JollyPlunger042', seed: 4242, start_ms: 1_004_000, round: 1 };
+  const k = setup({ answers: { set_room_status: { ok: true, data: playing } } });
+  const store = resumeStoreOf(null);
+  k.play.raceResumeStore = () => store;
+  const started = [];
+  k.play.scene = { start: (key, data) => started.push([key, data]) };
+  k.open();
+  await flush();
+  await el('tour-create').click();
+  await flush();
+  k.net.push({ kind: 'room', hint: 'answer', action: { type: 'status', room: { ...playing, status: 'ready', seed: null, start_ms: null, round: 0 }, at: 1_000_000 } });
+  k.poll();
+  el('tour-ready').click();
+  k.net.push({ kind: 'peer', event: 'ready', msg: { seq: 1, t: 1_000_000, sid: 'peer1', level: 1, ready: true }, at: 1_000_000 });
+  k.poll();
+  await flush();
+  k.poll();
+  assert.equal(started.length, 1);
+  assert.equal(started[0][1].store, store);
+  assert.equal(started[0][1].resume, undefined, 'nothing to resume');
+  closeTournamentPanel();
+});
+
+// --- 2.3b: app restart and a second tab (item 54) -----------------------------------------------
+
+const STALE = TUNING.online.resume.staleMs;
+const PLAYING = { ok: true, code: '482913', status: 'playing', seat: 'guest', host_name: 'SirFlushALot', guest_name: 'PlopMaster', seed: 4242, start_ms: 990_000, round: 1 };
+const rec2 = (fields = {}) => ({ v: 2, code: '482913', round: 1, seat: 'guest', pauseRound: 1, levels: { 1: START_SNAP, 2: LV2_SNAP }, wall: 5_000_000, ...fields });
+/** Another page's record (tabA) and this page's store (tabB) on one localStorage; item 46's remembered code beside them. */
+function otherPage(beatAgo) {
+  const map = new Map([[LEADERBOARD.onlineRaceKey, '482913']]);
+  const clock = { wall: 5_000_000 };
+  const page = (tab) => createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => clock.wall, tab });
+  const other = page('tabA');
+  clock.wall -= beatAgo;
+  other.set(rec2());
+  clock.wall += beatAgo;
+  globalThis.localStorage = fakeStorage(map);
+  return { map, clock, other, mine: () => page('tabB') };
+}
+const rpcs = (k) => k.net.calls.filter((c) => c[0] === 'rpc').map((c) => c[1]);
+
+test('2.3b a race another page is running (it beat a second ago): entering 🌐 neither rejoins it nor leaves it (item 46\'s leave included), says so, and looks again once', async () => {
+  const w = otherPage(1000);
+  try {
+    const k = setup({ answers: { room_state: { ok: true, data: PLAYING } } });
+    k.play.raceResumeStore = w.mine;
+    const started = [];
+    k.play.scene = { start: (key, data) => started.push([key, data]) };
+    k.open();
+    await flush();
+    await flush();
+    k.poll();
+    assert.deepEqual(rpcs(k).filter((f) => f === 'room_state' || f === 'leave_room'), [], rpcs(k).join());
+    assert.equal(k.net.calls.filter((c) => c[0] === 'openRoom').length, 0);
+    assert.equal(el('tour-status').textContent, t('en', 'onlineRaceElsewhere'));
+    assert.ok(el('tour-create'), 'the online home');
+    assert.equal(k.later.length, 1, 'one look again');
+    assert.ok(k.later[0].ms >= STALE, `after staleMs (${k.later[0].ms})`);
+    for (let ms = 0; ms < k.later[0].ms; ms += TUNING.online.resume.beatMs) {
+      w.clock.wall += TUNING.online.resume.beatMs;
+      assert.equal(w.other.beat(), 'mine'); // the other page still races, beating every second
+    }
+    k.later.shift().fn();
+    await flush();
+    await flush();
+    k.poll();
+    assert.deepEqual(rpcs(k).filter((f) => f === 'room_state' || f === 'leave_room'), [], 'still live: nothing');
+    assert.equal(k.later.length, 0, 'and no further look');
+    assert.equal(w.other.get().owner, 'tabA');
+    assert.equal(started.length, 0);
+    closeTournamentPanel();
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test('2.3b the look again finds the other page gone (its beat stale): this page claims the race and rejoins it', async () => {
+  const w = otherPage(1000);
+  try {
+    const k = setup({ answers: { room_state: { ok: true, data: PLAYING } } });
+    k.play.raceResumeStore = w.mine;
+    const started = [];
+    k.play.scene = { start: (key, data) => started.push([key, data]) };
+    k.open();
+    await flush();
+    await flush();
+    w.clock.wall += k.later[0].ms; // no beat since: it died
+    k.later.shift().fn();
+    await flush();
+    await flush();
+    k.poll();
+    assert.ok(rpcs(k).includes('room_state') && !rpcs(k).includes('leave_room'), rpcs(k).join());
+    assert.deepEqual(k.net.calls.filter((c) => c[0] === 'openRoom').map((c) => [c[1], c[2].seat]), [['482913', 'guest']]);
+    assert.equal(w.other.get().owner, 'tabB', 'claimed for this page');
+    assert.equal(started.length, 1);
+    assert.equal(started[0][1].resume.level, 2, 'rewound at the record\'s level, as 2.3');
+    closeTournamentPanel();
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test("2.3b a relaunch's race (the record another page's, its beat stale): claimed at once and rejoined, nothing left", async () => {
+  const w = otherPage(STALE + 1);
+  try {
+    const k = setup({ answers: { room_state: { ok: true, data: PLAYING } } });
+    k.play.raceResumeStore = w.mine;
+    const started = [];
+    k.play.scene = { start: (key, data) => started.push([key, data]) };
+    k.open();
+    await flush();
+    await flush();
+    k.poll();
+    assert.equal(k.later.length, 0, 'no look again needed');
+    assert.ok(rpcs(k).includes('room_state') && !rpcs(k).includes('leave_room') && !rpcs(k).includes('create_room'), rpcs(k).join());
+    assert.equal(w.other.get().owner, 'tabB');
+    assert.deepEqual(w.map.get(LEADERBOARD.onlineRaceKey), '482913', 'item 46\'s code kept (the race goes on)');
+    assert.equal(started.length, 1);
+    closeTournamentPanel();
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test("2.3b Create while another page races: item 46's leave is skipped (it would end that race for both), so the server's 'in a race' answers", async () => {
+  const w = otherPage(1000);
+  try {
+    const k = setup({ answers: { create_room: { ok: false, error: 'in a race' } } });
+    k.play.raceResumeStore = w.mine;
+    k.open();
+    await flush();
+    await flush();
+    await el('tour-create').click();
+    await flush();
+    assert.deepEqual(rpcs(k).filter((f) => f === 'leave_room' || f === 'create_room'), ['create_room']);
+    assert.equal(w.other.get().owner, 'tabA', 'the record untouched');
+    assert.equal(w.map.get(LEADERBOARD.onlineRaceKey), '482913');
+    closeTournamentPanel();
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test('Michael 24 Nov: the online home shows ?, which opens "How online races work" (invite first, then joining, the rules, tournaments); Got it goes back; a room hides ?', async () => {
+  const k = setup();
+  k.open();
+  await flush();
+  assert.equal(el('tour-help-btn').hidden, false, 'the online home offers ?');
+  await el('tour-help-btn').click();
+  assert.equal(el('tour-title').textContent, t('en', 'onlineHowTitle'));
+  const paras = el('tour-help').children;
+  assert.equal(paras.length, 5);
+  assert.ok(textOf(paras[1]).includes('Create room') && textOf(paras[2]).includes('Join with code'), 'how to invite, then how to join');
+  assert.ok(textOf(paras[4]).startsWith('Tournaments'), 'a line on tournaments last');
+  await el('tour-help-ok').click();
+  assert.ok(el('tour-create'), 'back on the online home');
+  await el('tour-create').click();
+  await flush();
+  assert.ok(el('tour-code'));
+  assert.equal(el('tour-help-btn').hidden, true, 'no ? in a room: the help would hold its knock and Ready');
+  closeTournamentPanel();
+});
+
+test('Michael 24 Nov: over a running Versus, ? with 🌐 off is the tournament help; with 🌐 on, the online help', async () => {
+  const k = setup({ versus: { leave: () => {} }, active: true });
+  k.open();
+  await el('tour-help-btn').click();
+  assert.equal(el('tour-title').textContent, t('en', 'tournamentHowTitle'));
+  assert.equal(el('tour-help').children.length, t('en', 'tournamentHowBody').split('\n').length);
+  await el('tour-help-ok').click();
+  await el('tour-online').click();
+  await flush();
+  await el('tour-help-btn').click();
+  assert.equal(el('tour-title').textContent, t('en', 'onlineHowTitle'));
+  closeTournamentPanel();
 });

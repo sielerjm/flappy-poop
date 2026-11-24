@@ -7,9 +7,11 @@
 // side (which line it crossed, the late award) is checked at the end.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { absorb, playScene } from './support/scenes.js';
-import { TUNING as T } from '../src/config.js';
+import { absorb, fakeStorage, playScene, registry } from './support/scenes.js';
+import { LEADERBOARD, TUNING as T } from '../src/config.js';
+import { createResumeStore, resumeKey } from '../src/onlineRace.js';
 import { raceOutcome } from '../src/tournament.js';
+import { catalogFor, t } from '../src/i18n.js';
 
 const { OnlineRace } = await import('../src/scenes/OnlineRace.js');
 
@@ -33,7 +35,16 @@ function fakeNet({ peerWidth = 720 } = {}) {
     take: () => q.splice(0),
     pump() {},
     peer: () => ({ name: 'Jolly', width: peerWidth }),
-    close() {},
+    closes: 0,
+    close() {
+      this.closes += 1;
+    },
+    leases: 0,
+    released: [],
+    lease() {
+      const at = (this.leases += 1);
+      return () => this.released.push(at);
+    },
   };
 }
 
@@ -73,12 +84,19 @@ function fakeHalf() {
     launch: (o) => calls.push(['launch', o]),
     startRace: () => calls.push(['startRace']),
     chromeArgs: () => ({ overlay: null }),
-    pausePlay: () => calls.push(['pausePlay']),
-    resumePlay: () => calls.push(['resumePlay']),
+    pausePlay() {
+      calls.push(['pausePlay']);
+      if (h.state === 'playing' || h.state === 'respawn') h.state = 'paused';
+    },
+    resumePlay() {
+      calls.push(['resumePlay']);
+      if (h.state === 'paused' && !h.levelBreak) h.state = 'playing';
+    },
     raceSnapshot: () => ({
       state: h.state, levelBreak: h.levelBreak, ended: h.ended, won: h.ended, flaps: 0, distance: h.distance, speed: 0, y: 640, vy: 0, angle: 0,
       frame: 'poop', alpha: 1, level: h.level, pipesPassed: 0, score: h.score, deaths: 0, levelWins: 0, finalFirst: false,
     }),
+    resumeSnapshot: () => ({ level: h.level, score: h.score, coins: h.coins ?? 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: h.levelWins ?? 0 }),
   };
   return h;
 }
@@ -87,7 +105,7 @@ function fakeHalf() {
  * A race scene past its start GO, as create() leaves it, with sinks for what it draws (`countdown`:
  * before its GO instead; `peerWidth`: the other side's presence width).
  */
-function raceScene({ seat = 'host', round = 1, countdown = false, peerWidth = 720 } = {}) {
+function raceScene({ seat = 'host', round = 1, countdown = false, peerWidth = 720, resume = undefined, store = undefined } = {}) {
   const net = fakeNet({ peerWidth });
   const half = fakeHalf();
   const room = { phase: 'playing', role: seat, code: '482913', hostName: 'Plop', guestName: 'Jolly', seed: 5, startMs: GO, round };
@@ -107,8 +125,8 @@ function raceScene({ seat = 'host', round = 1, countdown = false, peerWidth = 72
     hud: { card: absorb(), dot: absorb(), name: absorb(), score: absorb(), word: absorb(), link: null },
     locale: 'en',
   });
-  s.initRace({ net, lobby, plan: { seed: 5, startAt: GO, seat, names: seat === 'host' ? ['Plop', 'Jolly'] : ['Jolly', 'Plop'], fieldW: 720, round } });
-  if (!countdown) s.match.status = 'playing';
+  s.initRace({ net, lobby, plan: { seed: 5, startAt: GO, seat, names: seat === 'host' ? ['Plop', 'Jolly'] : ['Jolly', 'Plop'], fieldW: 720, round }, resume, store });
+  if (!countdown && !resume) s.match.status = 'playing';
   return { s, net, half, timers, ops, lobby, room };
 }
 
@@ -509,6 +527,45 @@ function overRace(opts) {
   return k;
 }
 
+// 5.1 (Appendix A: "Correct winner, including tie"): equal points go down the split-screen rules
+// (D3: fewer crashes, more 🏁, first out), each device seeing itself as slot 0, so the two agree; the
+// panel heads with the winner and names the tiebreak; all equal (no first out, e.g. both runs
+// reported without a final line) is a draw on both.
+test('5.1 a tie on points: crashes, then 🏁, then first out decide it the same way on both devices, the panel names the tiebreak; all equal is a Draw on both', () => {
+  const base = { ended: true, score: 30, deaths: 1, levelWins: 2, finalFirst: false };
+  const cases = [
+    ['deaths', { ...base }, { ...base, deaths: 2, finalFirst: true }, 0, 'tournamentByDeaths'],
+    ['levelWins', { ...base, levelWins: 3 }, { ...base, finalFirst: true }, 0, 'tournamentByLevelWins'],
+    ['finalFirst', { ...base }, { ...base, finalFirst: true }, 1, 'tournamentByFinalFirst'],
+    ['draw', { ...base }, { ...base }, null, null],
+  ];
+  for (const [by, a, b, winner, line] of cases) {
+    const seen = [];
+    for (const [seat, mine, theirs] of [['host', a, b], ['guest', b, a]]) {
+      const k = drawnRace({ seat });
+      const { s, timers } = k;
+      const texts = [];
+      const add = absorb();
+      s.add = new Proxy(add, { get: (_t, key) => (key === 'text' ? (_x, _y, str) => (texts.push(str), absorb()) : add[key]) });
+      Object.assign(s.match.slots[0], mine);
+      Object.assign(s.match.slots[1], theirs);
+      s.feed.doneSent = () => true;
+      s.checkOver();
+      assert.equal(s.match.status, 'over', `${by} ${seat}`);
+      assert.equal(s.outcome.by, by, `${by} ${seat}`);
+      seen.push(s.outcome.winner);
+      timers.find((x) => x.ms === T.deathToOverMs).fn();
+      const [, them] = s.plan.names;
+      const head = s.outcome.winner == null ? t('en', 'versusDraw') : s.outcome.winner === 0 ? t('en', 'onlineYouWin') : t('en', 'versusWins').replace('{name}', them);
+      assert.ok(texts.includes(head), `${by} ${seat}: the panel heads "${head}" (${JSON.stringify(texts.slice(0, 3))})`);
+      if (line) assert.ok(texts.includes(t('en', line)), `${by} ${seat}: the tiebreak named`);
+      else assert.ok(!['tournamentByDeaths', 'tournamentByLevelWins', 'tournamentByFinalFirst'].some((key) => texts.includes(t('en', key))), `${by} ${seat}: no tiebreak line on a draw`);
+    }
+    assert.equal(seen[0], winner, `${by}: the host's verdict`);
+    assert.equal(seen[1], winner == null ? null : 1 - winner, `${by}: the guest names the same player`);
+  }
+});
+
 test('the panel\'s Rematch: after the tap lockout it asks (Rematch ✓, "Waiting for <name>…"), again takes it back; the other asking first is gold and breathes', () => {
   const k = overRace();
   const { s, net, loop } = k;
@@ -697,4 +754,902 @@ test('taps on the race\'s buttons follow the field after a turn (the offer and t
   ctx.s.keepWaiting = () => kept.push('keep');
   ctx.s.onPointer({ x: 1280 - 920, y: 900 });
   assert.deepEqual(kept, ['keep'], 'the button drawn 920 px to the left answers there');
+});
+
+// --- 2.2: the shared pause in the scene (2.1's machine wired: the half, the ghost, the overlay's taps, the end) ---
+
+const P2 = T.online.pause;
+const RESUME_MS = R.countLeadMs + COUNT_MS;
+const pausesOf = (net) => sentOf(net, 'pause');
+const called = (half, name) => half.calls.filter((c) => c[0] === name).length;
+/** A paused race's scene with a game loop (taps compare frames, Leave compares times). */
+function pauseRig(opts) {
+  const ctx = raceScene(opts);
+  ctx.s.game = { loop: { frame: 1, time: 0 } };
+  ctx.net.clock.now = GO + 5000;
+  ctx.s.update();
+  return ctx;
+}
+
+test('2.2 the pause key mid-run pauses both: the half freezes, this side says why over the wire (menu), and the referee is held', () => {
+  const { s, net, half } = pauseRig();
+  const held = [];
+  const tick = s.referee.tick.bind(s.referee);
+  s.referee.tick = (l) => (held.push(l.held), tick(l));
+  s.setPaused(true);
+  assert.equal(s.isPaused(), true);
+  assert.equal(called(half, 'pausePlay'), 1);
+  assert.deepEqual(pausesOf(net).at(-1), { event: 'pause', reason: 'menu', ready: false, round: 0, count: 0 });
+  net.clock.now += 16;
+  s.update();
+  assert.deepEqual(held, [true], 'the referee ticks held (no level count starts under a pause)');
+  s.togglePause();
+  assert.equal(pausesOf(net).at(-1).ready, true, 'the pause key again says Ready (the race goes on only when both say it)');
+  assert.equal(s.isPaused(), true);
+});
+
+test('2.2 the other side\'s pause pauses this side and stands the ghost where it stopped; a tap says Ready; both ready, the host\'s 3-2-1 resumes the half at its GO', () => {
+  const { s, net, half } = pauseRig({ seat: 'host' });
+  net.push(peer('pos', { phase: 'run', distance: 2000, speed: 300, y: 640, vy: 0, level: 1, score: 3 }, GO + 4900));
+  s.update();
+  const stop = GO + 5010;
+  net.push(peer('pause', { reason: 'menu', ready: false, round: 0, count: 0 }, stop));
+  net.clock.now = GO + 5060;
+  s.update();
+  assert.equal(called(half, 'pausePlay'), 1, 'paused one latency after the other side');
+  assert.equal(s.pillLink(), 'paused', 'the pill says the other side paused, not a bad link');
+  net.clock.now = GO + 9000;
+  s.update();
+  assert.equal(Math.round(s.match.slots[1].distance), 2000 + Math.round(300 * 0.11), 'the ghost stands at the other side\'s pause time');
+  assert.equal(pausesOf(net).at(-1).ready, false, 'mid-run, this side waits for a tap');
+  s.game.loop.frame = 2;
+  s.setPaused(false); // Play's tap while paused (applyChrome 'resume')
+  assert.equal(pausesOf(net).at(-1).ready, true);
+  assert.equal(sentOf(net, 'resume').length, 0, 'the guest is not ready yet');
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: 0 }, GO + 9050));
+  net.clock.now = GO + 9100;
+  s.update();
+  assert.deepEqual(sentOf(net, 'resume'), [{ event: 'resume', round: 0, startAt: GO + 9100 + RESUME_MS, cancel: false }]);
+  assert.equal(called(half, 'resumePlay'), 0, 'counting');
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: GO + 9100 + RESUME_MS }, GO + 9150)); // the guest counts with it
+  net.clock.now = GO + 9100 + RESUME_MS - 900;
+  s.update();
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: GO + 9100 + RESUME_MS }, net.clock.now)); // its heartbeat
+  net.clock.now = GO + 9100 + RESUME_MS;
+  s.update();
+  assert.equal(called(half, 'resumePlay'), 1, 'at the GO');
+  assert.equal(s.isPaused(), false);
+  assert.equal(s.menuHeld, false);
+});
+
+test('2.2 a pause before GO holds the opening GO: no race starts while frozen; the resume\'s GO starts it', () => {
+  const { s, net, half } = raceScene({ seat: 'host', countdown: true });
+  net.clock.now = GO - 2000;
+  s.update();
+  net.push({ kind: 'presence', event: 'leave', peer: { name: 'Jolly' } });
+  s.update();
+  assert.equal(s.isPaused(), true, 'the other side gone from presence: lost');
+  net.clock.now = GO + 3000;
+  s.update();
+  assert.equal(called(half, 'startRace'), 0, 'GO passed under the pause: nothing starts');
+  assert.equal(s.match.status, 'countdown');
+  net.push({ kind: 'presence', event: 'join', peer: { name: 'Jolly' } });
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: 0 }, GO + 3050));
+  net.clock.now = GO + 3100;
+  s.update();
+  const go = sentOf(net, 'resume').at(-1);
+  assert.equal(go?.startAt, GO + 3100 + RESUME_MS, 'before GO both are ready by themselves: the host counts at once');
+  net.clock.now = go.startAt - 900;
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: go.startAt }, net.clock.now)); // the guest's heartbeat, counting
+  s.update();
+  net.clock.now = go.startAt;
+  s.update();
+  assert.equal(called(half, 'startRace'), 1, 'the resume\'s GO starts the race');
+  assert.equal(s.match.status, 'playing');
+});
+
+test('2.2 a hidden page pauses from the visibilitychange handler (no frames run there): this side sends away', () => {
+  const { s, net, half } = pauseRig();
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  globalThis.document = { hidden: true };
+  try {
+    s.tickPause(); // what create()'s onVisibility runs
+  } finally {
+    if (had) Object.defineProperty(globalThis, 'document', had);
+    else delete globalThis.document;
+  }
+  assert.equal(called(half, 'pausePlay'), 1);
+  assert.equal(pausesOf(net).at(-1).reason, 'away');
+});
+
+test('2.2 the other side left mid-race (the room\'s confirmed leave): over with no winner, the half frozen, no finish, no rematch; after the race a leave is only "left"', () => {
+  const { s, net, half, timers, lobby } = pauseRig({ seat: 'host' });
+  net.push({ kind: 'room', hint: 'left', action: { type: 'left', seat: 'guest' } });
+  s.update();
+  assert.equal(s.match.status, 'over');
+  assert.deepEqual(s.abandoned, { seat: 'guest' });
+  assert.equal(s.outcome.winner, null);
+  assert.equal(called(half, 'pausePlay'), 1);
+  assert.deepEqual(lobby.calls.filter((c) => c[0] === 'finish'), [], 'the room is abandoned, not finished');
+  assert.deepEqual(timers.map((x) => x.ms), [T.deathToOverMs], 'the results panel a beat later');
+  s.match.status = 'over';
+  s.toggleRematch();
+  assert.equal(sentOf(net, 'rematch').length, 0, 'no rematch with nobody to race');
+
+  const after = pauseRig({ seat: 'host' });
+  after.s.match.status = 'over';
+  after.net.push({ kind: 'room', hint: 'left', action: { type: 'left', seat: 'guest' } });
+  after.s.update();
+  assert.equal(after.s.abandoned, null, 'a race already over is not abandoned');
+  assert.equal(after.s.peerLeft, true);
+});
+
+test('2.2 back (this side\'s link or the other side returned) sends the run\'s end again', () => {
+  const { s } = pauseRig();
+  const again = [];
+  s.feed.again = () => again.push(1);
+  const drain = s.pause.drain;
+  s.pause.drain = () => [{ type: 'back' }, ...drain()];
+  s.tickPause();
+  assert.equal(again.length, 1);
+});
+
+test('2.2 Leave on the pause overlay asks twice: one tap arms it for leaveConfirmMs, a second inside it leaves, a late one arms it again', () => {
+  const { s } = pauseRig();
+  const left = [];
+  s.leave = () => left.push(s.game.loop.time);
+  s.setPaused(true);
+  s.tapLeave();
+  assert.deepEqual(left, []);
+  s.game.loop.time = P2.leaveConfirmMs + 1;
+  s.tapLeave();
+  assert.deepEqual(left, [], 'too late: armed again');
+  s.game.loop.time += P2.leaveConfirmMs - 1;
+  s.tapLeave();
+  assert.deepEqual(left, [2 * P2.leaveConfirmMs], 'the second tap in time');
+});
+
+test('2.2 a tap on the overlay\'s Ready button says Ready once: Play\'s chrome sees the same tap and does nothing more', () => {
+  const { s, net } = pauseRig();
+  s.setPaused(true);
+  const box = { id: 'ready', x: 200, y: 700, width: 200, height: 88 };
+  s.pauseUi = { panel: { visible: true }, ready: { visible: true }, boxes: { ready: box, leave: { id: 'leave', x: 500, y: 700, width: 200, height: 88 }, alone: { id: 'leave', x: 360, y: 700, width: 200, height: 88 } } };
+  s.game.loop.frame = 9;
+  s.onPointer({ x: 200, y: 700 });
+  assert.equal(pausesOf(net).at(-1).ready, true);
+  s.setPaused(false); // the same tap reaching Play (applyChrome 'resume')
+  assert.equal(pausesOf(net).at(-1).ready, true, 'not taken back by its own twin');
+  s.game.loop.frame = 10;
+  s.setPaused(false);
+  assert.equal(pausesOf(net).at(-1).ready, false, 'a later tap takes it back');
+});
+
+test('2.2 the pill while paused reads the pause machine: lost when the other side is silent mid-run, never "slow" for a paused peer', () => {
+  const { s, net } = pauseRig({ seat: 'guest' });
+  net.push(peer('pos', { phase: 'run', distance: 2000, speed: 300, y: 640, vy: 0, level: 1 }, GO + 5000));
+  s.update();
+  net.clock.now = GO + 5000 + P2.silenceMs + 10;
+  s.update();
+  assert.equal(s.isPaused(), true);
+  assert.equal(s.pillLink(), 'lost');
+});
+
+// --- 2.3: reload resume (D4) --------------------------------------------------------------------
+
+/** The tab's resume record as the scene writes it (src/onlineRace.js's createResumeStore). */
+function fakeStore() {
+  const recs = [];
+  return { recs, set: (r) => recs.push(JSON.parse(JSON.stringify(r))), clear: () => recs.push(null), get: () => recs.at(-1) ?? null, last: () => recs.at(-1) };
+}
+const START = { level: 1, score: 0, coins: 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 0 };
+const LV2 = { level: 2, score: 31, coins: 3, beans: 1, probiotic: 0, postbiotic: false, deaths: 1, levelWins: 1 };
+const LV3 = { level: 3, score: 64, coins: 5, beans: 2, probiotic: 4, postbiotic: true, deaths: 1, levelWins: 2 };
+const restarts = (ops) => ops.filter((o) => o[0] === 'restart').map((o) => o[1]);
+
+test('2.3 a fresh race writes the tab\'s resume record at its start: the room, the round, the seat, level 1\'s empty start', () => {
+  const store = fakeStore();
+  raceScene({ seat: 'guest', round: 2, store });
+  const rec = store.last();
+  assert.deepEqual({ code: rec.code, round: rec.round, seat: rec.seat, pauseRound: rec.pauseRound, levels: rec.levels }, { code: '482913', round: 2, seat: 'guest', pauseRound: 0, levels: { 1: START } });
+});
+
+test('2.3 a rewound race: Play launches at the level\'s start with its snapshot, the slot carries its numbers, the pause holds the GO (rewind) and the rewind goes every heartbeat', () => {
+  const store = fakeStore();
+  const { s, net, half } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' }, store });
+  assert.equal(s.match.status, 'countdown');
+  assert.deepEqual(s.launchData().resume, LV2, 'what create() hands Play');
+  assert.deepEqual([s.match.slots[0].score, s.match.slots[0].deaths, s.match.slots[0].levelWins, s.match.slots[0].level], [31, 1, 1, 2]);
+  net.clock.now = GO + 60_000;
+  s.update();
+  assert.equal(s.isPaused(), true);
+  assert.equal(s.pause.state().mine, 'rewind');
+  assert.equal(called(half, 'startRace'), 0, 'the room\'s GO is long past: nothing starts while held');
+  assert.deepEqual(sentOf(net, 'rewind'), [{ event: 'rewind', round: 1, level: 2, at: GO }], 'its level and its restart time');
+  net.clock.now += 500;
+  s.update();
+  assert.equal(sentOf(net, 'rewind').length, 1);
+  net.clock.now += T.online.pause.heartbeatMs;
+  s.update();
+  assert.equal(sentOf(net, 'rewind').length, 2, 'again a heartbeat later');
+  assert.deepEqual(store.last().levels, { 1: START, 2: LV2 });
+});
+
+test('2.3 Ready clears the rewind hold; both ready, the host\'s resume GO starts the race at the level\'s start, and the rewind stops', () => {
+  const { s, net, half } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'them' } });
+  net.clock.now = GO + 60_000;
+  s.update();
+  s.toggleReady();
+  assert.equal(s.pause.state().mine, null, 'the tap cleared it');
+  assert.equal(s.pause.state().ready.mine, true, 'before GO: ready by itself');
+  net.push(peer('pause', { reason: 'rewind', ready: true, round: 0, count: 0 }, net.clock.now - 20));
+  s.update();
+  const go = sentOf(net, 'resume').at(-1);
+  assert.equal(go?.startAt, net.clock.now + RESUME_MS, 'the host counts');
+  net.clock.now = go.startAt - 900;
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: go.startAt }, net.clock.now));
+  s.update();
+  const rewinds = sentOf(net, 'rewind').length;
+  net.clock.now = go.startAt;
+  s.update();
+  assert.equal(called(half, 'startRace'), 1, 'GO: the level runs');
+  assert.equal(s.match.status, 'playing');
+  assert.equal(s.rewound, null);
+  net.clock.now += 5000;
+  s.update();
+  assert.equal(sentOf(net, 'rewind').length, rewinds, 'no rewind once flying');
+});
+
+test('2.3 the other side\'s rewind restarts a live race at the lower level\'s start: its snapshots up to that level, by them, the floor at the sender\'s restart', () => {
+  const store = fakeStore();
+  const { s, net, half, ops } = raceScene({ seat: 'guest', store });
+  s.levels[2] = LV2;
+  s.levels[3] = LV3;
+  half.level = 3;
+  net.clock.now = GO + 90_000;
+  net.push(peer('rewind', { round: 1, level: 2, at: GO + 89_000 }, GO + 89_000));
+  s.update();
+  assert.deepEqual(ops.filter((o) => o[0] === 'stop'), [['stop', 'Play']]);
+  const [data] = restarts(ops);
+  assert.equal(restarts(ops).length, 1);
+  assert.deepEqual(data.resume, { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'them', floor: GO + 89_000 });
+  assert.equal(data.plan, s.plan);
+  assert.equal(data.net, net);
+  assert.equal(data.store, store);
+  net.push(peer('rewind', { round: 1, level: 2, at: GO + 89_000 }, GO + 89_500));
+  s.update();
+  assert.equal(restarts(ops).length, 1, 'once');
+});
+
+test('2.3 a rewind past this side\'s level brings it to its own start; rewound already, a lower one takes it back further, the same or a higher one only raises the floor', () => {
+  const live = raceScene({ seat: 'host' });
+  live.s.levels[2] = LV2;
+  live.half.level = 2;
+  live.net.clock.now = GO + 50_000;
+  live.net.push(peer('rewind', { round: 1, level: 3, at: GO + 49_000 }, GO + 49_000));
+  live.s.update();
+  assert.equal(restarts(live.ops)[0]?.resume.level, 2, 'its own level start (its rewind takes the other back)');
+
+  const r = raceScene({ seat: 'host', resume: { level: 3, levels: { 1: START, 2: LV2, 3: LV3 }, pauseRound: 0, by: 'me' } });
+  r.net.clock.now = GO + 50_000;
+  r.net.push(peer('rewind', { round: 1, level: 3, at: GO + 49_000 }, GO + 49_000));
+  r.s.update();
+  assert.deepEqual(restarts(r.ops), [], 'the same level: no restart');
+  const pos = (t) => peer('pos', { phase: 'run', distance: 100, speed: 300, y: 640, vy: 0, angle: 0, frame: 'poop', alpha: 1, level: 3, pipesPassed: 4, score: 4, deaths: 0, levelWins: 0, finalFirst: false }, t);
+  assert.equal(r.s.feed.receive(pos(GO + 48_000)), false, 'the floor is the other side\'s restart now');
+  r.net.push(peer('rewind', { round: 1, level: 2, at: GO + 49_000 }, GO + 49_600));
+  r.s.update();
+  assert.deepEqual(restarts(r.ops)[0]?.resume, { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'them', floor: GO + 49_000 }, 'a lower one: further back');
+});
+
+test('2.3 stale and out of bounds: a rewind stamped before this side last left a rewind, one for another round, or any once this side\'s run has ended changes nothing', () => {
+  const { s, net, ops } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' } });
+  net.clock.now = GO + 60_000;
+  s.update();
+  s.toggleReady();
+  net.push(peer('pause', { reason: 'rewind', ready: true, round: 0, count: 0 }, net.clock.now - 20));
+  s.update();
+  const go = sentOf(net, 'resume').at(-1).startAt;
+  net.clock.now = go;
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: go }, go - 10));
+  s.update();
+  assert.equal(s.match.status, 'playing');
+  net.push(peer('rewind', { round: 1, level: 2, at: GO + 59_000 }, go - 1));
+  net.push(peer('rewind', { round: 2, level: 1, at: go + 100 }, go + 100));
+  net.clock.now = go + 200;
+  s.update();
+  assert.deepEqual(restarts(ops), [], 'from before its GO, or another round');
+  s.feed.doneFixed = () => true;
+  net.push(peer('rewind', { round: 1, level: 2, at: go + 300 }, go + 300));
+  s.update();
+  assert.deepEqual(restarts(ops), [], 'its run has ended: it never rewinds');
+});
+
+test("2.7, AUD-107: a side whose run has ended answers each rewind of this round with its fixed end again (after the rewind's restart, so the rewound side's floor keeps it), never one of another round; a live side does not", () => {
+  const { s, net, ops } = raceScene();
+  const again = [];
+  s.feed.again = () => again.push(net.clock.now);
+  net.clock.now = GO + 30_000;
+  net.push(peer('rewind', { round: 1, level: 2, at: GO + 29_000 }, GO + 29_000));
+  s.update();
+  assert.deepEqual(again, [], 'live: the rewind restarts this side instead');
+  assert.equal(restarts(ops).length, 1);
+  const ended = raceScene();
+  const back = [];
+  ended.s.feed.again = () => back.push(ended.net.clock.now);
+  ended.s.feed.doneFixed = () => true;
+  ended.net.clock.now = GO + 90_000;
+  ended.net.push(peer('rewind', { round: 2, level: 6, at: GO + 89_000 }, GO + 89_000));
+  ended.s.update();
+  assert.deepEqual(back, [], 'another round: nothing');
+  ended.net.push(peer('rewind', { round: 1, level: 6, at: GO + 89_500 }, GO + 89_600));
+  ended.s.update();
+  assert.deepEqual(back, [GO + 90_000], 'its end goes again on the next frame, stamped after the restart');
+  ended.net.clock.now += 1000;
+  ended.net.push(peer('rewind', { round: 1, level: 6, at: GO + 89_500 }, GO + 90_900));
+  ended.s.update();
+  assert.equal(back.length, 2, 'and again on each heartbeat of the rewind (a lost answer is sent again)');
+  assert.deepEqual(restarts(ended.ops), [], 'never a restart');
+});
+
+test('T2-review: a rewound side sends no rewind in its own GO frame, and a late resend of a restart its GO answered restarts nothing (the online-reload flake)', () => {
+  const { s, net, ops } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' } });
+  net.clock.now = GO + 60_000;
+  s.update();
+  s.toggleReady();
+  net.push(peer('pause', { reason: 'rewind', ready: true, round: 0, count: 0 }, net.clock.now - 20));
+  s.update();
+  const go = sentOf(net, 'resume').at(-1).startAt;
+  const before = sentOf(net, 'rewind').length;
+  net.clock.now = go; // its heartbeat is long due: no frame ran during the count
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: go }, go - 10));
+  s.update();
+  assert.equal(s.match.status, 'playing');
+  assert.equal(sentOf(net, 'rewind').length, before, 'no rewind leaves in the GO frame');
+  net.push(peer('rewind', { round: 1, level: 2, at: GO + 59_000 }, go + 1)); // the other side's last heartbeat, sent in its GO frame
+  net.clock.now = go + 40;
+  s.update();
+  assert.deepEqual(restarts(ops), [], 'the restart this GO answered, heard late, restarts nothing');
+  net.push(peer('rewind', { round: 1, level: 2, at: go + 5_000 }, go + 5_000)); // a new reload after the GO
+  net.clock.now = go + 5_040;
+  s.update();
+  assert.equal(restarts(ops)[0]?.resume?.level, 2, 'a new restart after the GO still rewinds');
+});
+
+test('2.3 each level break writes its snapshot once its line is settled, and the record with it; a purchase in the break updates it', () => {
+  const store = fakeStore();
+  const k = raceScene({ seat: 'host', store });
+  const { s, net, half } = k;
+  net.clock.now = GO + 20_000;
+  half.distance = 5000;
+  s.claimLevelFinish(half, { level: 1, final: false });
+  half.score = 26;
+  half.coins = 4;
+  half.levelWins = 1;
+  inBreak(k, 2);
+  s.update();
+  assert.equal(s.levels[2], undefined, 'not before the line\'s verdict (the host\'s grace)');
+  net.clock.now += R.firstGraceMs + 10;
+  s.update();
+  assert.deepEqual(s.levels[2], { level: 2, score: 26, coins: 4, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 1 });
+  assert.deepEqual(store.last().levels[2], s.levels[2]);
+  const writes = store.recs.length;
+  s.update();
+  assert.equal(store.recs.length, writes, 'unchanged: not written again');
+  half.coins = 1;
+  s.update();
+  assert.equal(store.last().levels[2].coins, 1, 'the shop spent 3');
+});
+
+test('2.3 the record goes once this side\'s run has ended (a reload after its finish does not resume) and when the race is abandoned', () => {
+  const a = fakeStore();
+  const { s } = raceScene({ store: a });
+  s.feed.doneFixed = () => true;
+  s.update();
+  assert.equal(a.last(), null);
+  const b = fakeStore();
+  const k = raceScene({ store: b });
+  k.net.push({ kind: 'room', action: { type: 'left', seat: 'guest' } });
+  k.s.update();
+  assert.equal(b.last(), null);
+});
+
+test('2.3 a re-fit while rewound (a width before its GO) restarts on the same rewind', () => {
+  withViewport(1200, 1280, () => {
+    const { s, net, ops } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' }, peerWidth: 1600 });
+    assert.equal(s.fieldW, 1200);
+    net.clock.now = GO + 60_000; // the room's GO long past: the rewind's GO is still to come
+    s.update();
+    assert.ok(sentOf(net, 'width').length >= 1, 'its width goes until the rewind\'s GO');
+    net.push(peer('width', { width: 720 }, net.clock.now - 10));
+    net.clock.now += 16;
+    s.update();
+    const [data] = restarts(ops);
+    assert.equal(data?.peer.width, 720);
+    assert.equal(data.resume.level, 2, 'the same rewind');
+    assert.deepEqual(data.resume.levels, { 1: START, 2: LV2 });
+  });
+});
+
+test('2.3 one final line: a host whose fresh referee decides the final line for itself takes nothing once the other side\'s run already holds it (a reload after the guest finished)', () => {
+  for (const held of [false, true]) {
+    const { s, net, half } = raceScene({ seat: 'host' });
+    if (held) Object.assign(s.match.slots[1], { ended: true, finalFirst: true });
+    s.feed.slot = () => null; // the remote slot as set here (no ghost messages in this test)
+    net.clock.now = GO + 400_000;
+    half.level = T.levels.lastLevel;
+    s.claimLevelFinish(half, { level: T.levels.lastLevel, final: true });
+    net.clock.now += R.firstGraceMs + 10;
+    s.update();
+    assert.equal(half.calls.filter((c) => c[0] === 'award').length, held ? 0 : 1, held ? 'the other side holds the final line: no award' : 'control: the host takes its line');
+  }
+});
+
+test("2.3 the record goes at the race's end (checkOver itself, not only the run's own end)", () => {
+  const store = fakeStore();
+  const { s } = raceScene({ store });
+  s.match.slots[0].ended = true;
+  s.match.slots[1].ended = true;
+  s.feed.doneSent = () => true;
+  s.checkOver();
+  assert.equal(s.match.status, 'over');
+  assert.equal(store.last(), null);
+});
+
+// --- 2.3b: app restart and a second tab (item 54) -----------------------------------------------
+
+const STALE = T.online.resume.staleMs;
+/** Two pages' resume stores on one localStorage, on one wall clock. */
+function twoPages(wall = 2_000_000) {
+  const map = new Map();
+  const clock = { wall };
+  const page = (tab) => createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => clock.wall, tab });
+  return { map, clock, a: page('tabA'), b: page('tabB') };
+}
+/** What stepping aside needs of the scene (create() has them in the game). */
+function asideKit(k) {
+  const pumps = { n: 0 };
+  const closes = { n: 0 };
+  k.net.pump = () => (pumps.n += 1);
+  k.net.close = () => (closes.n += 1);
+  k.s.scene.start = (key, data) => k.ops.push(['start', key, data]);
+  k.s.scale = { setGameSize: (w, h) => k.ops.push(['size', w, h]) };
+  k.s.registry = registry();
+  return { pumps, closes };
+}
+
+test('2.3b the racing page beats its record every beatMs, rewound or not, and stops once its own end cleared it', () => {
+  const { clock, a } = twoPages();
+  const { s } = raceScene({ store: a });
+  assert.deepEqual([a.get().owner, a.get().beat], ['tabA', 2_000_000], 'written at the start, as this page\'s');
+  clock.wall += T.online.resume.beatMs;
+  s.beatRecord();
+  assert.equal(a.get().beat, 2_001_000);
+  const two = twoPages();
+  const k = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' }, store: two.a });
+  two.clock.wall += 3000;
+  k.s.beatRecord();
+  assert.equal(two.a.get().beat, 2_003_000, 'rewound and held: still beating');
+  s.feed.doneFixed = () => true;
+  s.update();
+  assert.equal(a.get(), null, 'its run ended: the record gone');
+  clock.wall += T.online.resume.beatMs;
+  s.beatRecord();
+  assert.equal(a.get(), null, 'and no beat brings it back');
+});
+
+test('2.3b a page frozen past staleMs whose race another page took over steps aside on its next frame, before it pumps or sends: the transport closed, no leave_room, the record left to the new owner, Play plain, the 🌐 window to say so', () => {
+  const { clock, a, b } = twoPages();
+  const k = raceScene({ store: a });
+  const { pumps, closes } = asideKit(k);
+  k.net.clock.now = GO + 30_000;
+  k.s.update();
+  const pumped = pumps.n;
+  assert.ok(pumped >= 1, 'control: a frame pumps');
+  clock.wall += STALE; // iOS froze it in the background: no beat
+  assert.ok(b.claim(), 'a relaunched page claims the free record (2.3b panel)');
+  const sent = k.net.sent.length;
+  k.net.push(peer('pos', { phase: 'run', distance: 100, level: 1 }, k.net.clock.now));
+  k.net.clock.now += 16;
+  k.s.update();
+  assert.equal(pumps.n, pumped, 'nothing pumped');
+  assert.equal(k.net.sent.length, sent, 'nothing sent');
+  assert.equal(closes.n, 1, 'the transport closed');
+  assert.deepEqual(k.lobby.calls.filter((c) => c[0] === 'leave'), [], 'the room is not left: the race goes on in the other page');
+  assert.equal(b.get()?.owner, 'tabB', 'the record is the new owner\'s, untouched');
+  assert.equal(k.s.match.status, 'left');
+  assert.deepEqual(k.ops.filter((o) => o[0] === 'stop' || o[0] === 'start'), [['stop', 'Play'], ['start', 'Play', { player: 1, match: null }]], 'back to the ready screen');
+  assert.equal(k.s.registry.get('raceSteppedAside'), true, 'its 🌐 window opens with the line (Play.openPendingRace)');
+  k.s.update();
+  k.s.beatRecord();
+  assert.equal(closes.n, 1, 'once');
+  assert.equal(b.get()?.owner, 'tabB');
+});
+
+test('2.3b stepping aside also runs from the wake (visibilitychange) and from the beat, before the pause machine sends anything', () => {
+  for (const how of ['wake', 'beat']) {
+    const { clock, a, b } = twoPages();
+    const k = raceScene({ store: a });
+    const { closes } = asideKit(k);
+    clock.wall += STALE;
+    b.claim();
+    const sent = k.net.sent.length;
+    if (how === 'wake') k.s.onWake();
+    else k.s.beatRecord();
+    assert.equal(closes.n, 1, how);
+    assert.equal(k.net.sent.length, sent, `${how}: no pause message went out`);
+    assert.equal(b.get()?.owner, 'tabB', how);
+  }
+  const { clock, a } = twoPages();
+  const k = raceScene({ store: a });
+  const { closes } = asideKit(k);
+  clock.wall += STALE;
+  k.s.onWake();
+  k.s.beatRecord();
+  assert.equal(closes.n, 0, 'control: frozen past staleMs but nobody took it: the race goes on');
+  assert.equal(a.get()?.beat, clock.wall, 'the beat again');
+});
+
+test('2.3b a reload keeps the owner (the same tab id): its record is still its own', () => {
+  const { clock, a, map } = twoPages();
+  raceScene({ store: a });
+  clock.wall += 1500;
+  const reloaded = createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => clock.wall, tab: 'tabA' });
+  assert.equal(reloaded.owner(), 'mine');
+  assert.equal(createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => clock.wall, tab: 'tabB' }).owner(), 'live', 'another page sees a live race');
+});
+
+/** Play with its storage on Maps, its window events caught. */
+function withPage(fn) {
+  const saved = { local: globalThis.localStorage, session: globalThis.sessionStorage, add: globalThis.addEventListener };
+  const local = new Map();
+  const session = new Map();
+  const on = {};
+  globalThis.localStorage = fakeStorage(local);
+  globalThis.sessionStorage = fakeStorage(session);
+  globalThis.addEventListener = (type, f) => ((on[type] ??= []).push(f));
+  try {
+    return fn({ local, session, on });
+  } finally {
+    globalThis.localStorage = saved.local;
+    globalThis.sessionStorage = saved.session;
+    if (saved.add === undefined) delete globalThis.addEventListener;
+    else globalThis.addEventListener = saved.add;
+  }
+}
+const rec2 = (fields) => ({ v: 2, code: '482913', round: 1, seat: 'host', pauseRound: 0, levels: { 1: START }, wall: Date.now(), owner: 'tabOther', beat: Date.now(), ...fields });
+
+test("2.3b Play's resume store: localStorage under the project's key, with this page's tab id from sessionStorage (one per page load), marked closed on pagehide and open again on pageshow", () => {
+  withPage(({ local, session, on }) => {
+    const p = playScene({ registry: registry(), onlineTestProject: () => false });
+    const st = p.raceResumeStore();
+    const tab = st.tab;
+    assert.match(tab, /^[A-Za-z0-9_-]{16}$/);
+    assert.equal(p.raceResumeStore().tab, tab, 'the same id for the page load');
+    st.set(rec2());
+    assert.equal(JSON.parse(local.get(LEADERBOARD.onlineResumeKey)).owner, tab, 'in localStorage, as this page\'s');
+    assert.deepEqual(JSON.parse(session.get(LEADERBOARD.onlineTabKey)), { id: tab, open: true });
+    on.pagehide.forEach((f) => f());
+    assert.equal(JSON.parse(session.get(LEADERBOARD.onlineTabKey)).open, false, 'pagehide: a reload keeps the id');
+    on.pageshow.forEach((f) => f());
+    assert.equal(JSON.parse(session.get(LEADERBOARD.onlineTabKey)).open, true);
+    const t = playScene({ registry: registry(), onlineTestProject: () => true });
+    t.raceResumeStore().set(rec2());
+    assert.ok(local.has(`${LEADERBOARD.onlineResumeKey}.test`), 'the test project\'s key');
+  });
+});
+
+test('2.3b openPendingRace: a record another page beats is not offered (the window stays shut) and is looked at once more after staleMs; a free one opens the window; a stepped-aside page opens it to say so', () => {
+  withPage(({ local }) => {
+    const timers = [];
+    const opened = [];
+    const p = playScene({ registry: registry(), onlineTestProject: () => false, match: null, state: 'ready', sys: { isActive: () => true }, time: { delayedCall: (ms, f) => timers.push({ ms, f }) } });
+    p.openVersusWindow = () => opened.push(1);
+    local.set(LEADERBOARD.onlineResumeKey, JSON.stringify(rec2()));
+    p.openPendingRace();
+    assert.deepEqual(timers.map((x) => x.ms), [STALE], 'live: one look again, staleMs on');
+    p.openPendingRace(); // Play restarts (a run ends): no second look
+    assert.equal(timers.length, 1);
+    local.set(LEADERBOARD.onlineResumeKey, JSON.stringify(rec2({ beat: Date.now() - STALE - 1 }))); // the other page died
+    timers.shift().f();
+    timers.splice(0).forEach((x) => x.f()); // the window opens on the next frame
+    assert.equal(opened.length, 1, 'free now: the window opens (and rejoins)');
+    const q = playScene({ registry: registry({ raceRejoinOffered: true, raceSteppedAside: true }), onlineTestProject: () => false, match: null, state: 'ready', sys: { isActive: () => true }, time: { delayedCall: (ms, f) => timers.push({ ms, f }) } });
+    q.openVersusWindow = () => opened.push(2);
+    local.set(LEADERBOARD.onlineResumeKey, JSON.stringify(rec2()));
+    q.openPendingRace();
+    timers.splice(0).forEach((x) => x.f());
+    assert.deepEqual(opened, [1, 2], 'stepped aside: the window opens on the live record, to say the race runs elsewhere');
+    assert.equal(q.registry.get('raceSteppedAside'), false, 'once');
+  });
+});
+
+// --- 2.5: the race's report (finish_match) -------------------------------------------------------
+
+/** A finished race on both sides, with an rpc and stats on the transport. */
+function reportScene({ seat = 'host', answer = { ok: true, data: { status: 'agreed', counted: true } } } = {}) {
+  const k = raceScene({ seat });
+  const rpcs = [];
+  k.net.rpc = async (fn, args) => {
+    rpcs.push([fn, args]);
+    return answer;
+  };
+  k.net.stats = () => ({ sent: 300, received: 290, rttMs: 41.6, junk: 1 });
+  Object.assign(k.s.match.slots[0], { ended: true, score: 412, deaths: 2, levelWins: 4, finalFirst: true });
+  Object.assign(k.s.match.slots[1], { ended: true, score: 377, deaths: 3, levelWins: 3, finalFirst: false });
+  k.s.feed.doneSent = () => true;
+  return { ...k, rpcs };
+}
+const flush = () => new Promise((res) => setImmediate(res));
+const textSink = () => {
+  const o = { text: '', color: null };
+  o.setText = (v) => ((o.text = v), o);
+  o.setColor = (c) => ((o.color = c), o);
+  o.setAlpha = () => o;
+  o.pulse = () => o;
+  return o;
+};
+
+test('2.5 the race over: both seats report it once, in seat order (host, guest), with the room code, round and this side\'s telemetry', async () => {
+  for (const seat of ['host', 'guest']) {
+    const { s, rpcs } = reportScene({ seat });
+    s.checkOver();
+    assert.equal(s.match.status, 'over');
+    s.reporter.tick();
+    await flush();
+    s.reporter.tick();
+    await flush();
+    assert.equal(rpcs.length, 1, `${seat}: one report`);
+    const [fn, args] = rpcs[0];
+    assert.equal(fn, 'finish_match');
+    assert.equal(args.p_code, '482913');
+    assert.equal(args.p_round, 1);
+    const me = { score: 412, deaths: 2, levelWins: 4, finalFirst: true };
+    const them = { score: 377, deaths: 3, levelWins: 3, finalFirst: false };
+    assert.deepEqual(args.p_result.slots, seat === 'host' ? [me, them] : [them, me], `${seat}: seat order`);
+    assert.deepEqual(args.p_result.stats, { sent: 300, received: 290, rttMs: 42, pauses: 0, pausedMs: 0 }, 'the transport\'s and the pause\'s numbers, rounded, nothing else');
+    assert.deepEqual(s.reporter.state(), { phase: 'done', status: 'agreed', counted: true, error: null });
+  }
+});
+
+test("2.7, AUD-110: the report's transport numbers are this race's own: counted from its start, kept through a restart inside the round (a re-fit, a rewind), started again by a rematch's round", async () => {
+  const k = reportScene();
+  let counts = { sent: 100, received: 90, retries: 1, rttMs: null };
+  k.net.stats = () => ({ ...counts });
+  const start = (data) => {
+    k.s.initRace(data);
+    k.s.match.status = 'playing';
+  };
+  start({ net: k.net, lobby: k.lobby, plan: k.s.plan }); // the race's start: the lobby already used the transport
+  counts = { ...counts, sent: 160, received: 150 };
+  k.s.fit.peer = () => null;
+  k.s.refitField();
+  start(restarts(k.ops).at(-1));
+  counts = { ...counts, sent: 220, received: 200 };
+  k.s.rewindTo(1, 'them');
+  start(restarts(k.ops).at(-1));
+  counts = { ...counts, sent: 400, received: 380, retries: 2, rttMs: 41.6 };
+  Object.assign(k.s.match.slots[0], { ended: true, score: 412 });
+  Object.assign(k.s.match.slots[1], { ended: true, score: 377 });
+  k.s.feed.doneSent = () => true;
+  k.s.checkOver();
+  k.s.reporter.tick();
+  await flush();
+  assert.deepEqual(k.rpcs.at(-1)[1].p_result.stats, { sent: 300, received: 290, retries: 1, rttMs: 42, pauses: 0, pausedMs: 0 }, 'round 1: from its start, through both restarts; the RTT as measured');
+  // The rematch: round 2 on the same transport.
+  k.lobby.state.room = { ...k.lobby.state.room, phase: 'playing', round: 2, seed: 6, startMs: GO + 200_000 };
+  k.s.restarting = false;
+  k.s.checkRematch();
+  const next = restarts(k.ops).at(-1);
+  assert.equal(next.plan.round, 2);
+  start(next);
+  counts = { ...counts, sent: 450, received: 420, retries: 2 };
+  Object.assign(k.s.match.slots[0], { ended: true, score: 50 });
+  Object.assign(k.s.match.slots[1], { ended: true, score: 40 });
+  k.s.feed.doneSent = () => true;
+  k.s.checkOver();
+  k.s.reporter.tick();
+  await flush();
+  assert.equal(k.rpcs.at(-1)[1].p_round, 2);
+  assert.deepEqual(k.rpcs.at(-1)[1].p_result.stats, { sent: 50, received: 40, retries: 0, rttMs: 42, pauses: 0, pausedMs: 0 }, 'round 2: only its own');
+});
+
+test('2.5 a race abandoned mid-way reports nothing (the server ends it), and a transport without rpc reports nothing', async () => {
+  const { s, rpcs } = reportScene();
+  s.onAbandoned('guest');
+  s.checkOver();
+  assert.equal(s.reporter, null);
+  assert.equal(rpcs.length, 0);
+  const bare = raceScene();
+  Object.assign(bare.s.match.slots[0], { ended: true });
+  Object.assign(bare.s.match.slots[1], { ended: true });
+  bare.s.feed.doneSent = () => true;
+  bare.s.checkOver();
+  assert.equal(bare.s.match.status, 'over');
+  assert.equal(bare.s.reporter, null);
+});
+
+test("2.5 the results panel's saved line follows the report: saving, then saved (green); the waiting line names the other player; left mid-race says so", async () => {
+  const { s } = reportScene({ answer: { ok: true, data: { status: 'playing', counted: false } } });
+  s.checkOver();
+  const saved = textSink();
+  s.result = { saved, status: textSink(), rematch: textSink(), shown: null, savedShown: null };
+  s.refreshResult();
+  assert.equal(saved.text, 'Saving the race…');
+  s.reporter.tick();
+  await flush();
+  s.refreshResult();
+  assert.equal(saved.text, "Saving: waiting for Jolly's game…");
+  s.reporter = { state: () => ({ phase: 'done', status: 'agreed', counted: true }) };
+  s.refreshResult();
+  assert.equal(saved.text, 'Saved to the 🏅 and 🏆 boards');
+  assert.equal(saved.color, '#7ee08a');
+  const left = reportScene();
+  left.s.onAbandoned('guest');
+  const line = textSink();
+  left.s.result = { saved: line, status: textSink(), rematch: textSink(), shown: null, savedShown: null };
+  left.s.refreshResult();
+  assert.equal(line.text, 'Not saved: the race was left before the end');
+});
+
+// --- 3.3: Add as a friend on the results panel (Preview G), and the status beat's stops -----------
+
+const PEER_JOLLY = 'ab'.repeat(16);
+
+/** overRace with 3.3's panel parts and an rpc on the transport: a saved race's report state, friend_list as given. */
+function friendRace(list = {}, { report = { phase: 'done', status: 'agreed', counted: true } } = {}) {
+  const k = overRace();
+  const { s, net } = k;
+  net.rpcs = [];
+  net.rpc = async (fn, args) => {
+    net.rpcs.push([fn, args]);
+    if (fn === 'friend_list') return { ok: true, data: list };
+    if (fn === 'online_history') return { ok: true, data: { recent: [{ name: 'Jolly', peer: PEER_JOLLY, at: 5 }, { name: 'Jolly', peer: null, at: 9 }] } };
+    if (fn === 'send_friend_request') return { ok: true, data: { ok: true, status: 'pending' } };
+    return { ok: true, data: null };
+  };
+  s.reporter = { tick() {}, state: () => report };
+  Object.assign(s.result, { saved: fakeText(), savedShown: null, friend: fakeButton(), friendBox: { id: 'friend', x: 360, y: 1006, width: 520, height: 52 }, friendLine: fakeText(), friendShown: null });
+  return k;
+}
+const settle = async () => {
+  for (let i = 0; i < 4; i += 1) await new Promise((r) => setTimeout(r, 0));
+};
+
+test('3.3 a saved race offers "Add <name> as a friend"; a tap after the lockout sends the ask by the race\'s handle and says it went', async () => {
+  const k = friendRace();
+  const { s, net, loop } = k;
+  s.refreshResult();
+  await settle();
+  s.refreshResult();
+  assert.deepEqual(net.rpcs.map((c) => c[0]).sort(), ['friend_list', 'online_history']);
+  assert.equal(s.result.friend.visible, true);
+  assert.equal(s.result.friend.label, 'Add Jolly as a friend');
+  loop.time = T.retryLockoutMs;
+  s.onPointer(tap(s.result.friendBox));
+  await settle();
+  s.refreshResult();
+  assert.deepEqual(net.rpcs.filter((c) => c[0] === 'send_friend_request').map((c) => c[1]), [{ p_peer: PEER_JOLLY }]);
+  assert.equal(s.result.friend.visible, false);
+  assert.equal(s.result.friendLine.text, 'Friend request sent to Jolly');
+  assert.equal(sentOf(net, 'rematch').length, 0, 'not a Rematch tap');
+});
+
+test('3.3 no offer before the race is saved (nothing read), nor for a blocked player; a friend already reads "<name> is your friend"', async () => {
+  const waiting = friendRace({}, { report: { phase: 'waiting', status: 'playing' } });
+  waiting.s.refreshResult();
+  await settle();
+  assert.equal(waiting.net.rpcs.length, 0);
+  assert.equal(waiting.s.result.friend.visible, false);
+  const blocked = friendRace({ blocked: [{ peer: PEER_JOLLY, name: 'Jolly' }] });
+  blocked.s.refreshResult();
+  await settle();
+  blocked.s.refreshResult();
+  assert.equal(blocked.s.result.friend.visible, false);
+  assert.equal(blocked.s.result.friendLine.text, '');
+  const friend = friendRace({ friends: [{ peer: PEER_JOLLY, name: 'Jolly' }] });
+  friend.s.refreshResult();
+  await settle();
+  friend.s.refreshResult();
+  assert.equal(friend.s.result.friend.visible, false);
+  assert.equal(friend.s.result.friendLine.text, 'Jolly is your friend');
+});
+
+test('3.3 Leave stops the page\'s status beat (friends see offline at once); stepping aside stops it quietly (the other page races on)', () => {
+  const stops = [];
+  const k = overRace();
+  k.half.onlineStatusBeatRef = { stop: (o) => stops.push(o?.quiet === true ? 'quiet' : 'offline') };
+  k.loop.time = 10_000;
+  k.s.onPointer(tap(k.s.result.boxes.home));
+  assert.deepEqual(stops, ['offline']);
+  const a = drawnRace();
+  a.half.onlineStatusBeatRef = { stop: (o) => stops.push(o?.quiet === true ? 'quiet' : 'offline') };
+  a.s.stepAside();
+  assert.deepEqual(stops, ['offline', 'quiet']);
+});
+
+// --- 3.8: a device waiting to pair after the narrowed pairing (item 61, Preview H accepted 22 Nov) -----
+
+/** friendRace with its transport answering `answers[fn]` first (the rest as friendRace's). */
+function friendRaceWith(answers, list = {}) {
+  const k = friendRace(list);
+  const inner = k.net.rpc;
+  k.net.rpc = async (fn, args) => {
+    if (fn in answers) {
+      k.net.rpcs.push([fn, args]);
+      return answers[fn];
+    }
+    return inner(fn, args);
+  };
+  return k;
+}
+const NOT_TRUSTED = { ok: false, error: 'not trusted' };
+const PAIR_LINE = 'Pair this device to add friends from your next races';
+
+test('3.8 a waiting device: its saved race shows no Add button but "Pair this device to add friends from your next races" (AUD-117: never an empty line)', async () => {
+  const { s } = friendRaceWith({ friend_list: NOT_TRUSTED, online_history: NOT_TRUSTED });
+  s.refreshResult();
+  await settle();
+  s.refreshResult();
+  assert.equal(s.result.friend.visible, false);
+  assert.equal(s.result.friendLine.text, PAIR_LINE);
+  for (const loc of ['en', 'zh-Hans']) assert.ok(catalogFor(loc).friendResultPair, `${loc} friendResultPair`);
+});
+
+test('3.8 a paired device whose opponent raced from a waiting device: the race has no handle, so no button and no line', async () => {
+  const { s } = friendRaceWith({ online_history: { ok: true, data: { recent: [{ name: 'Jolly', peer: null, at: 9 }] } } });
+  s.refreshResult();
+  await settle();
+  s.refreshResult();
+  assert.equal(s.result.friend.visible, false);
+  assert.equal(s.result.friendLine.text, '');
+});
+
+test('AUD-117 every refused ask on the results panel says something: not eligible, rate limited, not trusted (the pair line), offline', async () => {
+  const cases = [
+    [{ ok: true, data: { ok: false, error: 'not eligible' } }, null],
+    [{ ok: true, data: { ok: false, error: 'rate limited' } }, null],
+    [NOT_TRUSTED, PAIR_LINE],
+    [{ ok: false, error: 'offline' }, null],
+  ];
+  for (const [answer, want] of cases) {
+    const { s } = friendRaceWith({ send_friend_request: answer });
+    s.refreshResult();
+    await settle();
+    s.refreshResult();
+    assert.equal(s.result.friend.visible, true, 'the offer shows');
+    s.tapAddFriend();
+    await settle();
+    s.refreshResult();
+    const label = JSON.stringify(answer);
+    assert.equal(s.result.friend.visible, false, `${label}: the button goes`);
+    assert.notEqual(s.result.friendLine.text, '', `${label}: a line`);
+    assert.doesNotMatch(s.result.friendLine.text, /undefined/, label);
+    if (want) assert.equal(s.result.friendLine.text, want, label);
+  }
+});
+
+test("T4-review AUD-127: Leave closes the transport through the race's own lease (taken at initRace), so a 🌐 window opened just after keeps it", async () => {
+  const { s, net } = raceScene();
+  const started = [];
+  s.scene.start = (k) => started.push(k);
+  s.scale = { setGameSize() {} };
+  assert.equal(net.leases, 1, 'the race took a lease');
+  s.leave();
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(net.released, [1], 'released, which closes only if no later lease is out');
+  assert.equal(net.closes, 0, 'never close() past the lease');
+  assert.deepEqual(started, ['Play']);
+});
+
+test('item 70, N3: pauseOverBreak is true only for a level break under the shared pause; the pause and its resume redraw the shop pill', () => {
+  const { s, half } = pauseRig();
+  assert.equal(s.pauseOverBreak(), false, 'racing: no');
+  half.levelBreak = true;
+  half.state = 'paused';
+  assert.equal(s.pauseOverBreak(), false, 'a level break with no pause: no');
+  const before = called(half, 'shop');
+  s.setPaused(true);
+  assert.equal(s.pauseOverBreak(), true, 'the pause over the break: yes');
+  assert.ok(called(half, 'shop') > before, 'the pause redraws the 💰 pill (it hides)');
 });

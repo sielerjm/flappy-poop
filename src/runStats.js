@@ -1,5 +1,5 @@
 // One run's summary, as numbers (plan 30): Play feeds it while a single-player or Daily run flies,
-// and end() hands back the row submit_runs stores (db/schema.sql run_row_problem says what a row may
+// or a split-screen race's half (plan 39, 2.8: mode 'race'), and end() hands back the row submit_runs stores (db/schema.sql run_row_problem says what a row may
 // hold; RUN_DATA_KEYS is its run_data_keys(), and a test keeps the two the same). Nothing here
 // decides anything about a run. Everything is preallocated: no call made per frame, flap or press
 // allocates, so the stats cost a run nothing it can feel. Never throws on odd input (a bad number
@@ -84,11 +84,11 @@ export function createRunStats() {
   const lv = () => Math.min(Math.max(c.level, 1), LEVELS) - 1;
 
   return {
-    /** Start a run. info: { runId, session, mode ('single' | 'daily'), day, toilet, level, version, now, wall, webdriver, touch, fieldW }. */
+    /** Start a run. info: { runId, session, mode ('single' | 'daily' | 'race'; anything else is 'single'), day (a Daily's only), toilet, level, version, now, wall, webdriver, touch, fieldW }. */
     begin(info = {}) {
       for (const a of [lvPipes, lvFalls, lvClose, lvDeaths, lvMs, lipHist, gapHist, taps, breaks, lip, gap, hold, frameW, presses]) a.fill(0);
       Object.assign(c, {
-        active: true, runId: String(info.runId ?? ''), session: String(info.session ?? ''), mode: info.mode === 'daily' ? 'daily' : 'single',
+        active: true, runId: String(info.runId ?? ''), session: String(info.session ?? ''), mode: info.mode === 'daily' || info.mode === 'race' ? info.mode : 'single',
         day: info.mode === 'daily' ? info.day ?? null : null, toilet: Boolean(info.toilet), version: String(info.version ?? ''),
         startNow: finite(info.now) ? info.now : 0, startWall: finite(info.wall) ? info.wall : 0, level: Number.isInteger(info.level) ? info.level : 1,
         frameMs: 0, distance: 0, pipes: 0, falls: 0, closeCalls: 0, deaths: 0,

@@ -91,6 +91,19 @@ const ONLINE_FNS = {
   online_can: 'text, boolean',
   finish_match: 'text, integer, jsonb',
   online_history: '',
+  friend_list: '',
+  send_friend_request: 'text',
+  respond_friend_request: 'text, boolean',
+  remove_friend: 'text',
+  block_user: 'text',
+  unblock_user: 'text',
+  online_beat: 'boolean',
+  friend_statuses: '',
+  send_invite: 'text',
+  invite_list: '',
+  accept_invite: 'uuid',
+  decline_invite: 'uuid',
+  cancel_invite: 'uuid',
 };
 
 // ---------------------------------------------------------------------------
@@ -621,6 +634,7 @@ test('answer_guest: the host accepts (ready), or declines and the room moves to 
   await assert.rejects(call(db, host, 'answer_guest', [code, true]), /no guest/);
   await call(db, guest, 'join_room', [code]);
   await assert.rejects(call(db, guest, 'answer_guest', [code, true]), /no room/, 'only the host answers');
+  await db.query("update public.rooms set created_at = now() - interval '3 seconds'"); // a human learns the code and knocks (5.2b: a decline at once is a loop)
   const declined = await call(db, host, 'answer_guest', [code, false]);
   assert.equal(declined.ok, true);
   assert.equal(declined.status, 'open');
@@ -785,7 +799,10 @@ test('room:<code> is read and written by its two seated devices only: broadcast 
   assert.equal(await canRead(db, outsider.uid, topic), false);
   assert.equal(await canWrite(db, outsider.uid, topic), false);
   assert.equal(await canRead(db, await addUser(db), topic), false, 'a device that is not linked');
-  for (const t of [`room:${code}x`, `room:0${code.slice(1)}`, `user:${host.player}`, 'lab:anything', '']) {
+  const own = (await db.query('select public.online_user_topic($1) as t', [host.player])).rows[0].t;
+  assert.equal(await canRead(db, host.uid, own), true, 'its own player\'s topic: invites (4.1, tests/schemaInvites.test.js)');
+  assert.equal(await canWrite(db, host.uid, own), false, 'which only the server writes');
+  for (const t of [`room:${code}x`, `room:0${code.slice(1)}`, `user:${host.player}`, `user:${guest.player}`, 'lab:anything', '']) {
     assert.equal(await canRead(db, host.uid, t), false, `nobody reads ${t || 'no topic'}`);
     assert.equal(await canWrite(db, host.uid, t), false, `nobody writes ${t || 'no topic'}`);
   }
@@ -798,6 +815,7 @@ test('the channel admits nobody once the seat is gone: a declined guest, a secon
   const guest = await device(db, 'Qg');
   const { code } = await call(db, host, 'create_room');
   await call(db, guest, 'join_room', [code]);
+  await db.query("update public.rooms set created_at = now() - interval '3 seconds'"); // a human learns the code and knocks (5.2b: a decline at once is a loop)
   const moved = await call(db, host, 'answer_guest', [code, false]);
   assert.equal(await canRead(db, guest.uid, `room:${code}`), false, 'the old topic');
   assert.equal(await canRead(db, guest.uid, `room:${moved.code}`), false, 'the new topic');
@@ -892,7 +910,11 @@ async function both(db, r, round, slots) {
   await finish(db, r.host, r.code, round, slots);
   return finish(db, r.guest, r.code, round, slots);
 }
-const history = (db, d) => call(db, d, 'online_history');
+/** online_history less 3.1's peer handles (tests/schemaFriends.test.js tests those). */
+const history = (db, d) => call(db, d, 'online_history').then((h) => {
+  const drop = ({ peer: _p, ...rest }) => rest;
+  return { rival: h.rival && drop(h.rival), recent: h.recent.map(drop) };
+});
 
 test('the race limits follow the game: the fastest course a race can fly holds a capped score, and is well past the shortest race', () => {
   const pipes = levelEnd(T.levels.lastLevel, T);
@@ -986,7 +1008,7 @@ test('finish_match refuses a race reported sooner after GO than any race lasts, 
   assert.equal((await both(db, fair, 1, [slot(bound(secs) - 5), slot(10)])).status, 'agreed', 'just under the bound');
 });
 
-test('finish_match: only a trusted device seated in that race may report; anon may not; a malformed result raises', async () => {
+test('finish_match: only a device seated in that race may report, a waiting one too (item 61); anon may not; a malformed result raises', async () => {
   const db = await freshDb();
   const host = await device(db, 'Th');
   const owner = await device(db, 'Tg'); // the guest player's trusted device, not racing
@@ -998,7 +1020,7 @@ test('finish_match: only a trusted device seated in that race may report; anon m
   await call(db, host, 'set_room_status', [code, 'playing']);
   await goAgo(db, code, 400);
   const ok = JSON.stringify({ slots: [slot(1), slot(2)] });
-  await assert.rejects(call(db, pending, 'finish_match', [code, 1, ok]), /not trusted/);
+  assert.deepEqual(await call(db, pending, 'finish_match', [code, 1, ok]), { ok: true, status: 'playing', counted: false }, 'a waiting device reports (item 61)');
   await assert.rejects(call(db, owner, 'finish_match', [code, 1, ok]), /no match/, 'the player\'s other device is not in the race');
   await assert.rejects(call(db, host, 'finish_match', [code, 2, ok]), /no match/, 'another round');
   await assert.rejects(call(db, host, 'finish_match', ['999999', 1, ok]), /no match/);
@@ -1023,7 +1045,7 @@ test('finish_match: only a trusted device seated in that race may report; anon m
   }
   await assert.rejects(call(db, host, 'finish_match', [code, 1, null]), /bad result/, 'null');
   const [m] = await matchesOf(db, code);
-  assert.deepEqual([m.status, m.host_report, m.guest_report], ['playing', null, null], 'nothing stored');
+  assert.deepEqual([m.status, m.host_report, m.guest_report], ['playing', null, [slot(1), slot(2)]], 'nothing stored from a malformed result; the waiting guest\'s report stands');
 });
 
 test('what counts: never a race of one player against itself, nor past the caps per pair and per player in 24 hours', async () => {
@@ -1420,4 +1442,212 @@ test('a fourth waiting device takes the place of the waiting device seen longest
   await race(late, 'WtH1');
   await race(next, 'WtH2');
   await assert.rejects(link(db, await addUser(db), owner.player, 'Wt'), /too many devices waiting/, 'all three waiting devices are racing');
+});
+
+// ---------------------------------------------------------------------------
+// 3.7 (item 61): pairing guards only what a stolen id would expose of other people, so a waiting
+// device's race is saved like any other; each seat's trust is kept as its report landed.
+
+/** A host's ready room with a waiting (pending) device of `owner`'s player as its guest: the room, on for `secs` seconds. */
+async function racingWaiting(db, h, o, secs = 400) {
+  const host = await device(db, h);
+  const owner = await device(db, o);
+  const uid = await addUser(db);
+  assert.equal((await link(db, uid, owner.player, o)).trusted, false, 'the guest device waits to be paired');
+  const guest = { uid, player: owner.player, name: o };
+  const { code } = await call(db, host, 'create_room');
+  await call(db, guest, 'join_room', [code]);
+  await call(db, host, 'answer_guest', [code, true]);
+  await call(db, host, 'set_room_status', [code, 'playing']);
+  await goAgo(db, code, secs);
+  return { host, guest, owner, code, round: 1 };
+}
+const seatTrust = (m) => [m.host_trusted, m.guest_trusted];
+
+test('a waiting device\'s race is saved like any other: agreed, counted, on 🏅 and 🏆 under its player', async () => {
+  const db = await freshDb();
+  const r = await racingWaiting(db, 'Wh', 'Wo');
+  assert.deepEqual(await finish(db, r.guest, r.code, 1, [slot(40), slot(70)]), { ok: true, status: 'playing', counted: false });
+  assert.deepEqual(await finish(db, r.host, r.code, 1, [slot(40), slot(70)]), { ok: true, status: 'agreed', counted: true });
+  const [m] = await matchesOf(db, r.code);
+  assert.deepEqual([m.status, m.winner_seat, m.counted], ['agreed', 'guest', true]);
+  const t = await tstats(db, r.owner.player);
+  assert.deepEqual([t.gold, t.silver, t.events, t.best_score], [1, 0, 1, 70], 'the waiting device\'s player has the 🏅 row');
+  assert.deepEqual((await boardRows(db, r.owner.player)).map((x) => [x.name, x.score]), [['Wo', 70]], 'and the 🏆 post');
+  assert.deepEqual((await history(db, r.owner)).recent.map((x) => [x.name, x.mine, x.theirs]), [['Wh', 70, 40]], 'the player\'s paired device sees the race');
+  assert.deepEqual((await history(db, r.owner)).rival, { name: 'Wh', meetings: 1, losses: 0 }, 'and counts it on the rival line');
+  await assert.rejects(call(db, r.guest, 'online_history'), /not trusted/, 'the history stays for paired devices');
+});
+
+test('each seat\'s trust is kept as its report landed: a pairing or a demotion after it changes nothing, nor does a resend', async () => {
+  const db = await freshDb();
+  const r = await racingWaiting(db, 'Ph', 'Po');
+  let [m] = await matchesOf(db, r.code);
+  assert.deepEqual(seatTrust(m), [null, null], 'unknown until each seat reports');
+  await finish(db, r.host, r.code, 1, [slot(5), slot(6)]);
+  [m] = await matchesOf(db, r.code);
+  assert.deepEqual(seatTrust(m), [true, null], 'the host\'s report, from a paired device');
+  await db.query('update public.online_players set trusted = false where uid = $1', [r.host.uid]); // demoted after its report
+  await finish(db, r.guest, r.code, 1, [slot(5), slot(6)]);
+  [m] = await matchesOf(db, r.code);
+  assert.deepEqual([m.status, ...seatTrust(m)], ['agreed', true, false], 'the guest\'s, from a waiting one');
+  await call(db, r.guest, 'online_pair', [await call(db, r.owner, 'online_pair_code')]);
+  assert.equal((await rowOf(db, r.guest.uid)).trusted, true, 'paired since');
+  assert.deepEqual(await finish(db, r.guest, r.code, 1, [slot(5), slot(6)]), { ok: true, status: 'agreed', counted: true }, 'a resend answers the same');
+  [m] = await matchesOf(db, r.code);
+  assert.deepEqual(seatTrust(m), [true, false], 'and changes nothing');
+  // A waiting device that hosts: its seat is the host's.
+  const owner = await device(db, 'Hw');
+  const hostW = await addUser(db);
+  assert.equal((await link(db, hostW, owner.player, 'Hw')).trusted, false);
+  const guestP = await device(db, 'Hg');
+  const { code } = await call(db, hostW, 'create_room');
+  await call(db, guestP, 'join_room', [code]);
+  await call(db, hostW, 'answer_guest', [code, true]);
+  await call(db, hostW, 'set_room_status', [code, 'playing']);
+  await goAgo(db, code, 400);
+  assert.equal((await both(db, { host: hostW, guest: guestP, code }, 1, [slot(7), slot(8)])).status, 'agreed');
+  assert.deepEqual(seatTrust((await matchesOf(db, code))[0]), [false, true]);
+  // A race refused at a waiting seat's report records it all the same.
+  const soon = await racingWaiting(db, 'Sh2', 'So2', constant('c_min_race_s') - 5);
+  assert.equal((await finish(db, soon.guest, soon.code, 1, [slot(1), slot(1)])).status, 'refused');
+  assert.deepEqual(seatTrust((await matchesOf(db, soon.code))[0]), [null, false]);
+});
+
+test('a waiting device\'s report keeps every other check: too soon or over the score bound refuses, its player\'s other device is not in the race, and the caps count it', async () => {
+  const db = await freshDb();
+  const minS = constant('c_min_race_s');
+  const bound = (secs) => constant('c_score_base') + constant('c_score_rate') * secs;
+  const early = await racingWaiting(db, 'Eh2', 'Eo2', minS - 5);
+  assert.deepEqual(await finish(db, early.guest, early.code, 1, [slot(1), slot(1)]), { ok: true, status: 'refused', counted: false }, `under ${minS} s`);
+  const high = await racingWaiting(db, 'Hh2', 'Ho2', minS + 5);
+  assert.equal((await finish(db, high.guest, high.code, 1, [slot(1), slot(bound(minS + 5) + 5)])).status, 'refused', 'a score the time cannot hold');
+  await assert.rejects(finish(db, high.owner, high.code, 1, [slot(1), slot(1)]), /no match/, 'the paired device of that player did not sit in the race');
+  // The pair cap: the same two players' counted races, whichever devices they raced from.
+  const r = await racingWaiting(db, 'Ch2', 'Co2');
+  const cap = constant('c_pair_day');
+  for (let i = 0; i < cap; i += 1) {
+    await db.query(`insert into public.matches (room_code, round, seed, started_at, host_player, guest_player, status, counted, finished_at, host_trusted, guest_trusted)
+      values ('123456', 1, 1, now() - interval '1 hour', $1, $2, 'agreed', true, now() - interval '1 minute', true, true)`, [r.host.player, r.owner.player]);
+  }
+  assert.deepEqual(await both(db, r, 1, [slot(3), slot(4)]), { ok: true, status: 'agreed', counted: false }, `past ${cap} a pair in a day`);
+});
+
+// ---------------------------------------------------------------------------
+// 5.2b: item 68's server pacing (AUD-136 to AUD-138) and the definer rule (AUD-141).
+
+test('5.2b AUD-136: a pair looping join and decline is paced: a decline within 2 s of its code\'s minting is refused, and seated joins stop at c_device_oks a device and c_ip_oks an IP in 10 minutes', async () => {
+  const db = await freshDb();
+  const host = await device(db, 'LoopH');
+  const guest = await device(db, 'LoopG');
+  let { code } = await call(db, host, 'create_room');
+  assert.equal((await call(db, guest, 'join_room', [code])).ok, true);
+  await assert.rejects(call(db, host, 'answer_guest', [code, false]), /rate limited/, 'a decline at once: nobody could have learnt the code and knocked');
+  assert.equal((await room(db, code)).status, 'asked', 'nothing changed');
+  const sentBefore = (await roomMsgs(db, code)).length;
+  const oks = constant('c_device_oks');
+  let joined = 1;
+  for (let i = 0; i < 2 * oks; i += 1) {
+    await db.query("update public.rooms set created_at = now() - interval '3 seconds'");
+    ({ code } = await call(db, host, 'answer_guest', [code, false]));
+    const j = await call(db, guest, 'join_room', [code]);
+    if (!j.ok) {
+      assert.equal(j.error, 'rate limited');
+      break;
+    }
+    joined += 1;
+  }
+  assert.equal(joined, oks, `${oks} seated joins from one device, then 'rate limited'`);
+  assert.equal(sentBefore, 1, 'the guest message of the first join');
+  assert.equal(await db.query('select count(*)::int n from public.join_attempts where not ok').then((r) => r.rows[0].n), 0, 'the refused join spent no failed try');
+  // An IP: other devices behind it share its count (a school's wifi has room for c_ip_oks).
+  const ip = IP('198.51.100.7');
+  const g2 = await device(db, 'IpG');
+  await call(db, g2, 'join_room', ['999999'], { headers: ip }); // a miss: its row carries the IP's hash
+  const { ip_hash: hash } = (await db.query('select ip_hash from public.join_attempts where uid = $1', [g2.uid])).rows[0];
+  await db.query('insert into public.join_attempts (uid, ip_hash, ok) select gen_random_uuid(), $1, true from generate_series(1, $2)', [hash, constant('c_ip_oks')]);
+  const h3 = await device(db, 'IpH');
+  const { code: c3 } = await call(db, h3, 'create_room');
+  assert.deepEqual(await call(db, g2, 'join_room', [c3], { headers: ip }), { ok: false, error: 'rate limited' });
+  assert.equal((await call(db, g2, 'join_room', [c3], { headers: IP('203.0.113.9') })).ok, true, 'another IP joins');
+});
+
+test('5.2b AUD-137: a host device mints at most one race a minute across rooms; races nobody sees go after 30 days, agreed ones stay', async () => {
+  const db = await freshDb();
+  const r = await readyRoom(db, 'MintH', 'MintG');
+  await call(db, r.host, 'set_room_status', [r.code, 'playing']);
+  await call(db, r.host, 'leave_room', [r.code]);
+  await db.query("update public.rooms set created_at = now() - interval '3 seconds'");
+  const { code } = await call(db, r.host, 'create_room');
+  await call(db, r.guest, 'join_room', [code]);
+  await call(db, r.host, 'answer_guest', [code, true]);
+  await assert.rejects(call(db, r.host, 'set_room_status', [code, 'playing']), /rate limited/, 'a new room is no way round the minute');
+  await db.query("update public.matches set started_at = now() - interval '61 seconds'");
+  assert.equal((await call(db, r.host, 'set_room_status', [code, 'playing'])).status, 'playing', 'a minute after the last GO');
+  // One race of each kind, then 31 days on: only the agreed one is anyone's history.
+  const kinds = [];
+  for (const [i, status] of ['agreed', 'refused', 'disputed', 'abandoned'].entries()) {
+    const q = await racing(db, `KindH${i}`, `KindG${i}`);
+    if (status === 'agreed') await both(db, q, 1, [slot(3), slot(4)]);
+    else await finish(db, q.host, q.code, 1, [slot(0), slot(0)]);
+    kinds.push(q.code);
+  }
+  await db.query("update public.matches m set status = x.s from (values ($1, 'refused'), ($2, 'disputed'), ($3, 'abandoned')) as x(code, s) where m.room_code = x.code", kinds.slice(1));
+  assert.deepEqual((await db.query("select status from public.matches where room_code = any($1) order by status", [kinds])).rows.map((x) => x.status), ['abandoned', 'agreed', 'disputed', 'refused']);
+  await db.query("update public.matches set created_at = now() - interval '31 days', started_at = now() - interval '31 days', finished_at = now() - interval '31 days' where room_code = any($1)", [kinds]);
+  const fresh = await racing(db, 'FreshH', 'FreshG');
+  await finish(db, fresh.host, fresh.code, 1, [slot(0), slot(0)]);
+  await db.query("update public.matches set status = 'refused', created_at = now() - interval '29 days' where room_code = $1", [fresh.code]);
+  await call(db, await device(db, 'Later'), 'create_room'); // housekeeping runs
+  assert.deepEqual((await db.query("select status from public.matches where room_code = any($1)", [kinds])).rows.map((x) => x.status), ['agreed'], 'the agreed race stays');
+  assert.equal((await matchesOf(db, fresh.code)).length, 1, 'a hidden race 29 days old stays');
+});
+
+test('5.2b AUD-138: a device links at most c_links players it was not linked to an hour ("rate limited", no trust row left); its own player again any time; an hour on it may again', async () => {
+  const db = await freshDb();
+  const uid = await addUser(db);
+  const max = constant('c_links');
+  for (let i = 0; i < max; i += 1) assert.equal((await link(db, uid, id(`Fake${i}`), `F${i}`)).trusted, true);
+  await assert.rejects(link(db, uid, id('FakeX'), 'FakeX'), /rate limited/);
+  const trustRows = () => db.query('select count(*)::int n from public.online_trust').then((r) => r.rows[0].n);
+  assert.equal(await trustRows(), max, 'the refused link left no trust row');
+  assert.equal((await link(db, uid, id(`Fake${max - 1}`), `F${max - 1}`)).trusted, true, 'its own player again (every 🌐 entry) is never paced');
+  const other = await addUser(db);
+  assert.equal((await link(db, other, id('FakeX'), 'FakeX')).trusted, true, 'another device is not this one\'s count');
+  await db.query("update public.online_links set at = now() - interval '61 minutes' where uid = $1", [uid]);
+  assert.equal((await link(db, uid, id('FakeY'), 'FakeY')).trusted, true, 'an hour on');
+});
+
+test('5.2b AUD-141: every online function is security definer with an empty search_path (the header\'s rule; server_now too, AUD-102)', async () => {
+  const db = await freshDb();
+  const names = Object.keys(ONLINE_FNS);
+  const rows = (await db.query(`select p.proname, p.prosecdef, p.proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = any($1)`, [names])).rows;
+  assert.deepEqual([...new Set(rows.map((x) => x.proname))].sort(), [...names].sort(), 'every one is there');
+  for (const x of rows) {
+    assert.equal(x.prosecdef, true, `${x.proname} is security definer`);
+    assert.ok((x.proconfig ?? []).includes('search_path=""'), `${x.proname}: ${JSON.stringify(x.proconfig)}`);
+  }
+  await assert.rejects(call(db, null, 'server_now'), /not signed in/, 'server_now checks the caller first, as the rest do');
+});
+
+test('5.2b AUD-140: the live check\'s teardown SQL removes its tagged users and its throwaway players\' races, first trusts and names, and nothing of anyone else\'s', async () => {
+  const { TEARDOWN_SQL } = await import('../tools/online_live_check.mjs');
+  const db = await freshDb();
+  const check = await racing(db, 'chk39H', 'chk39G'); // ids 'chk39H…', as the check's playerId() makes them
+  await finish(db, check.host, check.code, 1, [slot(0), slot(0)]);
+  const real = await racing(db, 'RealH', 'RealG');
+  await both(db, real, 1, [slot(3), slot(4)]);
+  await db.query(`update auth.users set raw_user_meta_data = '{"online_check":"39"}' where id = any($1)`, [[check.host.uid, check.guest.uid]]);
+  const count = (table, col, like) => db.query(`select count(*)::int n from public.${table} where ${col} like $1`, [like]).then((r) => r.rows[0].n);
+  assert.ok((await count('online_trust', 'player_id', 'chk39%')) === 2 && (await count('online_profiles', 'player_id', 'chk39%')) === 2 && (await count('matches', 'host_player', 'chk39%')) === 1, 'the check\'s rows are there');
+  await db.exec(TEARDOWN_SQL);
+  for (const [table, col] of [['online_trust', 'player_id'], ['online_profiles', 'player_id'], ['matches', 'host_player'], ['matches', 'guest_player']]) {
+    assert.equal(await count(table, col, 'chk39%'), 0, `no ${table} row of the check's players`);
+  }
+  assert.equal(await db.query("select count(*)::int n from auth.users where raw_user_meta_data ->> 'online_check' = '39'").then((r) => r.rows[0].n), 0);
+  assert.equal(await count('online_trust', 'player_id', 'Real%'), 2, 'everyone else\'s trust stays');
+  assert.equal(await count('online_profiles', 'player_id', 'Real%'), 2);
+  assert.equal((await matchesOf(db, real.code)).length, 1, 'and their race');
+  assert.ok(await userExists(db, real.host.uid));
 });

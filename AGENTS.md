@@ -214,8 +214,9 @@ the other player; a respawning half's clock stops with it). Chrome decisions in 
 resumes the match. The match ends once **both** have cleared the rectum (the first one out waits under
 "Made it out!" / "Waiting for P2…", `showEscapedBanner`); the result panel names the higher score
 (`raceOutcome`, below) on a `versus.resultPanelW` (820 px) panel with each player's 🏁 level wins and 💀
-count, and offers Continue | Bracket (the Tournament paragraph). A race records nothing: no best, no
-save-code score, no 🏆 leaderboard. `Versus.rematch()` (same devices, new seed) has no button any more:
+count, and offers Continue | Bracket (the Tournament paragraph). A race adds nothing to a best, the
+save-code score or the career, but it posts (plan 39, 2.5): a two-player tournament to 🏅 (the Tournament
+paragraph) and every split-screen race its linked racers' scores to 🏆 (`racePosts`, below). `Versus.rematch()` (same devices, new seed) has no button any more:
 the smoke restarts a match through it.
 
 **Tournament** (🏅, `src/tournament.js`, `src/tournamentNames.js`, `ui/tournamentPanel.js`; 2026-11-09,
@@ -229,7 +230,7 @@ count (− / +, new rows rolled as Guests, so Start is one tap) and a row per pl
 save is never read or written; one row per player id), a **Guest** (`rollGuestName`: AdjectiveNoun###,
 ≤ 16 code points, clean words) or **Use my player** (`claimHost`, once, needs a username); a player with a username opens the lobby already
 as row 1 (`tournamentPanel.js` makes it as that button does), else two Guests; the card's **?**
-opens the help card (`view: 'help'`, Got it back to the lobby), its ✕ / Esc / the pad's B leaves for
+opens the help card (`view: 'help'`, Got it back to the lobby; with 🌐 on it reads `onlineHowTitle` / `onlineHowBody`, how to invite and join first, then a line on tournaments, else `tournamentHowTitle` / `tournamentHowBody`; the online home shows **?** too, a room screen does not, since the help view holds the poll's re-render), its ✕ / Esc / the pad's B leaves for
 single player (a paste field closes first). The lobby rows outlive the panel (module state), so the next
 👥 session starts with the last players. **Start** draws a seeded World Cup bracket (`createTournament`
 → `buildBracket(players, order)`: 2, 4 or 8 slots, byes at most one per first-round pair on a fixed
@@ -278,19 +279,40 @@ Esc reaches the panel after a mouse open. With every session a tournament, `vers
 `versusDraw` and the `versusPlayer` fallback are reachable only in principle (a race always has a round,
 names and a `finalFirst` half); they stay as safe fallbacks. **The 🏅 medal board** (Release B, 2026-11-09): "Use my player"
 gives the host's player its id (`hostSave` → `ensureId`). When `onRace` records the Final, a tournament
-of `tournament.minPostPlayers` (3, submit_tournament's floor) or more with any linked player (`postable`)
+of `tournament.minPostPlayers` (2 since plan 39, 2.5; submit_tournament's floor) or more with any linked player (`postable`)
 is queued once (`queueFinished`: `tournamentPayload(tour, newId())` with the host device's id into
-`Play.tournamentQueue`, registry `posted` / `tournamentId`) and synced; a 2-player one is `posted: 'two'`
-(the podium says it is not saved), an all-guest one `'none'`. **Two players** (plan 39, 2.4b): the server
-now takes them too: `submit_tournament` accepts 2 players, who race a lone final, gold and silver (a
-draw earns none). The client's `minPostPlayers` stays 3 until 2.5, so the game does not send them yet.
+`Play.tournamentQueue`, registry `posted` / `tournamentId`) and synced; an all-guest one is `posted: 'none'`.
+**Two players** (plan 39, 2.4b, 2.5): `submit_tournament` accepts 2 players, who race a lone final, gold and
+silver (a draw earns none); the client's `minPostPlayers` is 2, so they post like any other tournament
+(`posted: 'two'` and `tournamentSaveTwo` are gone). **Race scores to 🏆** (2.5, Michael's call 8): every
+split-screen race queues each linked racer's score with that racer's half's run summary behind it (2.8: `racePosts(tour, matchId, slots, runs)` in
+src/tournament.js gives each entry its `run`; `Versus.continueTournament` hands `runs` beside the slots; `Play.queueRacePosts` queues the run first under the racer's id, `queueRaceRun`, then the post naming it by `runId`; tests/raceRun.test.js; see Run summaries below; `tournamentPanel.queueRacePosts` from `onRace`; `createRacePostQueue` in
+src/leaderboard.js over `LEADERBOARD.racePostsKey` 'flappyPoop.racePosts'; `Play.racePostQueue` is
+drained in `syncLeaderboard` right after the tournament queue through `Play.postRace` (2.7, AUD-106): under
+the board's current name for that player, read just before the post (`fetchBoardName` in src/leaderboard.js:
+the name, '' for no rows, null when the board cannot say, and then the post waits); the entry's name, or this
+device's for its own player, only for a player with no rows. `submitScore`'s reason 'refused' (the server's
+"bad …") and 'nameTaken' drop the entry; offline or rate limited keep it. tests/racePostName.test.js). The versus result panel names it in `versusBoardLine`.
+**Online reports** (2.5): at `checkOver` both devices send the race to `finish_match`
+(`raceReport` in src/onlineRace.js: seat order host, guest, whole numbers, telemetry =
+`raceNetStats(net.stats(), netBase)` + `pause.stats()` under finish_match's 13 keys (2.7, AUD-110: each
+transport counter less its value at the round's start, kept through a re-fit or rewind restart, taken again
+in a rematch's round; the RTT keys as measured, an unmeasured key left out); `createRaceReporter`: one call
+at a time, asks again every `TUNING.online.report.pollMs` while the answer is 'playing', `polls` times, then
+every `slowPollMs`, until `waitMs` (the other device's whole resend window, tied by a test, AUD-109), then 'late'; a lost answer is
+resent after each `retryMs`; 'no match' once; no 'pending' phase (3.8: the server no longer raises 'not trusted', 3.7, so a waiting device races by code and its races are saved and counted on the boards; an old 'not trusted' answer fails like any refusal; friends, 🏁 Recent races, 📱 Devices, history and status stay for paired devices); `reportLine` maps the state to the
+results panel's line). `OnlineRace.startReport` / `refreshResult` drive it; a race left mid-way
+(abandoned) is never reported. The 🌐 window's **🏁 Recent races** (beside 📱 Devices; paired devices only,
+not on the Profile) comes from `onlineAccount.races()` (`online_history`, `historyRows`; the
+`onlineAccountViews` 'races' view; "yesterday" for one day ago). 'online closed' is `onlineClosed` in the
+lobby's `ERROR_KEYS`. tests/onlineReport.test.js, tests/racePosts.test.js.
 **A counted online race** (`finish_match`, see the online schema) adds 🏅 gold / silver / event / best and
 a 🏆 post at the last level through `board_post` (`submit_score`'s post, now shared), backed by a
 server-made `run_log` row of mode `race`; no tournament receipt and no matchup, so online pairings stay
 off the public rival line. The podium's line (`#tour-saved`,
 `savedText`) follows the queue's outcome. Guests travel as `{ id: null, name: null }`.
 `Play.syncLeaderboard` drains the queue after the merges and before the no-username return. Every queue
-(runs, Daily, career, 📚 board, pilot answers, tournaments) also goes again when the browser fires `online`
+(runs, Daily, career, 📚 board, pilot answers, tournaments, split-screen race scores) also goes again when the browser fires `online`
 and when the page is shown after a hide of `LEADERBOARD.resyncHiddenMs` (30 s) or longer, not only at boot
 and game over (plan 35, 1.4): `createResync` (`src/logic.js`) lets one `syncLeaderboard` run at a time,
 a trigger during a send joins it, and it never rejects. `Play.resyncOnline` and `resyncVisibility` wire it
@@ -355,8 +377,7 @@ profile (no ids): single-player numbers (bestScore = the best score-board row), 
 biggest rival (self-races ignored), counters, achievements. The game claims, the server checks the
 id format and a quest's window (+2 days' grace): accepted risk ACC-001 like scores.
 
-**Run summaries** (plan 30): every single-player and Daily run (never a test run, an education run or
-a split-screen match half) keeps a summary, as numbers, in `src/runStats.js` (`createRunStats`: preallocated, no
+**Run summaries** (plan 30): every single-player and Daily run (never a test run or an education run) keeps a summary, as numbers, in `src/runStats.js` (`createRunStats`: preallocated, no
 allocation per frame, flap or press). Play feeds it through `statCall` (the first error switches it
 off for the rest of the run): `start` (begin), `update` (frame), `doFlap` (each flap, with what stood
 behind it: the module-private press stamp set by the input listeners through `withInput`, read with
@@ -374,6 +395,7 @@ or 🌞 post whose run is still queued after a paced send waits (`postWaits`, `w
 per racer of a counted online race (`online_count_race`, from the agreed numbers; it replaces a row a
 device wrote first under that run id). `post_must_hold`, `post_run`, `hold_run` and `release_run`
 treat `race` like `single`; `streak_days` still counts `single` only.
+**Race halves** (plan 39, 2.8): a split-screen race's half keeps a summary of mode `race` (`Play.runSummaryMode`; off the toilet), never an online race's half, a test run, an education run or a guest's half. `Play.endRun` closes it at the finish line (`endRunSummary`) onto its slot's `run`; `Play.queueRacePosts` queues each linked racer's run under that racer's id (`queueRaceRun`, kept in the run queue while its post waits: `runBehindUnposted`) and then the post naming it (`runId`, kept by `normalizeRacePost`). `syncLeaderboard` runs `drainRuns` once before the race post drain while any race post waits (`submit_runs` takes one batch per player per 5 s, so never twice); `postRace` waits for its run like a 🏆 post (`postWaits` 'r:<id>', up to `runWaitSyncs`). Each press counts in the half it belongs to: `onPointerDown` / `onPointerUp` (`localPointer`, the pointer's `downX`), `onFlapKey` / `onFlapKeyUp` (single player only), `versusInput` (a key group's flap key, a pad's A or RT), `onVersusKeyUp`, `onPadPress`.
 
 **Loading splash** (2026-11-12, v0.15.0, plan `.claude/plans/Archive/01-loading-screen.plan.md`): the page's front
 door on every load, phone and desktop. `index.html`'s `#splash` (cream, the bobbing `poop.png` inside a
@@ -389,7 +411,7 @@ square `crop`; the emoji if it fails), else the emoji; a note about something th
 that badge's glyph via `achievementById` (the hints include 🔋 battery saver / low power mode, for every
 device: plan 28, 4.7). Cards are dealt from a shuffled deck kept in `flappyPoop.splash`
 (`nextNote`: a feature this device never showed comes first; every card once per cycle; a reshuffle
-never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features; the newest are 📅🔥 day streaks (plan 36: reworded for streaks on every profile and dealt as NEW again under the id `streaksAll`, it was `streaks`), ❓ challenge questions, plan 34, then 📚 education, plan 28; the ❓ card leaves the pool with education). The player
+never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features; the newest are 🌐 online races (plan 39, `online`, 24 Nov: dealt first as NEW; it aged 👤 profile out), 📅🔥 day streaks (plan 36: reworded for streaks on every profile and dealt as NEW again under the id `streaksAll`, it was `streaks`), ❓ challenge questions, plan 34, then 📚 education, plan 28; the ❓ card leaves the pool with education). The player
 browses at any time (swipe or mouse drag, ‹ ›, ← →, the d-pad by its own `getGamepads` poll, since
 Phaser's pad plugin is bound only in Play); the first browse stops the `hintMs` auto-advance. Boot
 drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` hands
@@ -397,6 +419,8 @@ drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` ha
 stops in a hidden tab) Continue lights up and glows, and **Play starts only on its
 release** (click, Enter / Space up, the pad's A up), since Play's keydown-SPACE flap repeats while held
 and the pad plugin reports a held button. Any error in the splash removes it and starts the game.
+Held-key flaps stay in split screen and single player; an **online race drops a key's auto-repeat** (flap, Ready, P
+and Esc: Play's `onlineRepeat(event)`, plan 39 5.2b, AUD-149 / AUD-144), tests/raceRun.test.js, tests/runStamp.test.js.
 
 **Education mode** (📚, 2026-11-13, v0.16.1, plan `.claude/plans/21-education.plan.md`: the tester
 build, its playtest polish and Stage 3, "tester-complete"; the old plans 22 and 23 are merged into
@@ -931,6 +955,10 @@ src/
                             Play.onFieldResize() when the width would change (while a
                             race runs, OnlineRace.onFieldResize: it re-fits the canvas
                             around the same field, no pause),
+                            ?join=<code> (plan 39, 4.3) the same way (joinCodeFromSearch,
+                            withoutJoin) into the registry's pendingJoin, which
+                            Play.openPendingJoin opens in the 🌐 window on the first
+                            ready screen with no match;
                             ?invite=<code> read once (inviteFromSearch), taken out
                             of the address bar at once (withoutInvite,
                             history.replaceState) and handed to Play through the
@@ -964,6 +992,10 @@ src/
                             flappyPoop.onlineTrust (plan 39, 1.6a), onlineRaceKey =
                             flappyPoop.onlineRace (plan 39, 1.8: the room code of the
                             race this device is in, '.test' added on the test project),
+                            onlineResumeKey = flappyPoop.onlineResume (2.3: the
+                            resume record, localStorage since 2.3b, '.test' likewise),
+                            onlineTabKey = flappyPoop.onlineTab (2.3b: this page's
+                            tab id, sessionStorage, one key for both projects),
                             score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
@@ -1095,7 +1127,10 @@ src/
                             the tournament panel open: 'panel');
                             rollMystery(rng, t, draws) takes an optional draw table
                             (the versus catch-up); coins and the shop: BAND_ITEMS,
-                            MYSTERY_COINS, createEffects addCoins / spendCoins /
+                            MYSTERY_COINS, createEffects restoreLevel (2.3: back to a
+                            level's start as snapshot() kept it, the purse set where a
+                            revive's restore() adds; bag capped, no postbiotic without a
+                            probiotic, a running fart gone), addCoins / spendCoins /
                             coins, SHOP_ITEMS, buyBlocker / canBuy, shopButtonLayout
                             / shopButtonHit, bracketButtonLayout (the 🏅 pill under
                             the 💰 in a race's shared level break), shopLayout / shopHit, chromeIntent's
@@ -1319,7 +1354,29 @@ src/
                             transport and ?netsim); SERVER_EVENTS, verifiedRoomAction
                             (a server event name is a hint, confirmed with room_state)
                             and netsimProfile (?netsim, dev hosts only). Knobs in
-                            TUNING.online (clock, net, ...). tests/online.test.js.
+                            TUNING.online (clock, net, ...). 2.3: the `rewind` event
+                            { round, level, at } and the pause reason `rewind`; roomStep's
+                            `rejoin` action (room_state's answer for the race this device
+                            still sits in: only a playing race, this device's seat).
+                            4.2: roomStep's `invited` (accept_invite's answer: this device is the
+                            guest and the room is 'ready' at once, no code, no Let in) and
+                            `renew` (a Resend kept the host's open room: its changedAt moves).
+                            4.3: joinLink(code) (SHARE.url + ?join=<code>), joinCodeFromSearch
+                            (the first join parameter that holds a room code) and withoutJoin
+                            (the address without it, the rest of the query and the hash kept).
+                            tests/online.test.js.
+  onlineInvites.js          Online race (🌐, plan 39, 4.2) invites on the client, NO Phaser/DOM:
+                            inviteRow (a row taken only whole), inviteLeftMs, ringShare (the
+                            share of the span left) and mmss, each from the server's `sent_at`
+                            and `expires_at` alone: there is no client INVITE_TTL, so nothing
+                            drifts from what the server checks. incomingRows (invite_list's live
+                            incoming, one per friend), topicEvent (the topic's two events,
+                            `invite` and `invite_update`, parsed or dropped), inviteErrorKey
+                            (the error words) and createInvites({ rpc, now }): load() (the
+                            topic comes only from invite_list, never built from the save's id),
+                            onEvent, prune (expiry), count, accept and decline. Shown, read and
+                            subscribed only in online mode (the beat's rule).
+                            tests/onlineInvites.test.js.
   onlineNet.js              Online race (🌐, plan 39) transport for one page:
                             createOnlineNet(deps) and ONLINE_RPCS. Nothing loads until
                             signIn() / warm(); the only caller of loadSupabase(). Anonymous
@@ -1332,7 +1389,10 @@ src/
                             private channel room:<code> after a refresh; send() only
                             while joined; take() returns what arrived (peer, room,
                             presence, channel); error, cap and rejoin rules follow the
-                            0.3 spike. close() keeps the session, signOut() is local.
+                            0.3 spike. close() keeps the session, signOut() is local. close() counts
+                            calls: a first load or sign-in still out at a close starts no ticker,
+                            socket or clock (AUD-145). signIn({ create: false }) reuses a
+                            stored session only (Clear and Load; AUD-146).
                             ?netsim delays and drops received messages. Per-frame calls
                             are synchronous. Knobs in TUNING.online.net. Callers: the
                             sign-in side, src/onlineAccount.js, and the lobby,
@@ -1343,8 +1403,25 @@ src/
                             <code>` stored in this browser (encodeDevProject /
                             devProjectFrom; `=off` forgets it) under its own session and
                             trust keys (DEV_PROJECT_KEY). ONLINE_RPCS includes finish_match
-                            and online_history; the server's plain messages include
-                            'online closed', 'no match' and 'bad result'.
+                            and online_history, plus friend_list, send_friend_request,
+                            respond_friend_request, remove_friend, block_user and
+                            unblock_user (3.1), online_beat and friend_statuses (3.2), send_invite, invite_list,
+                            accept_invite, decline_invite and cancel_invite (4.1); the server's plain messages include
+                            'online closed', 'no match', 'bad result' and 'bad peer'.
+                            beacon(fn, args) (3.3): an online function as a keepalive POST to the Data API with
+                            the session's token, never awaited, false when nothing can send it; ONLINE_RPCS
+                            functions only. The token guard test's one exception (pagehide's online_beat(false)).
+                            It sends the token the client refreshed to (`session` follows TOKEN_REFRESHED) and
+                            nothing on an expired one (T3-review AUD-112).
+                            4.2: openTopic(topic) joins the player's own topic that invite_list names
+                            (private, no presence, no self; only 'user:' and 32 hex), queues
+                            { kind: 'user', event: 'invite' | 'invite_update' | 'joined' | 'closed' }
+                            (every join, a rejoin too, queues 'joined': the panel reads invite_list
+                            again); closeTopic() and topicState() ('none' / 'joining' / 'joined').
+                            close() closes it, and so does the race's hand-off.
+                            T4-review AUD-127: lease() (each 🌐 window at startOnline, each race at
+                            initRace takes one) returns a release that closes the transport only if no
+                            later lease was taken, so a window opened while leave_room answers keeps it.
                             tests/onlineNet.test.js, tests/onlineDevProject.test.js.
   onlineAccount.js          Online race (🌐, plan 39, 1.6a) the sign-in side on top of
                             createOnlineNet, NO Phaser/DOM: enter (sign in, link the
@@ -1352,7 +1429,10 @@ src/
                             remove, pairCode, pair and leave (unlink, then signOut()),
                             each as { ok, … } or { ok: false, errorKey } (an i18n key
                             the screens show; item 35's sign-in errors incl. rate
-                            limited). tests/onlineAccount.test.js.
+                            limited); races() (2.5: online_history → historyRows, the
+                            🏁 Recent races). leave() signs in with create: false, so a
+                            dead stored session is not replaced by a new user only to sign out.
+                            tests/onlineAccount.test.js.
   onlineLobby.js            Online race (🌐, plan 39, 1.6c) the lobby controller, NO
                             Phaser/DOM: createOnlineLobby({ net, name, width, onBothReady })
                             runs one room from Create / Join to both Ready over roomStep,
@@ -1364,7 +1444,10 @@ src/
                             polls poll(). roomItem(item) feeds a room item in; finish() and
                             rematch() are host only (set_room_status 'finished', then
                             'playing' again with a new seed, round + 1); start() shares
-                            its code with rematch. Item 46: createOnlineLobby({ memory })
+                            its code with rematch. A refused Start reads onlineErrTooSoon
+                            (the server's race-a-minute pacing), a paced link onlineLinkLimited.
+                            The join keypad (ui/tournamentPanel.js keypadKey) drops a repeated Enter (one join, AUD-142);
+                            digits and Backspace still repeat. Item 46: createOnlineLobby({ memory })
                             (get / set / clear of the race's room code, the panel's
                             raceMemory over LEADERBOARD.onlineRaceKey): remember() at the
                             hand-off, and a code still there at creation, or before a
@@ -1373,12 +1456,59 @@ src/
                             'no room', so an offline leave keeps it (AUD-096),
                             since a reload mid-race leaves the room 'playing' and the
                             server refuses a seated device a new room ('in a race', up to
-                            6 h; message onlineErrInRace). tests/onlineLobby.test.js.
+                            6 h; message onlineErrInRace). 2.3: createOnlineLobby({
+                            resume }) skips that leave on entry (the resume record
+                            is the race to rejoin; 2.3b: the panel's raceMemory hides the
+                            code while another page's record is live) and
+                            notice(key) puts one status line on the lobby (2.3b:
+                            `onlineRaceElsewhere`); rejoin(record) asks room_state:
+                            playing → the channel opens as this seat first
+                            (net.openRoom(code, { seat })) and only then roomStep's
+                            `rejoin` makes the room this seat's (the panel's poll never
+                            hands off a race whose join can still fail), then handOffRace's
+                            hand-off with a resume plan; a failed open leaves the lobby
+                            idle, removes the channel, keeps the record, leaves nothing
+                            (2.7, AUD-108); no room, finished or abandoned → { over }
+                            (code and record forgotten, "That race is over."); offline or
+                            a refused channel keeps both and never leaves the room.
+                            4.2: createOnlineLobby({ onUser }) hands the player's topic's items on to
+                            the panel; invite(peer, name) (the Friends row's Invite and Resend:
+                            send_invite makes the room or keeps the open one, 'renew'; only when
+                            canInvite() holds: no room or an open one we host), inviteUpdate (a
+                            friend's no shows 'declined', a cancel drops it, an accept reads
+                            room_state), acceptInvite(accept) (the 'invited' step, then the
+                            channel opens as the guest's) and inviteLeftMs. state.invite is
+                            { invite, peer, name, sentAt, expiresAt, status }. 4.3: joinCode(code,
+                            { link }) joins a share link's code; a room gone reads
+                            'onlineLinkExpired', the code kept on the join screen.
+                            T4-review AUD-124: invite and acceptInvite set Connecting (screen 'busy')
+                            before a remembered stale leave. AUD-126: a cancelled accept leaves the
+                            seat it was given. AUD-129: a cancelled Resend leaves a room the late
+                            answer made, unless it is the one leave() already left.
+                            tests/onlineLobby.test.js, tests/onlineJoinLink.test.js.
+  onlineFriends.js          Online race (🌐, plan 39, 3.3) friends, NO Phaser/DOM: createOnlineFriends
+                            ({ rpc, max }) over friend_list, friend_statuses and online_history:
+                            the lists (requests to answer, friends sorted online, in a game,
+                            offline, then by name; requests sent; Blocked), the recent
+                            opponents (TUNING.online.status.opponents, not yet friends, asked
+                            or blocked; a race with no peer handle is left out), offer(name)
+                            for the results panel, ask / accept / decline / take back /
+                            remove / block / unblock, each as { ok, ... } or { ok: false,
+                            errorKey }. createStatusBeat({ rpc, beacon, beatMs }): the device's
+                            online_beat; start() (beats at once, then every beatMs from a
+                            window setInterval; a 'not trusted' answer stops it quietly),
+                            stop() (online_beat(false) at once; { quiet: true } sends
+                            nothing), hide() (pagehide: the keepalive beacon) and show()
+                            (pageshow from the back-forward cache: beats again).
+                            tests/onlineFriends.test.js.
   onlineRace.js             Online race (🌐, plan 39, 1.7a, 1.7b) per-frame rules, NO
                             Phaser/DOM/timers: raceStartPlan (room → seed, names, seat,
                             agreed width, round), countdownStep, localPhase, linkQuality,
                             createRaceFeed({ now, send, since }) (what goes on the wire from
-                            the local half and the other seat rebuilt from what arrives;
+                            the local half and the other seat rebuilt from what arrives; at most one
+                            `flap` per TUNING.online.flapMinMs (200 ms): faster taps fold
+                            into one sent at the window's end with the poop's state then,
+                            dropped if the run is not flying (AUD-144);
                             `since` drops messages stamped before this round's GO; the
                             run's end is fixed once (doneFixed()), its pos and done go
                             each frame until the transport takes done (doneSent(),
@@ -1391,7 +1521,9 @@ src/
                             tie; it goes again at once after a refused send and every
                             TUNING.online.race.claimResendMs until the line settles
                             (verdictWaitMs); the host answers a repeat with its verdict,
-                            and a guest that knows the verdict claims nothing; the host takes its own line after
+                            at most once per half a claimResendMs (AUD-147), and a guest that
+                            knows the verdict claims nothing; the host answers a guest's pause
+                            word with a resume at most once per half a heartbeatMs; the host takes its own line after
                             TUNING.online.race.firstGraceMs with no earlier claim), one
                             `first` per line; `ready` marks keyed by the level they start,
                             resent every readyResendMs; both ready and the host in its break
@@ -1404,14 +1536,67 @@ src/
                             (a standing ask repeats every readyResendMs).
                             createFieldFit({ mine, theirs, heard, now, send, until })
                             (item 14, AUD-097): from the race's start to its GO each
-                            side sends `width` every widthResendMs; the newest heard
+                            side sends `width` (with `heard`: whether it has the other's) every
+                            widthResendMs only until it hears the other's, then goes quiet and
+                            answers only a width whose `heard` is false, at most one per
+                            widthResendMs (AUD-143: a rewound race waiting for Ready sends
+                            none; a width carried over a restart sets the field but does not
+                            count as heard); the newest heard
                             replaces the presence width; agreedWidth of the two is
                             fieldW(); receive() is true when it moved; peer() the
                             newest heard; nothing is sent from GO on.
                             raceRoomItem (only the confirmed status 'playing' / 'finished'
-                            reaches the lobby; a leave or abandoned room is Tier 2's).
-                            Knobs in TUNING.online.race. tests/onlineRace.test.js.
-  leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
+                            reaches the lobby; a leave or abandoned room goes to the shared
+                            pause instead, which ends the race with no winner, 2.2).
+                            createRacePause({ seat, now, send, present, since, round })
+                            (plan 39, 2.1): the shared pause. Either device's trigger
+                            pauses both; both Ready and the host's resume count restart
+                            both at one server ms; a disconnect never ends a race, only
+                            the room's confirmed leave or abandon. createRaceReferee's
+                            tick takes `held`: no count starts, a running one is called
+                            off before GO, the grace and the verdict wait stand still.
+                            The feed holds the ghost for it (2.2): hold(at) stands it at
+                            `at` (or where the other side's first `pause` message says it
+                            stopped), release(after) lets go at the first ghost message
+                            stamped at or after `after`, heardT() is the newest ghost
+                            message's server time, again() sends the run's end once more
+                            (the other side came back and may have missed it).
+                            pauseOverlay(state, { midRun }) (pure): the overlay's i18n keys
+                            from the machine's state(): null while live or over,
+                            { count: true } in the resume's 3-2-1, else title (this side's
+                            link first, then the other's, then PAUSED), sub, each player's
+                            row and the Ready button (null while this side's link is down,
+                            and when no tap is needed: in a break or before GO).
+                            raceReport / raceNetStats / createRaceReporter / reportLine (2.5): the
+                            finish_match report and its results-panel line (the Tournament
+                            paragraph, "Online reports").
+                            createWakeLock(nav) (item 16): want(true) keeps the screen on
+                            (one lock, asked again after a resume), want(false) lets go,
+                            refused quietly where unsupported; held().
+                            Knobs in TUNING.online.race and TUNING.online.pause (silenceMs,
+                            heartbeatMs, leaveConfirmMs 4000: Leave's second tap).
+                            2.3 (reload resume): createResumeStore (the record in
+                            localStorage since 2.3b; blocked storage keeps nothing, never
+                            throws), parseResume (whole or null, version RESUME_VERSION 2:
+                            owner + beat, no older than
+                            TUNING.online.resume.maxAgeMs), resumePlan(record, room), levelSnap
+                            / startSnap (a level's start, sanitized / level 1's), rewindOnHeard
+                            (the lower of the two level starts); the feed's and the referee's
+                            floor(at) drops what the other side sent before its restart; the
+                            pause machine's own reason `rewind`, cleared by its Ready.
+                            2.3b (app restart, a second page): resumeOwner({ record, tab,
+                            wall }) → 'mine' / 'live' (another owner beat within
+                            online.resume.staleMs 5000) / 'free' (no beat, a beat ahead
+                            of the clock, or stale) / null; the store gains owner(),
+                            claim(), beat(), holder() and never writes over or clears
+                            another page's live record (set → false); pageTab (this page's
+                            id in sessionStorage, marked closed on pagehide so a duplicated
+                            tab, which copies sessionStorage, takes a new one). Knobs
+                            online.resume.beatMs 1000 and staleMs 5000.
+                            tests/onlineRace.test.js, tests/onlinePause.test.js,
+                            tests/onlineResume.test.js.
+  leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 39, 2.5 adds
+                            createRacePostQueue over LEADERBOARD.racePostsKey; plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
                             the Singleplayer and Daily Dump day streaks, never
                             sent; merge folds in fetchPlayDays' days, 34.13):
@@ -1424,12 +1609,13 @@ src/
                             REST API with an injected fetch, apikey header only,
                             4 s abort, false / null on any failure, never throws
                             (submitScore: { ok } or { ok: false, reason: 'nameTaken'
-                            | 'other' }, request's errors flag reading the
+                            | 'refused' | 'other' }, request's errors flag reading the
                             PostgREST message). checkNameAvailable (true / false /
                             null), mergePlayers, createMergeStore
                             (flappyPoop.merges: queued { keep, merge } pairs until
                             the server confirms), fetchPlayerName (the board's name
-                            or null), createRenameStore (flappyPoop.rename: a rename
+                            or null), fetchBoardName (the name, '' for no rows, null when
+                            it cannot say: Play.postRace's read), createRenameStore (flappyPoop.rename: a rename
                             typed here), nameAction ('adopt' / 'keep'). Tournaments:
                             submitTournament ('ok' / 'keep' / 'rejected': only the
                             server's own bracket refusal drops one), fetchTournamentBoard,
@@ -1737,11 +1923,49 @@ src/
                             results arrive on 'tournament-race' ({ then }: 'next'
                             races on, else the panel). tournamentPadAction walks its
                             buttons for a controller. ROUND_KEYS names the rounds.
+                            4.2: loadInvites (invite_list on entering 🌐, on Friends and when the
+                            topic joins again, then net.openTopic), onUserItem, sendInvite,
+                            acceptInvite, declineInvite; closeTopic at the race hand-off.
+                            T4-review: stopOnline closes the topic at once (AUD-127) and the transport
+                            through the window's lease (startOnline takes it; the hand-off clears it);
+                            sendInvite and acceptInvite draw Connecting after the call starts (AUD-124);
+                            the home's badge tick reads invite_list again when topicState() is 'none'
+                            (AUD-130); none is read while a resume record is rejoined, and rejoinRace
+                            reads it when the race is over (AUD-131); a ?join= code is joined once a
+                            stale race is found over, dropped if it could not be reached or another
+                            window still races (AUD-128).
+                            4.3: openTournamentPanel's `join` option (a share link's code) is kept
+                            through the sign-in, a name chosen first and a Retry, and joined once
+                            linked (joinFromLink); Share without a share sheet copies its text
+                            ('onlineLinkCopied'). shareCode calls share() and writeText inside the
+                            tap; with neither (a page that is not a secure context, such as a phone
+                            on the Mac's LAN address) copyInTap copies through a hidden textarea and
+                            execCommand('copy'), and with no way to copy the text itself shows on the
+                            status line (Michael's phone check, 22 Nov: the buttons did nothing there).
                             The 🌐 view (plan 39, 1.6c): mounts onlineAccountViews and
                             onlineLobbyViews, pre-warms the transport on entering,
                             polls the lobby, leaves the room and closes online play on
                             every exit; ✕ in an online view goes back to the online home;
-                            the keypad takes typed digits and a paste.
+                            the keypad takes typed digits and a paste. 2.3: startLobby
+                            reads the resume record, makes the lobby with `resume`
+                            and calls lobby.rejoin(record) (status "Rejoining your
+                            race…"); the record waits through the sign-in and link
+                            screens; the panel hands every race the store. 2.3b: mine
+                            or free → claim() first, then rejoin; live (another page
+                            has the race) → no rejoin, no leave, lobby.notice(
+                            'onlineRaceElsewhere') and one lookAgain after staleMs
+                            (ctx.timers, cleared by stopOnline) that claims and rejoins
+                            if the lobby is still idle; raceMemory().get() hides
+                            item 46's code while the record is live, so a Create or
+                            Join there never leaves the other page's race.
+                            3.3: the online home gains 🤝 Friends (onlineFriendsViews); once linked, and
+                            after pairing (onPaired, only with 🌐 on, 3.6), Play.onlineStatusBeat() starts; leaving online
+                            mode stops it (online_beat(false)) unless the race took over (o.handed);
+                            stopOnline stops ctx.play.onlineStatusBeatRef, a beat that exists (AUD-122), and builds none.
+                            T3-review: a link answering after 🌐 was switched off starts nothing (AUD-113);
+                            a window showing the race another page runs does not beat (that page does: one
+                            device, one row), and starts when lookAgain claims the race (AUD-114).
+                            The only caller of the beat's start() in src/ (tests/onlineFriends.test.js guards it).
                             tests/onlinePanel.test.js.
     panelFrame.js           The frame every DOM window shares (plan 28, 4.1):
                             panelFrameCss(id, { width }) gives the backdrop (fixed
@@ -1756,7 +1980,11 @@ src/
     onlineAccountViews.js   Online race (🌐, plan 39, 1.6a) the sign-in side's screens
                             (Preview B): name claim, linking, devices, pairing code,
                             pair, errors. Plain DOM over onlineAccount.js's results;
-                            tournamentPanel's 🌐 view mounts them (1.6c).
+                            tournamentPanel's 🌐 view mounts them (1.6c). keypad(): the code
+                            boxes keep one height empty or typed, so the keys never move on
+                            the first digit (item 70, N9); a press redraws the keypad, so the
+                            pressed key carries `hit` (light pink) for KEY_FLASH_MS (150 ms)
+                            after it (st.hit; item 70, N10).
                             tests/onlineAccountViews.test.js.
     onlineLobbyViews.js     Online race (🌐, plan 39, 1.6c) the lobby's screens (Preview A):
                             home, Connecting, host code with countdown and Share / Copy,
@@ -1765,8 +1993,34 @@ src/
                             Play.onlineProjectName(), null on the real site) adds
                             onlineDevOnLive / onlineDevOnTest to the no-room error.
                             Both ready shows onlineStarting (the panel's onBothReady starts
-                            the race, 1.7a).
+                            the race, 1.7a). 4.2: the host's invite line ("Waiting for <name>
+                            to answer", m:ss) with Resend after a no or the two minutes. 4.3:
+                            Share sends joinLink(code) alone, no line before it (item 70, N1);
+                            Copy copies the code alone. The 🌐 row locked on (a screen too
+                            narrow to split) reads onlineSwitchOnSub, with no line saying why
+                            (item 70, N4). The home ends with a yellow onlineBetaNote
+                            (#tour-beta, `note warn`: online is new, 💬 reports a bug; 24 Nov);
+                            `.note + .share` spaces the safety note off Recent races | Devices.
                             tests/onlineLobbyViews.test.js.
+    onlineFriendsViews.js   Online race (🌐, plan 39, 3.3, Preview G) the 🤝 Friends button
+                            with its badge (requests waiting; online mode only) and the
+                            Friends screen: requests (Accept | Decline), friends with a
+                            dot and a word, requests sent (Take back), Recent opponents
+                            (only a ⋯), Blocked (Unblock); a row's ⋯ holds Remove, Block
+                            and, on an opponent, Add friend; Remove and Block ask twice.
+                            3.6: tournamentPanel's accountUi() has mark(), a guard taken when a call goes
+                            out (same online object, still on, no help/peek view, same screen key
+                            `${st.view}|${lobby screen}`); openFriends, run(), openDevices, openRaces
+                            and onPair draw only while it holds; openFriends returns true when it drew;
+                            a refused Friends action reads the lists again before its error line (AUD-116).
+                            pollFriends and refreshBadge are the panel's timers' reads.
+                            4.2: Invite on a 🟢 friend's row; a friend who invited you comes
+                            first with their ✉️ (a ring of the time left and m:ss, redrawn in place
+                            once a second by inviteTick) and ✕ to turn it down; a row wraps its
+                            buttons under the name (`.slot.fr`) when the name does not fit, so a
+                            long name never clips the time; ✉️ n beside the 🤝 Friends button.
+                            Plain DOM over onlineFriends and onlineInvites.
+                            tests/onlineFriendsPanel.test.js, tests/onlineInvitesPanel.test.js.
     savePanel.js            Plain DOM panel over the canvas (a three-step intro,
                             Username field, read-only user code + Copy, Load
                             field, an outlined Clear beside the Save button that
@@ -2118,7 +2372,20 @@ src/
                             (Versus ignores it). takeLevelClearBonus() is the shared
                             bonus; awardLevelFirst({ final }) is the online race's late
                             verdict (levelWins + 1, the bonus, the popup, finalFirst on
-                            the final line, publishSlot). win() → showEscapedBanner
+                            the final line, publishSlot; OnlineRace does not call it for
+                            the final line once the other side's slot holds finalFirst,
+                            2.3). Reload resume (2.3):
+                            init takes `resume`, start() begins at that level's first pair
+                            with the kept numbers (effects.restoreLevel), resumeSnapshot()
+                            gives a level's start, raceResumeStore() builds the store
+                            (browserStorage() with raceTab(), this page's tab id, once
+                            per page load: registry raceTab), openPendingRace(again)
+                            (in create, once per page load: registry raceRejoinOffered)
+                            opens the 🌐 window when a record is there; a live record
+                            (another page's) opens nothing and is looked at once more
+                            after staleMs (registry raceRejoinLooked); a page that
+                            stepped aside (registry raceSteppedAside) opens it even on
+                            a live record, once, to show why. win() → showEscapedBanner
                             (levelTitle / levelHint, no shade; applyLocale keeps it).
                             chromeState() / overlayPause(): chromeArgs and
                             onPadAction read the match's state ('paused' in this
@@ -2250,7 +2517,7 @@ src/
                             ready"; onLevelTap toggles ready over the wire; isReady;
                             levelStage 'count' during the shared count; GO calls
                             Play.beginLevel (an overlay or hidden tab pauses the local half
-                            only; Tier 2 pauses both). The run's done is held until the final
+                            only; the shared pause below pauses both). The run's done is held until the final
                             line is settled (the referee's settled()), so both devices
                             compute raceOutcome from the same numbers; checkOver needs this
                             side's done sent and the other's heard, then the host's app calls
@@ -2268,7 +2535,62 @@ src/
                             beans sit below the opponent's pill: the scene passes
                             TUNING.online.inventoryY0 to Play as launch data
                             `inventoryY0` (Play.half.inventoryY0, third argument of
-                            inventoryRows). tests/onlineRaceScene.test.js.
+                            inventoryRows).
+                            2.2: the shared pause (createRacePause, wired). Host methods:
+                            setPaused(on) is this side's `menu` reason (the pause key, ⏸,
+                            a pad's Menu, an overlay opening; off only when Play's tap
+                            lands while paused); a tap while paused is Ready
+                            (toggleReady); isPaused() is the machine frozen (paused or
+                            counting to the resume). pauseLocal() feeds the machine each
+                            frame and on visibilitychange; the machine's effects: pause
+                            freezes the local half mid-run and holds the ghost, resume
+                            starts the 3-2-1 on server time, back resends the run's end
+                            (feed.again()), abandoned ends the race. The referee is held
+                            while it lasts, and a pause before GO holds the opening GO
+                            (the resume's GO starts the race). The overlay: why it
+                            stopped, each player's mark, the time paused, Ready | Leave;
+                            Leave asks twice within online.pause.leaveConfirmMs, then
+                            ends the race for both. The abandoned race (the room's
+                            confirmed left / abandoned): results panel "No winner" with
+                            Leave only, no finish, no rematch. The opponent's pill gains
+                            a `paused` state (amber dot, "paused"). A wake lock is held
+                            while the race plays.
+                            2.3: a reload mid-race rejoins and both race the current level
+                            again from its start. keepLevel stores level N's start (the
+                            Play.resumeSnapshot()) in each level break once line N-1 is
+                            settled and again as the shop spends, into the resume
+                            record. 2.3b: the racing page `holds` the record once its own
+                            write went through and beats it every online.resume.beatMs
+                            from a window setInterval (Phaser's loop pauses in a hidden
+                            tab); lostSeat() (top of update, onWake, the beat) sees
+                            another page's record and stepAside()s: net.close() with
+                            no leave_room, Play started plain, the record left to the
+                            new owner. forgetRecord() does the clears. pauseOverBreak() (a
+                            host method; Versus's is false): the shared pause over this
+                            device's level break, so Play's 💰 pill neither shows nor opens
+                            and an open shop sells nothing under the overlay (item 70, N3).
+                            A rewound scene (data.resume) launches Play at that
+                            level (launchData), holds under the pause overlay until this
+                            side's Ready (own reason `rewind`), sends `rewind` every
+                            online.pause.heartbeatMs until its GO and agrees its field
+                            width until then (fitUntil). The other side, on `rewind`,
+                            raises its feed's and referee's floor to the sender's restart
+                            and restarts at the lower of the two levels (rewindOnHeard;
+                            nothing for another room round or a stale rewind; a side whose
+                            run has ended sends its fixed pos and done again, feed.again(),
+                            so after the rewound side's restart, 2.7, AUD-107). The shared pause's count gives one GO. The
+                            record is gone at the race's end, abandoned, Leave, this
+                            side's own finish.
+                            3.3: the results panel's friend offer (loadFriendOffer,
+                            drawFriendOffer, tapAddFriend: a button "Add <name> as a friend"
+                            under Rematch | Leave, tap or click only; a line once asked, made
+                            friends or already friends), read once the report is agreed
+                            (saved); on a waiting device (its friend reads 'not trusted', or a refused tap says so) the line friendResultPair (3.8: "Pair this device to add friends..."); hidden for a blocked player or a null peer. The beat
+                            is kept through the hand-off from the 🌐 window; stepAside() stops
+                            it quietly (the other page beats), Leave after a race stops it.
+                            T4-review AUD-127: initRace takes a lease on the transport; Leave's late
+                            close goes through it.
+                            tests/onlineRaceScene.test.js.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png) over ‼️ long falls / 😢 close calls (data.falls / closeCalls; ×– for a stored Daily result), pipes crossed, then Share | Home on one row from overButtonsLayout and, on a normal or test run, a glowing Play again under them, the panel lifted over.againLiftPx so it clears the ⏸) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute
@@ -2720,9 +3042,11 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             of Tier 2's client): `matches` (one row per race, minted by
                             set_room_status('playing'); rooms.match_id points at the race
                             running; readable by no role, kept as the players' history).
-                            finish_match(code, round, result): trusted devices only (a
-                            pending one: 'not trusted'); each seated device reports both
-                            seats' numbers; the race ends agreed (equal reports), disputed
+                            finish_match(code, round, result): any seated device, paired
+                            or waiting (3.7: no 'not trusted'); each reports both seats'
+                            numbers and its trust as reported lands in matches.host_trusted
+                            / guest_trusted (true paired, false waiting, null unreported;
+                            later pairing, demotion or removal changes nothing); the race ends agreed (equal reports), disputed
                             (different), refused (shorter than 180 s from GO, c_min_race_s,
                             or a score above 200 + 4 a second) or abandoned (a leave or
                             an abandon before any seat reported, or still playing 6 h
@@ -2733,13 +3057,24 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             (online_count_race, board_post) and run_log mode 'race'. Each
                             seat's numbers-only telemetry is kept (host_stats / guest_stats,
                             a key list, owner's eyes). online_history(): the owner's online
-                            rival line and last races, trusted devices only, no ids
+                            rival line and last races, paired devices only, no ids
                             (online_races is its internal helper; the public profile's rival
                             counts split-screen races only). Off switch: online_settings
                             (one row), admin_set_online_open(bool), owner only; closed means
                             'online closed' on the room functions, a race running keeps going.
                             Rematch pacing: set_room_status('playing') waits 60 s from the
-                            last GO ('rate limited'). Races follow trust in a merge: a side
+                            last GO ('rate limited'), and (5.2b, AUD-137) a host device
+                            starts one race a minute across rooms (index matches_host_uid);
+                            housekeeping deletes refused, disputed and abandoned races 30
+                            days old, agreed ones stay. Item 68 pacing (5.2b): join_room
+                            paces seated joins, c_device_oks a device and c_ip_oks an IP in
+                            10 minutes (AUD-136); answer_guest refuses a decline within 2 s
+                            of its code's minting ('rate limited'); link_online_player
+                            paces links of a player the device was not linked to, c_links
+                            (10) an hour, in online_links (RLS on, no grant, kept an hour;
+                            a refresh of its own player never; AUD-138); server_now is
+                            security definer, and a test holds every online function to
+                            definer with search_path = '' (AUD-141). Races follow trust in a merge: a side
                             that loses trust in fold_player leaves its races under the id
                             folded away; when nobody loses trust every race moves; seat, self-
                             race and history checks compare resolved ids. M1 rule 6 (2.4e): a
@@ -2747,10 +3082,81 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             (removed as Remove removes one), never a paired device or one
                             seated in a race; 'too many devices waiting' now means all three
                             are racing. tests/schemaOnline.test.js.
+                            Friends (3.1, tests/schemaFriends.test.js): tables friendships,
+                            blocks, friend_asks and online_trust, readable by no role, keyed
+                            on resolved player ids. A device names another player only by a
+                            peer handle (online_peer: per viewer, from the pepper; no player
+                            id leaves the server), found only among the viewer's agreed-race
+                            opponents (both seats paired as reported, 3.7), friendship rows and own blocks (online_peer_find). No
+                            online function may find a player by a name or search (the guard
+                            test). friend_list, send_friend_request, respond_friend_request,
+                            remove_friend, block_user, unblock_user: trusted device only
+                            ('bad peer' for a malformed handle). Eligible = an agreed race
+                            with both seats paired as reported (host_trusted and
+                            guest_trusted, 3.7; a waiting device's race is saved and
+                            counted, never a friendship) under both current ids, no block either way, neither hidden
+                            (friend_eligible, at every ask). A merge moves friend data
+                            following trust, as it moves races (online_fold_friends), and
+                            the online name follows trust. A made-up player merged with a
+                            stolen id brings the owner none of its friends while the owner's
+                            side keeps trust; under M1's accepted residual (the made-up side
+                            linked first, or the owner was away 7 days or has no device) its
+                            friends land on the owner's id (accepted, 22 Nov). Merge
+                            seniority is online_trust.since (the first trusted link, kept
+                            through a Clear: for good while the player has races or friends,
+                            else 90 days from the last link).
+                            online_trust.seen_at is the last link by any device, stamped on
+                            every link; online_cleanup drops a row 90 days after it when the
+                            player has no device, agreed race, friendship or block.
+                            online_history() adds `peer` to the rival line and each race;
+                            it is null on a race a merge left under an old opponent id
+                            (online_peer_shown: the handle only when online_peer_find finds
+                            that player), and on a race with a waiting seat (3.7), so the client shows no Add friend or Block there.
+                            Status (3.2, tests/schemaStatus.test.js): online_beats, one row
+                            per device (uid, at), readable by no role, gone with the device's
+                            link. online_beat(p_here): a trusted device's heartbeat, nothing
+                            written within 5 s of the last; false deletes it (a leave).
+                            friend_statuses(): { friends: [{ peer, name, state }] }, state
+                            online | in_game | offline, friends as friend_list, no ids.
+                            Internal online_state: in_game = a trusted device with a beat
+                            under 60 s old in a room 'playing', online = such a beat, else
+                            offline. No shared channel (it would list everyone online).
+                            Invites (4.1, tests/schemaInvites.test.js): the invites table (id, from_uid the
+                            sending device and its room's host, from_player, to_player, room_code, status
+                            pending | accepted | declined | cancelled, sent_at, expires_at; 'expired' is never
+                            stored; from_uid goes null when the device's user is deleted, so the rows still
+                            count for the caps), readable by no role. For a paired device only (authenticated; 'not
+                            signed in', 'not linked', 'not trusted'). send_invite(p_peer) -> { ok, invite,
+                            code, sent_at, expires_at } or { ok: false, error: 'unavailable' | 'rate limited' }
+                            (raises 'bad peer', 'in a race', 'online closed', 'busy'); invite_list() ->
+                            { incoming, outgoing, topic } (peer, name, sent_at, expires_at, outgoing adds
+                            status; topic is the player's own Realtime topic);
+                            accept_invite(p_invite) -> { ok, code, status: 'ready', host_name } or
+                            { ok: false, error: 'expired' }; decline_invite and cancel_invite -> { ok: true }
+                            whatever the id. Times in ms, no ids. Who: an accepted friend, no hide, no block,
+                            reading 'online' in online_state; anything else is the same 'unavailable'. Caps:
+                            5 a minute and 100 a day per player, 10 an hour to one friend. The invite belongs
+                            to the sending device's room (its open one, kept on a resend, else one made with
+                            source 'invite'); one live invite per sending device and per pair. Live is read
+                            every time (online_invite_live): pending, before expires_at (INVITE_TTL, 2 minutes,
+                            stored on the row, one server constant c_ttl, no client mirror), its room open
+                            under that device, the device beating within 60 s, the two still friends; so an
+                            unfriend, block, merge or lost beat ends it at once and reads 'expired'. Accept
+                            seats the friend's device and the room goes straight to 'ready' (no code, no join
+                            cap, no Let in). Delivery on the player's own topic (online_user_topic: 'user:'
+                            and 32 hex of sha256 of the pepper and the resolved player id, never the id, so a
+                            device whose save holds a merged-away id still hears its player's invites; given
+                            only by invite_list): online_can lets that player's paired devices read it and
+                            nobody write it (only the server's realtime.send), so a waiting device reads
+                            nothing. Events: `invite` to the friend; `invite_update`
+                            { invite, status } to both players on accept, decline or cancel. online_unseat
+                            (every leave path) and join_room (a code guest taking the seat) end the device's
+                            invites and tell both players. Nothing is sent on expiry. online_cleanup drops
+                            invites 2 days old. rooms.source takes 'invite'.
                             PL/pgSQL gotcha: a bare CASE inside
                             `IF … THEN` ends the condition at its THEN; parenthesise.
 
-tests/                      node --test (schema.test.js, schemaOnline.test.js, pilot.test.js,
+tests/                      node --test (schema.test.js, schemaOnline.test.js, schemaFriends.test.js, schemaStatus.test.js, schemaInvites.test.js, pilot.test.js,
                             eduBoardSync.test.js and schemaCheck.test.js need `npm install`: PGlite). Each file is self-describing:
   field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),
                             uiColumn, poopX, the x0 shift of trayLayout /
@@ -3029,42 +3435,118 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             pairing, the name claim both ways, rooms, caps, the channel
                             policies, housekeeping; plan 39, 2.4: matches, finish_match
                             (agreed / disputed / refused / abandoned, the bounds and caps,
-                            telemetry), online_history, the off switch, rematch pacing,
+                            telemetry; 3.7: a waiting device's report, each seat's trust
+                            as reported), online_history, the off switch, rematch pacing,
                             races following trust in a merge, the fourth waiting device
-                            (2.4e), the boards' posts and race runs
+                            (2.4e), the boards' posts and race runs; 5.2b: the pacing of
+                            join_room, answer_guest, set_room_status and link_online_player,
+                            the 30-day race cleanup, every online function definer
+  schemaFriends.test.js     Plan 39, 3.1 in PGlite: friends, blocks, peer handles (per viewer,
+                            no ids out), eligibility (3.7: both seats paired as reported), merges of friend data following trust,
+                            AUD-103 seniority (online_trust.since), the upgrade backfill, the
+                            guard against finding a player by a name or search, a dead handle
+                            (null peer), the 90-day trust cleanup, the 3.1-paste upgrade
+  schemaStatus.test.js      Plan 39, 3.2 in PGlite: online_beat (trusted only, 5 s write gap,
+                            a leave deletes), friend_statuses (states, order, friends only, no
+                            ids), in_game from a room 'playing', the 60 s fresh window
+  schemaInvites.test.js     Plan 39, 4.1 in PGlite: send_invite (who may be invited, the caps, one live
+                            invite per device and pair, a resend keeps the room), accept (ready, no code),
+                            decline and cancel, expiry read live (TTL, room, beat, friendship), the
+                            player's own topic (a handle, its policy, a merged-away id), online_unseat and
+                            join_room ending invites, the caps surviving an unlink, the two-day cleanup,
+                            the undo line's restore list, no role reads the table
   runLog.test.js            submit_runs and run_log in PGlite as anon: owner-only, rejects
                             counted, a resend stored once, 5 s pacing, 90-day purge, the
                             merge; plan 39: mode 'race' accepted and treated like single
-  onlineLiveCheck.test.js   tools/online_live_check.mjs: the target guard, the arguments and
-                            how a channel answer is read
+  onlineLiveCheck.test.js   tools/online_live_check.mjs: the target guard, the arguments,
+                            how a channel answer is read and its 14 steps
   online.test.js            src/online.js: the protocol and its validation, stale and
                             reordered messages, the derived version, codes, the clock,
                             the ghost against a 60 Hz sender over every netsim profile
-                            (and 2 Hz vs 5 Hz keyframes, item 25), the field width pairs,
+                            (and 2 Hz vs 5 Hz keyframes, item 25), the field width pairs (5.2b: quiet once heard),
                             the room state machine
   onlineNet.test.js         src/onlineNet.js: a fake client on a virtual clock (sign-in,
                             stored and dead sessions, RPC errors, the clock, join, caps,
-                            rejoin, presence limits, verified room events), and the real
+                            rejoin, presence limits, verified room events; 5.2b: a close while the first
+                            load is out, signIn({ create: false })), and the real
                             vendored bundle on a fake fetch (online RPCs carry the Bearer
                             token; leaderboard, daily and tournament calls never do)
+  onlineFriends.test.js     src/onlineFriends.js: the lists and their sort, the opponents (a
+                            null peer, blocked, asked), offer(), ask / accept / block errors,
+                            createStatusBeat (start, stop quiet and loud, hide, show, 'not
+                            trusted', one timer), beatMs under half of the schema's c_fresh
+  onlineInvites.test.js     src/onlineInvites.js (4.2): rows taken whole, the ring and m:ss from the
+                            server's times, one incoming per friend, the topic's events, the error
+                            words, load / accept / decline / expiry
+  onlineInvitesPanel.test.js src/ui/onlineFriendsViews.js and tournamentPanel's ✉️ on
+                            tests/support/panelDom.js: invite_list once linked, the topic it names,
+                            ✉️ n on 🤝 Friends, the inviting friend first, Invite, accept, ✕,
+                            Resend, nothing outside online mode, closed at the hand-off
+  onlineJoinLink.test.js    the share link (4.3): joinLink, joinCodeFromSearch, withoutJoin, the
+                            panel's `join` kept through sign-in, name and Retry, a gone room's
+                            'onlineLinkExpired', Share's copy fallback
+  onlineFriendsPanel.test.js src/ui/onlineFriendsViews.js and tournamentPanel's Friends
+                            screen on tests/support/panelDom.js: the button and badge, each
+                            section, ⋯ with Remove / Block asking twice, polls, an
+                            opponent's row with only its ⋯ (Add friend inside), the not-paired screen, the beat (on at
+                            link; off on ✕; a waiting device's stops itself; kept through the
+                            race hand-off), and 3.6's hold/release harness: a call that
+                            answers after the screen changed draws nothing, a refused action
+                            reads the lists again, onPaired beats only with 🌐 on (18 tests)
   onlineAccount.test.js     src/onlineAccount.js: enter / claim / devices / remove /
                             pairCode / pair / leave on a fake net, every error key
   onlineAccountViews.test.js src/ui/onlineAccountViews.js: each screen, its errors and
                             strings
   onlineLobby.test.js       src/onlineLobby.js: create / join / ask / answer / ready on a
                             fake net, auto new codes, Decline's new code, the version check,
-                            finish / rematch / roomItem
+                            finish / rematch / roomItem; rejoin (resume skips the leave on
+                            entry; over, offline and a refused channel keep the room;
+                            notice)
   onlineLobbyViews.test.js  src/ui/onlineLobbyViews.js: each screen and its strings
+  onlineReport.test.js      src/onlineRace.js's raceReport, createRaceReporter, reportLine
+                            (2.5); the onlineAccount races() / historyRows view
+  racePosts.test.js         tournament.js racePosts, leaderboard.js createRacePostQueue and
+                            the drain order after the tournament queue (2.5)
+  raceRun.test.js           a split-screen race's half summary (mode race), its run queued
+                            under the racer's id before its post, the early drainRuns, postRace's
+                            wait (plan 39, 2.8)
+  racePostName.test.js      Play.postRace end to end on PGlite: a race post never changes a
+                            player's board name (an old pasted code, a kept roster after a
+                            rename, require_run's held post) (2.7, AUD-106)
+  onlineEndedRejoin.test.js two real OnlineRace scenes on a 40 ms link: an ended side answers
+                            a rewound peer that rejoined inside its dead socket's presence
+                            linger; both seats, two sequences, plus two controls (2.7, AUD-107)
   onlineRace.test.js        src/onlineRace.js: start plan, countdown, the feed, the referee
                             (first on server time, the ready count, a ready taken back,
-                            the rematch ask), raceRoomItem; two simulated peers racing
-                            through a level break to the end
+                            the rematch ask, the held referee; 5.2b AUD-143, AUD-144, AUD-147: the flap ceiling,
+                            the answer rules, the quiet width), raceRoomItem; two simulated peers racing
+                            through a level break to the end; pauseOverlay, createWakeLock, the
+                            feed's hold / release / again
+  onlinePause.test.js       src/onlineRace.js's createRacePause: two devices with the real
+                            sender, inbox and feed on a simulated link (airplane mode, a
+                            hidden tab, silence, presence, a one-way break, a lost resume
+                            or cancel, solo after the other's end, stats; the feed's ghost hold;
+                            a guest reloading on a new session at its saved round, both held
+                            until Ready, one GO)
+  onlineResume.test.js      2.3: the rewind event and reason, rejoin, effects.restoreLevel,
+                            levelSnap, rewindOnHeard, the record (v2) and its store, resumePlan,
+                            the floors, the rewind hold, the overlay; resumeOwner, the
+                            store across two pages, pageTab, the knobs and keys
   onlineRaceScene.test.js   scenes/OnlineRace.js's wiring on a stand-in Play and a fake
                             transport (initRace, the host interface, the final line's
-                            hold, the rematch restart); Play's onFinishCrossed line and
+                            hold, the rematch restart, the pause host methods, the overlay
+                            and Leave's double tap, the abandoned panel, the pill's paused
+                            state, a pause before GO; a rewound scene, keepLevel, the other
+                            side's restart, the final-line guard; the beat, stepping aside
+                            on a frame / the wake / the beat, a reload keeping the owner,
+                            Play's store and tab id, openPendingRace); Play's onFinishCrossed line and
                             awardLevelFirst
   onlinePanel.test.js       tournamentPanel's 🌐 view on tests/support/panelDom.js: mounts,
-                            forced over Play, exits leave the room, keypad
+                            forced over Play, exits leave the room, keypad; the rejoin
+                            (record read, lobby made with resume, the store handed on);
+                            a live record (no rejoin, no leave, the line, one look again;
+                            the look finding it free), a relaunch's stale record, Create
+                            beside a live race
   onlineDevProject.test.js  onlineProjectConfig and ?onlinetest: dev hosts only, own keys,
                             off, blocked storage
   onlineSignOut.test.js     Clear and a Load of another player leave online play only on
@@ -3385,8 +3867,14 @@ tools/
   online_test_link.mjs      Prints the ?onlinetest phone link for a test project from an env
                             file (plan 39, 1.6c); the repo never holds a project's URL or key.
   online_live_check.mjs     The live check of the online schema (plan 39): --env <file> for a test
-                            project, --live for the live project after the paste. Four anonymous
-                            sessions, twelve PASS/FAIL lines; each session unlinks itself; never a
+                            project, --live for the live project after the paste. Throwaway ids start
+                            CHECK_ID_PREFIX ('chk39'); TEARDOWN_SQL also deletes their matches,
+                            online_trust and online_profiles rows and is printed at every end,
+                            a pass included (AUD-140). Step 8 waits DECLINE_WAIT_MS (2.5 s)
+                            after minting before it declines, past answer_guest's 2 s decline
+                            pacing (AUD-136; plan 39, 5.3b). Four anonymous
+                            sessions, fourteen PASS/FAIL lines (line 12: friends and status; line 13:
+                            invites; line 14: teardown; a test project expects 13 of 14, live 14 of 14); each session unlinks itself; never a
                             secret key. tests/onlineLiveCheck.test.js covers it.
   headless_check.mjs        npm run smoke [url] [--list] [--only=a,b]: the checks run in
                             named sections (SECTIONS, in run order, each printing its check
@@ -3405,7 +3893,9 @@ tools/
                             not start a run. It launches headless Chrome (CHROME env
                             overrides the path), drives the running game over the
                             DevTools protocol through globalThis.__flappy (opted in
-                            before load, so any --url works), and fails
+                            before load, so any --url works; waitOver() waits for the Over
+                            scene, the game-clock delay then a poll of 5 s at most, instead
+                            of a fixed time after a death: AUD-148), and fails
                             on a page exception, a stalled __flappy.loop.frame, or an
                             overlay that does not open / close. Covers every overlay in
                             OVERLAYS (tests/tools.test.js keeps that list equal to
@@ -3501,7 +3991,7 @@ tools/
                             a result panel recording the race, Continue to the
                             podium and the 🏅 queue / post, Continue straight into
                             the next race, Abandon to the lobby, a 2-player Final
-                            with no 🥉 and nothing saved, an all-guest one). The
+                            with no 🥉 and nothing saved, an all-guest one; each 🏆 post is backed by its half's run, 2.8). The
                             viewport is pinned to 720x1280 before load
                             (Emulation.setDeviceMetricsOverride) so the rest is
                             the phone field; tapAt maps through the live
@@ -3533,7 +4023,8 @@ tools/
                             and invite-link (a page loaded with ?invite= opens the
                             panel with the code, the address cleaned, the code filled again
                             when the panel reopens after a close), run-stats
-                            (plan 30), streaks (plan 34: a day counted by a run and
+                            (plan 30; part 4, 2.8: a split-screen race through Chrome's own input,
+                            a race summary per half, each press in its own half's), streaks (plan 34: a day counted by a run and
                             by a Daily, the 🌞 / 📚 numbers, the profile rows, Clear)
                             and education-superq (plan 34: the bubble between two
                             equal still pairs, its float, flown past, the hold, the
@@ -3562,7 +4053,27 @@ tools/
                             link: the purse under the opponent's pill, the wait timer and
                             Keep waiting, the shared count and GO, one outcome on both, the
                             results panel, Rematch's states and round 2, Leave back to
-                            single player.
+                            single player; 31 checks, the last three on the results panel's real Add as a
+                            friend button (3.6).
+                            Plan 39's online-reload: the guest's reload restarts the race at
+                            level 2's start; then a real page reload with a stand-in
+                            transport: the 🌐 window rejoins, the race is back rewound, both
+                            Ready, one GO, level 2 from its first pair with the kept numbers,
+                            the end, the record gone. 2.3b adds a relaunch (the tab id
+                            gone, the record's beat a minute old: the window rejoins, the
+                            record is this page's and beaten every second) and a takeover
+                            (another page's fresh record: this page steps aside, the
+                            transport closed, no leave_room).
+                            Plan 39's online-friends (3.3, 17 checks): the 🌐 home's 🤝 Friends and its
+                            badge, the Friends screen's sections and ⋯, Add friend, and the beat on a stand-in
+                            transport.
+                            Plan 39's online-invites (4.2): on a 320 phone and a stand-in transport, invite_list
+                            and its topic, ✉️ n on 🤝 Friends, the inviting friend first with a 16-character
+                            name (the buttons wrap inside the row), accept to the guest's ready screen, Invite,
+                            the wait, a no and Resend in the same room. Plan 39's online-join-link (4.3): the
+                            real page opened at ?join= takes the code out of the address, opens 🌐, keeps it
+                            through a failed sign-in, joins on Retry; a gone room says the link expired.
+                            Full smoke: 43 sections, 993 checks.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -3778,7 +4289,8 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   A new client event goes in `ONLINE_EVENTS` (which moves `protocolVersion`, so
   older clients are told to update) and never reuses a server event name.
   A new online function goes in `ONLINE_RPCS` as well as the schema header
-  (`tests/onlineNet.test.js` keeps them equal). The server's event names on
+  (`tests/onlineNet.test.js` keeps them equal). Friends (3.1) name another player only by
+  a peer handle (`peer` in `online_history()` and `friend_list()`), never an id or a name. The client (3.3) lives in `src/onlineFriends.js` and `src/ui/onlineFriendsViews.js` (`TUNING.online.status`: `beatMs` 20 s, tied below half of the schema's `c_fresh` by a test; `pollMs` 10 s; `badgeMs` 30 s; `opponents` 5). The status beat (`Play.onlineStatusBeat()`, once per page; pagehide sends `online_beat(false)` through `onlineNet.beacon`, pageshow beats again) starts on link in the 🌐 window and after pairing, and stops with `online_beat(false)` on 🌐 off, ✕ and Leave after a race; it is quiet on stepping aside and on Clear / Load and is kept through the race hand-off. It never runs outside online mode: `tests/onlineFriends.test.js` checks that `tournamentPanel.js` is the only caller. The results panel offers Add as a friend only once the report is agreed. The 39 friend strings (`friendsButton` to `friendResultPair`) carry rows in `TRANSLATION_NOTES.md`. The server's event names on
   `room:<code>` are hints: the transport confirms them with `room_state`, since a
   seated peer can broadcast those names too.
   The sign-in side (enter, claim, devices, pairing, leave) lives in
@@ -3787,6 +4299,15 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   Clear and a Load of another player leave online play only on a device that holds
   a session (no client load otherwise: `tests/onlineSignOut.test.js`). A newly
   claimed online name is stored the save panel's way only after the link succeeds.
+  Invites (4.2, `src/onlineInvites.js`) show only in online mode, as the beat does. Every time comes
+  from the server's `sent_at` / `expires_at` (no client INVITE_TTL), and the player's topic only from
+  `invite_list`'s `topic`, never built from the save's id (`tests/onlineInvites.test.js`,
+  `tests/onlineInvitesPanel.test.js`); `onlineNet.closeTopic()` runs with `close()`, when the player leaves online mode (at once, not
+  when `leave_room` answers; T4-review AUD-127) and at the race's hand-off. Invite and Resend are offered only when `lobby.canInvite()` holds. A share link (4.3) is
+  `?join=<code>`, read once in `main.js` and taken out of the address (`tests/onlineJoinLink.test.js`);
+  it makes no server call of its own, so a closed room reads 'onlineLinkExpired'. The 14 strings of 4.2
+  and 4.3 (`friendInvite` to `inviteGone`, `onlineLinkExpired`, `onlineLinkCopied`) carry rows in
+  `TRANSLATION_NOTES.md`.
   The lobby (`src/onlineLobby.js`, mounted by the 🌐 view of `ui/tournamentPanel.js`) feeds
   `roomStep` only RPC results and `{ kind: 'room' }` items, never a peer's own events. Lobby
   ready is the `ready` event with level 1 (`LOBBY_LEVEL`), newest wins by t / seq.
@@ -3801,11 +4322,37 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   the purse rows' start below the opponent's pill; `claimResendMs` and `widthResendMs` are the
   resends of a guest's claim and of the field width). The `go` event's `cancel` flag, `finish`'s `at` and
   `width` (sent from the race's start to GO) are in `ONLINE_EVENTS`, so they moved `protocolVersion`.
+  The shared pause (2.1) lives in `createRacePause` (knobs `TUNING.online.pause`); its events `pause` and
+  `resume` are in `ONLINE_EVENTS`, so they moved `protocolVersion`. It calls no `set_room_status` (a playing
+  room is never expired). 2.2 wires it into `scenes/OnlineRace.js` (the overlay, Ready, Leave, the abandoned
+  panel; `online.pause.leaveConfirmMs` is Leave's second-tap window); its orphans allowlist entry is gone.
+  Reload resume (2.3, D4; `tests/onlineResume.test.js`): no schema change, `room_state` finds the seat by auth
+  uid and the stored session keeps it. Each level break keeps this side's level start (`Play.resumeSnapshot()`,
+  `OnlineRace.keepLevel`) in the resume record, localStorage under `LEADERBOARD.onlineResumeKey`
+  (`createResumeStore`, `parseResume`: version 2, 6 h; 2.3b). After a reload `Play.openPendingRace()` opens the 🌐
+  window once per page load; its lobby rejoins through `room_state` (the channel opened as that seat first, then `roomStep`'s `rejoin`,
+  never a leave; a failed open leaves nothing, AUD-108) and hands the race to `OnlineRace` rewound. The `rewind` event and pause reason
+  (both moved `protocolVersion`): the rewound side holds under the pause overlay until its Ready; the other
+  side raises its feed's and referee's floor to the sender's restart and restarts at the lower of the two level
+  starts (a side whose run has ended answers each rewind of this round with its fixed pos and done again,
+  `feed.again()`, AUD-107); the shared pause's count gives one GO. A host replaying the last level takes no final-line award the
+  other side already holds. A race that is over is forgotten ("That race is over."). Not covered: a reload
+  after this side's own finish (no record, so item 46's leave applies and the other side sees "left: no
+  winner" if still racing). A reload just before a line's verdict rewinds both one level further.
+  App restart and a second page (2.3b; no schema change, no new event): the record carries `owner` (a page's
+  tab id, `pageTab` in sessionStorage under `LEADERBOARD.onlineTabKey`, marked closed on `pagehide` so a
+  duplicated tab takes a new id) and `beat` (wall ms). `resumeOwner` says 'mine', 'live' (another owner beat
+  within `online.resume.staleMs` 5000) or 'free'. The racing page beats it every `online.resume.beatMs` 1000
+  from a window timer. A relaunched app finds its old record free and rejoins; a live record is neither
+  rejoined nor left (item 46's code is hidden, `lobby.notice('onlineRaceElsewhere')`) and is looked at once
+  more after staleMs. A page whose record another page took steps aside: `net.close()`, no `leave_room`.
+  Residuals are in the plan's item 55 (a frozen page under staleMs keeps its seat; blocked localStorage
+  resumes nothing).
   The tournament panel's hand-off (`handOffRace`, 1.8) remembers the room (`lobby.remember()`), and over a
   running Versus (🌐 switched on in its lobby) marks the match `left` and stops Versus and PlayB so only the
-  race draws (not `Versus.leave()`, which starts a plain Play). The race's end is not stored anywhere in Tier 1:
-  the only server row is the room's. The smoke's `online-race` section drives the real scene against a
-  scripted guest in the page (a break, the end, a rematch, a Leave; no network).
+  race draws (not `Versus.leave()`, which starts a plain Play). From 2.5 both devices report the race's end
+  to `finish_match` (`createRaceReporter`, see the Tournament paragraph's online reports). The smoke's `online-race` section drives the real scene against a
+  scripted guest in the page (a break, the end and its report, a rematch, a Leave; no network).
   `?onlinetest=<code>` (`onlineProjectConfig`) works on dev hosts only, keeps its own session
   and trust keys, and the repo never holds a test project's URL or key
   (`tools/online_test_link.mjs` builds the link from an env file).
@@ -3820,7 +4367,7 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `grant  execute … to authenticated;` pair), is `security definer` with `set search_path = ''` and
   qualified names, checks `auth.uid()` first, and is listed in the header's `--   * online name(...)`
   list (tests/schema.test.js checks the anon and online lists against the grant lines;
-  tests/schemaOnline.test.js checks the privileges; `finish_match` and `online_history` follow this rule). A failure the server counts is returned as
+  tests/schemaOnline.test.js checks the privileges; `finish_match` and `online_history` follow this rule; no online function may take a name or search to find a player, which tests/schemaFriends.test.js guards; friend functions and online_beat are for a trusted device (tests/schemaStatus.test.js) and their tables are readable by no role; so are the invite functions and their table (tests/schemaInvites.test.js)). A failure the server counts is returned as
   `{ ok: false, error }`, because a raise would roll the count back. The game's anon functions stay
   revoked from authenticated (a session token sent to one is refused).
 - New achievement → one `ACHIEVEMENTS` entry in `src/achievements.js` (a new,

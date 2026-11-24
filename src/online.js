@@ -22,7 +22,7 @@
 //   netsimProfile reads ?netsim=<profile> on a dev host.
 // tests/online.test.js covers all of it.
 
-import { FIELD, GAME_HEIGHT, TUNING } from './config.js';
+import { FIELD, GAME_HEIGHT, SHARE, TUNING } from './config.js';
 import { VERSION, angleForVelocity, createCourse, debugHandleAllowed, fnv1a32 } from './logic.js';
 
 // --- protocol ---------------------------------------------------------------------------------
@@ -31,6 +31,13 @@ const SID = /^[A-Za-z0-9_-]{1,32}$/;
 const FRAME = /^[A-Za-z0-9_-]{1,32}$/;
 const PHASES = ['run', 'respawn', 'break', 'ended'];
 const SEATS = ['host', 'guest'];
+/**
+ * Why a side is paused (plan 39, 2.1), most telling first: its own tab hidden (away), offline, the
+ * server's events cap closed its channel (busy), its channel down otherwise (link), a menu or the
+ * pause key (menu), a rewound race waiting for this side's Ready (rewind: 2.3, a reload put both back at a
+ * level's start); or nothing of its own: it lost the other side (lost) or the other side paused (peer).
+ */
+const PAUSE_REASONS = ['away', 'offline', 'busy', 'link', 'menu', 'rewind', 'lost', 'peer'];
 
 /** Every message's envelope: a per-session sequence number, server time (ms) and the session id. */
 const ENVELOPE = Object.freeze({ seq: ['int', 0, 2 ** 31], t: ['num', 0, 1e14], sid: ['str', SID] });
@@ -48,8 +55,14 @@ const level = ['int', 1, 99];
  * repeat keeps the crossing's time), `first` the host's verdict on it; `ready` / `go` the
  * level-break ready check and the host's GO (`cancel` takes back the count that ends at that
  * `startAt`: a ready withdrawn during it); `width` this side's field width, from the race's start
- * to its GO (presence holds the join-time one, item 14); `done` a run's final numbers; `rematch`
- * the ask.
+ * to its GO (presence holds the join-time one, item 14), and whether it has heard the other's (5.2b); `done` a run's final numbers; `rematch`
+ * the ask. The shared pause (2.1): `pause` is this side's pause while it lasts (why, whether this
+ * side is ready to go on, the pause round it belongs to: the number of resumes so far, and the GO it
+ * counts to, 0 for none), sent on every change and every online.pause.heartbeatMs; `resume` the
+ * host's GO for that round (`cancel` calls off the count that ends at that `startAt`). Reload resume
+ * (2.3, D4): `rewind` says this side's race restarted at `level`'s start in room round `round` (a
+ * reload, or the other side's rewind), sent from its restart (`at`, server ms) to its GO every
+ * online.pause.heartbeatMs; the other side restarts at the lower of the two levels.
  */
 export const ONLINE_EVENTS = Object.freeze({
   pos: Object.freeze({
@@ -63,9 +76,12 @@ export const ONLINE_EVENTS = Object.freeze({
   first: Object.freeze({ level, seat: ['enum', SEATS] }),
   ready: Object.freeze({ level, ready: ['bool'] }),
   go: Object.freeze({ level, startAt: ['num', 0, 1e14], cancel: ['bool'] }),
-  width: Object.freeze({ width: ['width'] }),
+  width: Object.freeze({ width: ['width'], heard: ['bool'] }),
   done: Object.freeze({ score: count, deaths: count, levelWins: ['int', 0, 99], finalFirst: ['bool'], won: ['bool'] }),
   rematch: Object.freeze({ want: ['bool'] }),
+  pause: Object.freeze({ reason: ['enum', PAUSE_REASONS], ready: ['bool'], round: count, count: ['num', 0, 1e14] }),
+  resume: Object.freeze({ round: count, startAt: ['num', 0, 1e14], cancel: ['bool'] }),
+  rewind: Object.freeze({ round: count, level, at: ['num', 0, 1e14] }),
 });
 
 /** The continuous state events: only the newest counts. Every other event counts once, in any order. */
@@ -282,6 +298,48 @@ export function parseCode(input) {
   return CODE.test(s) ? s : null;
 }
 
+// --- the share link (4.3) -------------------------------------------------------------------------
+
+// A join parameter: "join=" after a "?" or "&" anywhere in the query, up to the next "&" or the hash
+// (plan 28's invite parameter's pattern, AUD-038: one pattern, so a code read is a code taken out).
+const JOIN_PARAM = /[?&]join=([^&#]*)/g;
+
+/** The game's address that joins `code`'s room (the share sheet's link). */
+export function joinLink(code) {
+  return `${SHARE.url}?join=${code}`;
+}
+
+/** The first join parameter in a location.search that holds a room code (parseCode), else null. */
+export function joinCodeFromSearch(search) {
+  if (typeof search !== 'string' || !search) return null;
+  for (const m of search.matchAll(JOIN_PARAM)) {
+    let raw;
+    try {
+      raw = decodeURIComponent(m[1]);
+    } catch {
+      continue;
+    }
+    const code = parseCode(raw);
+    if (code) return code;
+  }
+  return null;
+}
+
+/** The address without any join parameter (history.replaceState): the rest of the query kept as written, the hash too. */
+export function withoutJoin(href) {
+  if (typeof href !== 'string') return href;
+  const hashAt = href.indexOf('#');
+  const head = hashAt < 0 ? href : href.slice(0, hashAt);
+  const hash = hashAt < 0 ? '' : href.slice(hashAt);
+  const q = head.indexOf('?');
+  if (q < 0) return href;
+  const search = head.slice(q);
+  const kept = search.replace(JOIN_PARAM, '');
+  if (kept === search) return href;
+  const rest = kept.replace(/^[?&]+/, '');
+  return `${head.slice(0, q)}${rest ? `?${rest}` : ''}${hash}`;
+}
+
 // --- clock --------------------------------------------------------------------------------------
 
 /**
@@ -452,7 +510,8 @@ const close = (r, reason, at, extra = {}) => ({ ...r, phase: 'closed', reason, c
 /**
  * The next room after `action` ({ type, at: server ms, … }): the lobby's own steps (create,
  * join, leave, a host's answered), RPC results (rpc), the server's events on room:<code> (guest,
- * answer, left, status), a clock tick (expiry) and a version mismatch. An action that does not
+ * answer, left, status), a clock tick (expiry), a version mismatch and a reload's rejoin (2.3:
+ * room_state's answer for the race this device still sits in). An action that does not
  * fit the phase returns the same object. Never mutates `room`.
  */
 export function roomStep(room, action) {
@@ -479,6 +538,17 @@ export function roomStep(room, action) {
       if (r.phase === 'creating') return { ...r, phase: 'open', code, changedAt: at };
       return { ...r, phase: 'asked', code, hostName: text(res.host_name), changedAt: at };
     }
+    case 'invited': {
+      // 4.2: a friend's invite accepted (accept_invite's answer): this device is the room's guest and
+      // the room is 'ready' at once (no code typed, no Let in: the host chose this guest; item 65).
+      const res = a.result;
+      const code = parseCode(res?.code);
+      if (live || res?.ok !== true || res.status !== 'ready' || !code) return r;
+      return { ...roomInit(), phase: 'ready', role: 'guest', code, hostName: text(res.host_name), changedAt: at };
+    }
+    case 'renew':
+      // 4.2: a Resend kept the host's open room (send_invite) and restarted its 15 minutes on the server.
+      return r.role === 'host' && r.phase === 'open' && parseCode(a.code) === r.code ? { ...r, changedAt: at } : r;
     case 'guest':
       return r.role === 'host' && r.phase === 'open' ? { ...r, phase: 'asked', guestName: text(a.name), changedAt: at } : r;
     case 'answered': {
@@ -521,6 +591,25 @@ export function roomStep(room, action) {
     }
     case 'mismatch':
       return live ? close(r, 'update', at, { update: UPDATES.includes(a.update) ? a.update : 'both' }) : r;
+    case 'rejoin': {
+      // 2.3, D4: a reload's race, as room_state answered it: only a race still playing, this device's seat.
+      const s = a.room;
+      if (live || !s || typeof s !== 'object' || s.status !== 'playing' || !SEATS.includes(s.seat)) return r;
+      const code = parseCode(s.code);
+      if (!code) return r;
+      return {
+        ...roomInit(),
+        phase: 'playing',
+        role: s.seat,
+        code,
+        hostName: text(s.host_name),
+        guestName: text(s.guest_name),
+        seed: Number.isFinite(s.seed) ? s.seed : null,
+        startMs: Number.isFinite(s.start_ms) ? s.start_ms : null,
+        round: Number.isInteger(s.round) ? s.round : 0,
+        changedAt: at,
+      };
+    }
     default:
       return r;
   }

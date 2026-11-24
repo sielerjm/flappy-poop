@@ -1,6 +1,7 @@
 import './phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { FIELD } from './config.js';
 import { fieldWidth, perfMode, inviteFromSearch, withoutInvite, debugHandleAllowed } from './logic.js';
+import { joinCodeFromSearch, withoutJoin } from './online.js';
 import { attachPerfMeter } from './ui/perfMeter.js';
 import { installErrorCard } from './ui/errorCard.js';
 import { Boot } from './scenes/Boot.js';
@@ -29,6 +30,16 @@ const invite = inviteFromSearch(globalThis.location?.search);
 try {
   // Out of the address bar whenever the parameter is there, a code too long to use included.
   const clean = globalThis.location ? withoutInvite(globalThis.location.href) : null;
+  if (clean && clean !== globalThis.location.href) globalThis.history?.replaceState?.(globalThis.history.state, '', clean);
+} catch {
+  /* no history API: the code stays in the address, and still works */
+}
+
+// ?join=<code> (plan 39, 4.3): a race's share link, read and taken out of the address bar the same way,
+// and handed to Play (Play.openPendingJoin), which opens the 🌐 window to join it.
+const join = joinCodeFromSearch(globalThis.location?.search);
+try {
+  const clean = globalThis.location ? withoutJoin(globalThis.location.href) : null;
   if (clean && clean !== globalThis.location.href) globalThis.history?.replaceState?.(globalThis.history.state, '', clean);
 } catch {
   /* no history API: the code stays in the address, and still works */
@@ -82,6 +93,7 @@ globalThis.addEventListener?.('resize', () => {
 installErrorCard(game); // index.html's error trap shows the card from here on (plan 35, 1.1)
 if (perf) attachPerfMeter(game, perf);
 if (invite) game.registry.set('pendingInvite', invite);
+if (join) game.registry.set('pendingJoin', join);
 
 // Debug / automation handle (headless drivers reach scenes through it), on this machine and the local
 // network only, or when a driver opts in before the page loads (debugHandleAllowed). No gameplay effect.

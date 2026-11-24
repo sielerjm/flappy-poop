@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { El, installDom } from './support/dom.js';
 import { t } from '../src/i18n.js';
 import { TUNING as T } from '../src/config.js';
-import { lobbyBody, lobbyMessage, lobbyTick, netSwitch, shareText } from '../src/ui/onlineLobbyViews.js';
+import { lobbyBody, lobbyCss, lobbyMessage, lobbyTick, netSwitch, shareText } from '../src/ui/onlineLobbyViews.js';
 
 installDom();
 
@@ -59,7 +59,7 @@ test('the 🌐 row: off and on read their own line; locked on (a phone) the swit
   assert.ok(text(on).includes(t('en', 'onlineSwitchOnSub')));
   const forced = netSwitch(ui, { on: true, forced: true }, (v) => flips.push(v));
   assert.equal(forced.find('tour-online').disabled, true);
-  assert.ok(text(forced).includes(t('en', 'onlineForced')));
+  assert.ok(text(forced).includes(t('en', 'onlineSwitchOnSub')), 'item 70, N4: forced on reads as on, with no line saying why');
 });
 
 test('home: you on row 1 (you), an empty opponent row, Join with code and Create room (primary), the safety line; the account notes and 📱 Devices from the panel', async () => {
@@ -196,11 +196,14 @@ test('no room on a dev host says which project this device is on, so a live / �
   assert.equal(busy.text, t('en', 'onlineErrBusy'));
 });
 
-test('the share text carries the grouped code and the game\'s link; zh-Hans reads its own', () => {
-  const en = shareText({ tr: (k) => t('en', k) }, '482913');
-  assert.ok(en.includes('482 913') && en.startsWith('Race me'));
-  const zh = shareText({ tr: (k) => t('zh-Hans', k) }, '482913');
-  assert.ok(zh.includes('482 913') && zh !== en);
+test('item 70, N1: the share text is the link that joins the room, alone, in every language', () => {
+  const link = 'https://sielerjm.github.io/flappy-poop/?join=482913';
+  assert.equal(shareText({ tr: (k) => t('en', k) }, '482913'), link, '4.3: the link joins the room; no line before it');
+  assert.equal(shareText({ tr: (k) => t('zh-Hans', k) }, '482913'), link);
+});
+
+test('item 70, N1 and N4: the share line and the too-narrow line are gone from both catalogs', () => {
+  for (const locale of ['en', 'zh-Hans']) for (const key of ['onlineShareText', 'onlineForced']) assert.equal(t(locale, key), key, `${locale}: no ${key}`);
 });
 
 test('every screen draws in zh-Hans with no key left showing', () => {
@@ -209,4 +212,21 @@ test('every screen draws in zh-Hans with no key left showing', () => {
     assert.ok(!/online[A-Z]|tournament[A-Z]/.test(text(k.root)), `${screen}: ${text(k.root)}`);
   }
   assert.ok(T.online.codeTtlMs > 0);
+});
+
+test('home, Michael 24 Nov: the last line is a yellow note that online is new and 💬 reports a bug (en and zh-Hans); the safety note sits clear of Recent races | Devices', () => {
+  for (const loc of ['en', 'zh-Hans']) {
+    const k = harness(fakeLobby(), loc);
+    k.ui.homeExtras = () => ({ notes: [], devices: Object.assign(new El('div'), { id: 'dev-x', className: 'share' }) });
+    k.ui.rerender();
+    const beta = k.find('tour-beta');
+    assert.ok(beta, `${loc}: the line is there`);
+    assert.equal(beta.className, 'note warn');
+    assert.equal(text(beta), t(loc, 'onlineBetaNote'));
+    assert.ok(text(beta).includes('💬'));
+    assert.equal(k.root.children.at(-1), beta, 'under everything, Devices included');
+  }
+  assert.ok(lobbyCss('p').includes('#p .note + .share { margin-top: 8px; }'));
+  const room = harness(fakeLobby({ screen: 'host', room: { phase: 'open', role: 'host', code: '482913' } }), 'en');
+  assert.equal(room.find('tour-beta'), null, 'the home only');
 });

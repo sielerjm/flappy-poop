@@ -8,6 +8,26 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.28.0',
+    date: '24 Nov 2026',
+    notes: {
+      en: [
+        '🌐 Online races now ride out real life: a dropped connection, a call or another app pauses both games until you both tap Ready, and a reload or a reopened app rejoins the race at the start of the current level. Leave asks twice, since it ends the race for both of you.',
+        '🌐 Online races are saved: the winner gets gold and the other player silver on the 🏅 board, both scores go to the 🏆 board, and 🏁 Recent races shows your last races and your biggest online rival, for your eyes only. Split-screen two-player tournaments now count on 🏅 and 🏆 too.',
+        '🤝 Friends: after a race you finished together, add the other player as a friend. See who is online, accept or decline requests, remove or block a player. Only your friends see your status, and only while you are in 🌐 online. Pair a device in 📱 Devices to see 🤝 Friends.',
+        '✉️ Invite a friend who is online from 🤝 Friends: one tap puts them in your room, ready to race. Or tap Share to send a link to your room: a friend who opens it joins once signed in.',
+        'Tap ? in the 🌐 window to learn how online races work. Online races are new, so you may hit a bug: tap 💬 to report it. Also, a held key counts as one tap online, a new race can start a minute after the last one began, and the online pause and the join keypad are easier to tap.',
+      ],
+      'zh-Hans': [
+        '🌐 在线比赛更经得起意外了：网络断开、来电或切到别的应用时，两边的游戏一起暂停，等你们都点“准备”再继续；比赛中途刷新页面或重新打开应用，会从当前关卡的开头回到比赛。“离开”要点两次，因为它会让双方的比赛都结束。',
+        '🌐 在线比赛会保存：赢家在 🏅 榜上得金牌，另一位得银牌，双方的分数都会记到 🏆 榜上；🏁 最近比赛会显示你最近的比赛和在线最大对手，只有你能看到。分屏的双人锦标赛现在也会记到 🏅 和 🏆 榜上。',
+        '🤝 好友：和对方一起完成一场比赛后，可以把对方加为好友。可以看到谁在线，接受或拒绝请求，删除或屏蔽玩家。只有你的好友能看到你的状态，而且只在你打开 🌐 在线时。在 📱 设备里配对后，才能看到 🤝 好友。',
+        '✉️ 在 🤝 好友里邀请在线的好友：对方点一下就进入你的房间，准备比赛。也可以点“分享”发送房间链接：朋友打开后，登录就会加入你的房间。',
+        '在 🌐 窗口里点 ? 可以看在线比赛怎么玩。在线比赛是新功能，可能会有问题：点 💬 告诉我们。另外，在线时按住按键只算一次点击，新的一场要在上一场开始一分钟后才能开始，暂停画面和输入房间码的键盘也更好点了。',
+      ],
+    },
+  },
+  {
     version: '0.25.0',
     date: '20 Nov 2026',
     notes: {

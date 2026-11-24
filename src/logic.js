@@ -6,14 +6,14 @@ import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 import { createJsonStore } from './store.js';
 import { TUNING, LEADERBOARD } from './config.js';
 
-export const VERSION = '0.25.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
+export const VERSION = '0.28.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 /** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
 export function versionText(locale, version = VERSION) {
   return t(locale, 'versionLine').replace('{version}', version);
 }
 
 /** Player-facing stamp on the About overlay: the time of the last push (written by `npm run push`). */
-export const LAST_UPDATED = '21 Nov 2026, 20:29';
+export const LAST_UPDATED = '24 Nov 2026, 11:29';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -1572,6 +1572,22 @@ export function createEffects(t) {
     },
     coins() {
       return coinCount;
+    },
+    /**
+     * Back to a level's start as snapshot() kept it (plan 39, 2.3: a rewound online race), unlike
+     * restore(), which gives a revive's back on top: the purse set (never negative), the bag (at
+     * most beans.maxBeans), a probiotic with its postbiotic (none without one); a running fart is gone.
+     */
+    restoreLevel({ coins = 0, beans = 0, probiotic = 0, postbiotic: post = false } = {}) {
+      const whole = (n) => (Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
+      coinCount = whole(coins);
+      beanCount = Math.min(whole(beans), t.beans.maxBeans);
+      probioticPipesLeft = whole(probiotic);
+      postbiotic = Boolean(post) && probioticPipesLeft > 0;
+      powerOn = false;
+      powerJustEnded = false;
+      powerClock = 0;
+      powerSuper = false;
     },
     /** Enough beans and no fart running. */
     powerReady() {

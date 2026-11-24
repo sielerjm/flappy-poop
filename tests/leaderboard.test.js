@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD, TUNING } from '../src/config.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, withOwnRows, boardPage, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, enrolResearch, submitResearchEvents, deleteResearch } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, nameAction, submitPlan, submitPlans, withOwnRows, boardPage, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, enrolResearch, submitResearchEvents, deleteResearch } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -70,9 +70,10 @@ test('submitScore posts the plan to submit_score with the apikey header and the 
   assert.deepEqual(c.body, { p_player_id: ID, p_name: 'Alice', p_score: 41, p_toilet: true, p_level: 1 });
 });
 
-test('submitScore says why it failed: nameTaken for the server\'s "name taken", other for the rest', async () => {
+test('submitScore says why it failed: nameTaken for the server\'s "name taken", refused for its "bad …" (never accepted), other for the rest', async () => {
   const plan = { playerId: ID, name: 'Alice', score: 41 };
   assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: { message: 'rate limited' } }), config }), { ok: false, reason: 'other' });
+  assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: { message: 'bad score' } }), config }), { ok: false, reason: 'refused' }, '2.7: a post the server will never take');
   assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: { code: 'P0001', message: 'name taken' } }), config }), { ok: false, reason: 'nameTaken' });
   assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: 'not json' }), config }), { ok: false, reason: 'other' });
   assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 500, body: '' }), config }), { ok: false, reason: 'other' });
@@ -1098,4 +1099,22 @@ test('boardPage: the page\'s rows (the caller\'s only on its own page), the call
   assert.deepEqual(boardPage(page(1, 3), { offset: 0, limit: 25 }), { rows: page(1, 3), mine: null, last: true });
   assert.deepEqual(boardPage(null, { offset: 25, limit: 25 }), { rows: null, mine: null, last: true }, 'offline stays offline');
   assert.deepEqual(boardPage([...page(1, 25), me41], { offset: -3, limit: 25 }).rows.length, 25, 'a bad offset is page 1');
+});
+
+test('race post queue (2.5): split-screen 🏆 posts wait here once each, oldest first, capped; junk dropped; drained in order', async () => {
+  const storage = fakeStorage();
+  const q = createRacePostQueue(storage, { key: 'rp', max: 3 });
+  const post = (c, score = 10) => ({ id: `r${c}`, playerId: c.repeat(22), name: `N${c}`, score, level: 7 });
+  assert.equal(q.add({ ...post('a'), playerId: 'short' }), null, 'a bad id is not queued');
+  assert.equal(q.add({ ...post('a'), score: -1 }), null);
+  assert.equal(q.add({ ...post('a'), name: '' }), null);
+  for (const c of 'abcd') q.add(post(c));
+  q.add(post('b'));
+  assert.deepEqual(q.load().map((e) => e.name), ['Nb', 'Nc', 'Nd']);
+  const seen = [];
+  const left = await q.drain((e) => (seen.push(e.name), e.name === 'Nc' ? 'keep' : 'ok'));
+  assert.deepEqual(seen, ['Nb', 'Nc'], 'stops at the first keep');
+  assert.equal(left, 1);
+  assert.deepEqual(q.load().map((e) => e.name), ['Nc', 'Nd']);
+  assert.deepEqual(q.load()[0], { id: 'rc', playerId: 'c'.repeat(22), name: 'Nc', score: 10, level: 7 });
 });

@@ -234,8 +234,8 @@ export function linkedCount(tour) {
 }
 
 /**
- * True when a finished tournament goes to the 🏅 board: minPostPlayers (3, submit_tournament's
- * own floor; two players race the Final alone, nothing to give bronze) or more, and someone linked.
+ * True when a finished tournament goes to the 🏅 board: minPostPlayers (2, submit_tournament's
+ * own floor; two players race the Final alone, gold and silver) or more, and someone linked.
  */
 export function postable(tour, t = TUNING) {
   return tour.players.length >= t.tournament.minPostPlayers && linkedCount(tour) > 0;
@@ -260,6 +260,21 @@ export function tournamentPayload(tour, id, levelPipes = TUNING.tournament.level
         return { id: m.id, round: m.round, a, b, winner: m.winner, by: m.result?.by ?? 'score', slots: [slot(slots[0]), slot(slots[1])] };
       }),
   };
+}
+
+/**
+ * A split-screen race's 🏆 posts (plan 39, 2.5, item 42(c)): one per racer with a player id (a pasted
+ * code or the host's own player), side a's first, each { playerId, name, score, level } from that
+ * side's slot, and `run`, that side's race summary (plan 39, 2.8), when `runs` holds one; guests and a
+ * zero score post nothing (a guest's run goes nowhere).
+ */
+export function racePosts(tour, matchId, slots, runs = null) {
+  const m = tour?.matches?.find((x) => x.id === matchId);
+  if (!m) return [];
+  return matchPlayers(tour, m)
+    .map((i, side) => [tour.players[i], slots?.[side], runs?.[side] ?? null])
+    .filter(([p, s]) => linked(p) && Math.floor(s?.score ?? 0) > 0)
+    .map(([p, s, run]) => ({ playerId: p.playerId, name: p.name, score: Math.floor(s.score), level: Math.max(1, Math.floor(s.level ?? 1)), ...(run ? { run } : {}) }));
 }
 
 // ---------------------------------------------------------------------------

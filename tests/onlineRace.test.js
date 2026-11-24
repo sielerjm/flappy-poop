@@ -134,6 +134,49 @@ test('the feed: a pos at once, then keyframes every online.keyframeMs mid-run; f
   assert.equal(sent[0].length, 3, 'one flap, one message');
 });
 
+test('5.2b AUD-144: at most one flap message per online.flapMinMs; faster taps fold into one sent at the window\'s end with the poop\'s state then', () => {
+  let clock = 0;
+  const out = [];
+  const feed = createRaceFeed({ now: () => clock, send: (event, fields) => (out.push({ event, t: clock, ...fields }), true), since: 0 });
+  const flapsOf = () => out.filter((m) => m.event === 'flap');
+  const h = half();
+  feed.tick(h);
+  clock = 1000;
+  feed.tick({ ...h, flaps: 1, y: 600, vy: T.flapVelocity });
+  assert.equal(flapsOf().length, 1, 'a lone tap goes at once');
+  clock = 1050;
+  feed.tick({ ...h, flaps: 2, y: 590, vy: T.flapVelocity });
+  clock = 1100;
+  feed.tick({ ...h, flaps: 2, y: 580, vy: T.flapVelocity + 50 });
+  assert.equal(flapsOf().length, 1, 'a second tap inside the window waits');
+  clock = 1000 + T.online.flapMinMs;
+  feed.tick({ ...h, flaps: 2, y: 560, vy: T.flapVelocity + 100 });
+  assert.equal(flapsOf().length, 2, 'it goes at the window\'s end');
+  assert.deepEqual([flapsOf()[1].y, flapsOf()[1].vy], [560, T.flapVelocity + 100], 'with the poop\'s state then, so the ghost replays it');
+  // A minute of taps at 30 Hz (a held key's repeat rate, or many touches) at 60 fps: bounded at the ceiling.
+  const start = flapsOf().length;
+  let flaps = 2;
+  for (let f = 0; f < 3600; f += 1) {
+    clock = 2000 + f * (1000 / 60);
+    if (f % 2 === 0) flaps += 1;
+    feed.tick({ ...h, flaps, distance: f });
+  }
+  const minute = flapsOf().length - start;
+  assert.ok(minute <= 60_000 / T.online.flapMinMs + 1, `${minute} flap messages for 1,800 taps in a minute`);
+  assert.ok(minute >= 60_000 / T.online.flapMinMs - 5, `the taps still go, at the ceiling (${minute})`);
+  // A tap held in the window is dropped once the run is not flying (a break, a respawn, its end).
+  clock = 70_000;
+  feed.tick({ ...h, flaps: flaps + 1 });
+  clock += 10;
+  feed.tick({ ...h, flaps: flaps + 2 });
+  const held = flapsOf().length;
+  clock += T.online.flapMinMs;
+  feed.tick({ ...h, flaps: flaps + 2, state: 'paused', levelBreak: true });
+  clock += T.online.flapMinMs;
+  feed.tick({ ...h, flaps: flaps + 2, state: 'paused', levelBreak: true });
+  assert.equal(flapsOf().length, held, 'nothing flaps out of a break');
+});
+
 test('the remote slot: the ghost of the other peer at the right distance, its score and level, extrapolated between keyframes', () => {
   const { feeds, advance } = pair();
   assert.equal(feeds[1].slot(), null, 'nothing heard yet');
@@ -306,6 +349,30 @@ test('first over the line (the host\'s word): server time decides, so a guest cl
   d.refs[1].tick(brk(2));
   assert.deepEqual(firsts(d.refs[1].drain()), [{ type: 'first', level: 1, mine: true, final: false }]);
   assert.equal(d.events(1, 'first').length, 0, 'a guest never sends a verdict');
+});
+
+test('5.2b AUD-147: the host answers repeated claims to a line it decided at most once per half a claimResendMs: a guest\'s honest repeats each get one, a flood few', () => {
+  let now = 20_000;
+  const sent = [];
+  const ref = createRaceReferee({ seat: 'host', now: () => now, send: (e, f) => (sent.push({ e, ...f }), true), since: 0 });
+  ref.crossed({ level: 1 });
+  now += T.online.race.firstGraceMs + 100;
+  ref.tick({ level: 2, inBreak: true, shopOpen: false, held: false });
+  const firsts = () => sent.filter((m) => m.e === 'first').length;
+  assert.equal(firsts(), 1, 'the verdict');
+  let seq = 0;
+  const claim = () => ref.receive({ kind: 'peer', event: 'finish', msg: { seq: (seq += 1), t: now, sid: 'g', level: 1, distance: 0, at: now } });
+  for (let i = 0; i < 100; i += 1) {
+    claim();
+    now += 10;
+  }
+  assert.ok(firsts() - 1 <= 2, `100 claims in a second: ${firsts() - 1} answers`);
+  const before = firsts();
+  for (let i = 0; i < 3; i += 1) {
+    now += T.online.race.claimResendMs;
+    claim();
+  }
+  assert.equal(firsts() - before, 3, 'a repeat every claimResendMs (the verdict lost) is answered each time');
 });
 
 test('the host first: decided when the later claim lands, or after online.race.firstGraceMs with none; never twice', () => {
@@ -613,8 +680,8 @@ test('raceRoomItem: only the room\'s confirmed status for a race or its end reac
  * line of each level at `lines[level - 1]`, waits in its break and taps ready `tapAfter` ms after the
  * beat, ends at the last line; the referee's effects applied as OnlineRace applies them.
  */
-function simHalf(i, d, { speeds, lines, tapAfter }) {
-  const h = { ...half({ distance: 0, speed: speeds[0] }), arrivedAt: null, tapped: false, begins: [], doneSent: false };
+function simHalf(i, d, { speeds, lines, tapAfter, flapEveryMs = 0 }) {
+  const h = { ...half({ distance: 0, speed: speeds[0] }), arrivedAt: null, tapped: false, begins: [], doneSent: false, flaps: 0, flapClock: 0 };
   const last = lines.length;
   return {
     h,
@@ -622,6 +689,11 @@ function simHalf(i, d, { speeds, lines, tapAfter }) {
       const ref = d.refs[i];
       if (h.state === 'playing') {
         h.distance += h.speed * (dt / 1000);
+        // 5.1's quota test: a tap every flapEveryMs mid-run (0: none), which the feed sends as a flap.
+        if (flapEveryMs && (h.flapClock += dt) >= flapEveryMs) {
+          h.flapClock -= flapEveryMs;
+          h.flaps += 1;
+        }
         h.pipesPassed = Math.floor(h.distance / 300);
         h.score = h.pipesPassed;
         if (h.distance >= lines[h.level - 1]) {
@@ -845,6 +917,65 @@ test('a rematch ask goes again every online.race.readyResendMs while it stands, 
   assert.equal(e.events(1, 'rematch').length, n, 'a withdrawn ask is not repeated');
 });
 
+// --- a held race (plan 39, 2.1: the shared pause holds the referee) --------------------------------
+
+test('a held race starts no level count; the host calls off a running one before its GO; a hold after GO changes nothing', () => {
+  const d = duo();
+  d.refs[1].setReady(2, true);
+  d.advance(50);
+  d.refs[0].setReady(2, true);
+  d.refs[0].tick(brk(2, { held: true }));
+  assert.deepEqual(d.refs[0].drain().filter((e) => e.type === 'count'), [], 'held: no count');
+  assert.equal(d.events(0, 'go').length, 0);
+  d.refs[0].tick(brk(2));
+  const c = d.refs[0].count();
+  assert.ok(c, 'not held: the count starts');
+  d.refs[0].drain();
+  d.advance(100);
+  d.refs[0].tick(brk(2, { held: true }));
+  assert.deepEqual(d.refs[0].drain(), [{ type: 'cancel', level: 2 }], 'a hold before GO calls it off');
+  assert.deepEqual([d.events(0, 'go').at(-1).cancel, d.events(0, 'go').at(-1).startAt], [true, c.startAt]);
+  assert.equal(d.refs[0].isReady(2), true, 'both stay ready, so the count comes back once the hold ends');
+  d.advance(100);
+  d.refs[0].tick(brk(2));
+  const again = d.refs[0].count();
+  assert.ok(again && again.startAt > c.startAt, 'a fresh count after the hold');
+  d.refs[0].drain();
+  d.setClock(again.startAt);
+  d.refs[0].tick(brk(2, { held: true }));
+  assert.deepEqual(d.refs[0].drain(), [{ type: 'begin', level: 2, late: false }], 'held from GO on: the level begins (the scene keeps the half frozen)');
+});
+
+test('a held race stops the host\'s grace and a guest\'s verdict wait: a claim from a guest that crossed first still wins once the hold ends', () => {
+  let holding = true;
+  const d = duo({ drop: (i, event) => i === 1 && event === 'finish' && holding });
+  d.refs[1].crossed({ level: 1, final: true, distance: 9000 }); // the guest at 0; its claims are lost while the link is down
+  d.advance(100);
+  d.refs[0].crossed({ level: 1, final: true, distance: 9000 }); // the host at 100
+  for (let at = 0; at < 4000; at += 100) {
+    d.advance(100);
+    d.refs[0].tick(brk(1, { inBreak: false, held: true }));
+    d.refs[1].tick(brk(1, { inBreak: false, held: true }));
+  }
+  assert.deepEqual(firsts(d.refs[0].drain()), [], 'held: the host takes nothing on its grace');
+  assert.equal(d.refs[1].settled(1), false, 'held: the guest\'s verdict wait does not run');
+  assert.ok(d.now() > R.verdictWaitMs + R.claimResendMs, 'longer than the wait and a resend');
+  const lost = d.events(1, 'finish').length;
+  assert.ok(lost >= 3, `the guest kept claiming while held (${lost} claims, all lost)`);
+  holding = false;
+  d.refs[1].tick(brk(1, { inBreak: false }));
+  assert.equal(d.events(1, 'finish').length, lost + 1, 'the hold over: the claim goes at once');
+  d.refs[0].tick(brk(1, { inBreak: false }));
+  for (let at = 0; at < 1500; at += 50) {
+    d.advance(50);
+    d.refs[0].tick(brk(1, { inBreak: false }));
+    d.refs[1].tick(brk(1, { inBreak: false }));
+  }
+  assert.deepEqual(firsts(d.refs[0].drain()), [{ type: 'first', level: 1, mine: false, final: true }], 'the guest crossed first: its line');
+  assert.equal(d.refs[1].settled(1), true);
+  assert.deepEqual(firsts(d.refs[1].drain()), [{ type: 'first', level: 1, mine: true, final: true }]);
+});
+
 /** Two field fits on one server clock and a 40 ms link each way, as the race scene wires them. */
 function fitPair({ widths, presence, until, drop = null, refuse = null }) {
   let clock = 0;
@@ -881,7 +1012,7 @@ function fitPair({ widths, presence, until, drop = null, refuse = null }) {
   return { fits, sent, advance, now: () => clock };
 }
 
-test('one field width (item 14, AUD-097): each side sends its width now until GO and takes the newest it hears over the join-time one, so both race on the smaller', () => {
+test('one field width (item 14, AUD-097): each side sends its width until it hears the other\'s (and answers an unheard one), never at or after GO, and takes the newest it hears over the join-time one, so both race on the smaller', () => {
   // The audit\'s case: the host phone announced 1600 in landscape, then turned to portrait (720);
   // the guest\'s desktop is 1200 at join and now. Each side\'s first width is lost on the way.
   const lostFirst = [1, 1];
@@ -891,7 +1022,7 @@ test('one field width (item 14, AUD-097): each side sends its width now until GO
   assert.deepEqual(p.fits.map((f) => f.fieldW()), [720, 720], 'both on the smaller once each heard the other');
   assert.deepEqual(p.fits.map((f) => f.peer()?.width), [1200, 720]);
   const before = p.sent.map((s) => s.length);
-  assert.ok(before.every((n) => n >= 2), 'again every online.race.widthResendMs');
+  assert.ok(before.every((n) => n >= 2), 'again every online.race.widthResendMs while the first was lost');
   p.advance(2000);
   assert.ok(p.sent.every((s) => s.every((m) => m.t < 4000)), 'nothing at or after GO');
   for (const [w, pres] of [[[720, 1600], [null, null]], [[1600, 1600], [720, 720]], [[1200, 900], [1600, 1600]]]) {
@@ -899,6 +1030,42 @@ test('one field width (item 14, AUD-097): each side sends its width now until GO
     q.advance(500);
     assert.deepEqual(q.fits.map((f) => f.fieldW()), [Math.min(...w), Math.min(...w)], `widths ${w}, presence ${pres}`);
   }
+});
+
+test('5.2b AUD-143: once each side heard the other\'s width the fit goes quiet (a rewound race waiting for Ready sends none); a restart or a reloaded page says it again and is answered, at most once per widthResendMs', () => {
+  const p = fitPair({ widths: [720, 1200], presence: [null, null], until: Infinity });
+  p.advance(2000);
+  assert.deepEqual(p.fits.map((f) => f.fieldW()), [720, 720]);
+  const settled = p.sent.map((s) => s.length);
+  assert.ok(settled.every((n) => n <= 3), `a few each to agree (${settled})`);
+  assert.deepEqual(p.sent.map((s) => s.at(-1).heard), [true, true], 'each last said it heard the other');
+  p.advance(60_000);
+  assert.deepEqual(p.sent.map((s) => s.length), settled, 'a minute of waiting: no width');
+  // This side's fit after a restart (a rewind or a refit): the carried width sets the field at once,
+  // and it says its own again, since a phone may have turned meanwhile.
+  let now = 0;
+  const out = [];
+  const a = createFieldFit({ mine: 720, heard: { width: 1200, t: 0, seq: 1 }, now: () => now, until: Infinity, send: (e, f) => (out.push(f), true) });
+  assert.equal(a.fieldW(), 720);
+  now = 100;
+  a.tick();
+  assert.deepEqual(out, [{ width: 720, heard: false }], 'a new fit says its width');
+  const w = (fields, t, seq) => ({ kind: 'peer', event: 'width', msg: { seq, t, sid: 'b2', ...fields }, at: t });
+  a.receive(w({ width: 1000, heard: true }, 200, 1));
+  now = 700;
+  a.tick();
+  assert.equal(out.length, 1, 'heard, and the other heard it: quiet');
+  // The other page reloads again: its new fit has heard nothing and says so; a flood of those gets paced answers.
+  for (let i = 0; i < 50; i += 1) {
+    a.receive(w({ width: 1000, heard: false }, 800 + i * 10, 2 + i));
+    now = 800 + i * 10;
+    a.tick();
+  }
+  assert.deepEqual(out.slice(1), [{ width: 720, heard: true }], 'one answer in half a second of asks');
+  a.receive(w({ width: 1000, heard: true }, 1400, 60));
+  now = 5000;
+  a.tick();
+  assert.equal(out.length, 2, 'answered: quiet again');
 });
 
 test('the field fit: never wider than this side; its own width before it hears anything; a refused send goes again at once; an older width never replaces a newer one', () => {
@@ -919,4 +1086,35 @@ test('the field fit: never wider than this side; its own width before it hears a
   assert.equal(fit.receive(w(1000, 40, 1)), false, 'older: ignored');
   assert.equal(fit.fieldW(), 800);
   assert.equal(fit.receive({ kind: 'peer', event: 'pos', msg: { seq: 3, t: 60, sid: 'x' } }), false, 'not a width');
+});
+
+// --- 5.1: the quota (Appendix A's cost notes; the Verification section's "record the real number in 5.1") ---
+
+// 0.3 measured the Realtime bill on the test project: each broadcast is 1 sent + 1 received, and its
+// 5 Hz keyframes + flaps came to 1,541 billed messages per match-minute (39-logs/0.3-spike.md), so
+// about 1.4 taps a second. The shipped protocol (2 Hz keyframes, item 34) over a whole race, every
+// message the feed and the referee send counted: well under 0.3's figure, and a match-minute bill
+// that leaves Free's 2 M a month at least 2,000 match-minutes. Measured 22 Nov: 781 billed per
+// match-minute (pos 240, flap 170, control 11 over 1.08 min), about 2,560 match-minutes on Free.
+// Real races' own numbers: matches.host_stats / guest_stats (sent, received) on the test project.
+test('5.1 quota: a minute-long race at about 1.4 taps a second bills at most 1,000 messages per match-minute (0.3 measured 1,541 at 5 Hz); keyframes stay at 2 Hz', () => {
+  const tap = 700; // ms between taps: 0.3's 1,541 at 5 Hz less its keyframes is about 1.4 taps a second
+  const { d, halves } = raceToEnd({
+    host: { speeds: [300, 300], lines: [9000, 18000], tapAfter: 300, flapEveryMs: tap },
+    guest: { speeds: [295, 305], lines: [9000, 18000], tapAfter: 600, flapEveryMs: tap },
+  });
+  assert.ok(halves.every((s) => s.h.doneSent), 'both ended');
+  const all = [...d.sent[0], ...d.sent[1]];
+  const span = Math.max(...all.map((m) => m.t)) - Math.min(...all.map((m) => m.t));
+  const minutes = span / 60_000;
+  assert.ok(minutes > 0.9 && minutes < 1.3, `about a minute (${minutes.toFixed(2)})`);
+  const billedPerMin = (all.length * 2) / minutes; // each broadcast: 1 sent + 1 received
+  const byEvent = Object.fromEntries([...new Set(all.map((m) => m.event))].map((e) => [e, all.filter((m) => m.event === e).length]));
+  assert.ok(billedPerMin <= 1000, `billed per match-minute ${billedPerMin.toFixed(0)} (${JSON.stringify(byEvent)})`);
+  for (const i of [0, 1]) {
+    const pos = d.events(i, 'pos').length / minutes / 60;
+    assert.ok(pos <= 1000 / T.online.keyframeMs + 0.2, `device ${i}: ${pos.toFixed(2)} pos a second, the 2 Hz keyframes`);
+    assert.ok(d.events(i, 'flap').length >= 60, `device ${i}: the taps went as flaps (${d.events(i, 'flap').length})`);
+  }
+  assert.ok(2_000_000 / billedPerMin >= 2000, `Free's 2 M a month: ${Math.floor(2_000_000 / billedPerMin)} match-minutes`);
 });

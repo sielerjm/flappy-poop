@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { LEADERBOARD } from '../src/config.js';
-import { parseArgs, resolveTarget, classifyJoin, isRefusal, reportLine, STEPS, LIVE_REF, TEARDOWN_SQL } from '../tools/online_live_check.mjs';
+import { parseArgs, resolveTarget, classifyJoin, isRefusal, reportLine, STEPS, LIVE_REF, TEARDOWN_SQL, CHECK_ID_PREFIX } from '../tools/online_live_check.mjs';
 
 const SOURCE = readFileSync(new URL('../tools/online_live_check.mjs', import.meta.url), 'utf8');
 const TEST_URL = 'https://abcdefghijklmnopqrst.supabase.co';
@@ -59,14 +59,27 @@ test('the run proves finding 20 (a session refused by the game\'s anon functions
   assert.match(SOURCE, /rpc\(S\.A, 'schema_version'\)/);
   assert.match(SOURCE, /must\(S\.C, 'join_room'/, 'B is mid-race by step 10, and a racing device is told so before any code');
   assert.match(SOURCE, /process\.on\('SIGINT'/);
-  assert.ok((SOURCE.match(/TEARDOWN_SQL/g) ?? []).length >= 4, 'printed on leftovers, a crash and Ctrl-C');
+  assert.ok((SOURCE.match(/TEARDOWN_SQL/g) ?? []).length >= 5, 'printed on leftovers, a pass, a crash and Ctrl-C');
 });
 
-test('the report: twelve numbered steps, one PASS or FAIL line each; the teardown SQL deletes only the check\'s own users', () => {
-  assert.deepEqual(STEPS.map(([n]) => n), ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']);
+test('the report: fourteen numbered steps, one PASS or FAIL line each; the teardown SQL deletes only the check\'s own users', () => {
+  assert.deepEqual(STEPS.map(([n]) => n), ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14']);
   assert.equal(reportLine(STEPS[0], { ok: true, note: '401 42501' }), 'PASS 01 anon cannot call online functions: 401 42501');
-  assert.equal(reportLine(STEPS[11], { ok: false }), `FAIL 12 ${STEPS[11][1]}`);
-  assert.equal(TEARDOWN_SQL, "delete from auth.users where raw_user_meta_data ->> 'online_check' = '39';");
+  assert.equal(reportLine(STEPS[13], { ok: false }), `FAIL 14 ${STEPS[13][1]}`);
+  assert.match(STEPS[13][1], /^teardown/, 'the teardown stays last: it unlinks every session');
+  // 5.2b AUD-140: the users, then their throwaway players' races, first trusts and names (run on PGlite in schemaOnline.test.js).
+  assert.equal(
+    TEARDOWN_SQL,
+    [
+      "delete from auth.users where raw_user_meta_data ->> 'online_check' = '39';",
+      "delete from public.matches where host_player like 'chk39%' or guest_player like 'chk39%';",
+      "delete from public.online_trust where player_id like 'chk39%';",
+      "delete from public.online_profiles where player_id like 'chk39%';",
+    ].join('\n  '),
+  );
+  assert.equal(CHECK_ID_PREFIX, 'chk39');
+  assert.match(SOURCE, /const playerId = \(\) => `\$\{CHECK_ID_PREFIX\}\$\{randomBytes\(13\)\.toString\('base64url'\)\}`\.slice\(0, 22\);/, 'every throwaway id carries the prefix the teardown matches');
+  assert.doesNotMatch(SOURCE.split('\n').slice(0, 25).join('\n'), /nothing is left behind/, 'the header names what stays');
   assert.match(SOURCE, /signInAnonymously\(\{ options: \{ data: \{ online_check: '39' \} \} \}\)/, 'every user it makes carries the tag the teardown matches');
 });
 
@@ -74,4 +87,52 @@ test('it runs only when called, and keeps no session on disk', () => {
   assert.match(SOURCE, /if \(process\.argv\[1\] && import\.meta\.url === /);
   assert.match(SOURCE, /persistSession: false/);
   assert.doesNotMatch(SOURCE, /[a-z0-9]{20}\.supabase\.co/, 'no project URL is written in it');
+});
+
+// Plan 39, 3.5 (T3-review AUD-120, 3.2r note e): the friend and status functions on a real project,
+// where PGlite cannot reach (PostgREST's schema cache and grants, the beacon's keepalive POST and its
+// CORS preflight). Runs before the teardown, from C (paired, in no room).
+test('step 12 checks the friend and status functions on a real project before the teardown', () => {
+  assert.match(STEPS[11][1], /friend/);
+  assert.match(SOURCE, /rpc\(anon, 'friend_list'\)/, 'anon is refused on friend_list');
+  assert.match(SOURCE, /rpc\(anon, 'online_beat', \{ p_here: true \}\)/, 'anon is refused on online_beat');
+  assert.match(SOURCE, /must\(S\.C, 'online_beat', \{ p_here: true \}\)/, 'a paired device beats');
+  assert.match(SOURCE, /must\(S\.C, 'friend_statuses'\)/, 'and reads its friends\' states (none)');
+  assert.match(SOURCE, /\/rest\/v1\/rpc\/online_beat`/, 'the beacon-shaped raw POST');
+  assert.match(SOURCE, /keepalive: true/);
+  assert.match(SOURCE, /method: 'OPTIONS'/, 'the preflight a browser sends before the beacon');
+  const at = (re) => SOURCE.search(re);
+  assert.ok(at(/await step\(12,/) > at(/await step\(11,/) && at(/await step\(13,/) > at(/await step\(12,/), 'steps run in order, the teardown last');
+});
+
+// Plan 39, 4.1: the invite functions on a real project (PostgREST's grants and schema cache) and the
+// user:<player id> topic's policy on real Realtime, which PGlite only stubs. From C (paired, in no room);
+// B, another player's device, must be refused on C's topic.
+test('step 13 checks the invite functions and the player\'s own topic on a real project before the teardown', () => {
+  assert.match(STEPS[12][1], /invite/);
+  assert.match(SOURCE, /rpc\(anon, 'invite_list'\)/, 'anon is refused on invite_list');
+  assert.match(SOURCE, /rpc\(anon, 'send_invite', \{ p_peer: '0'\.repeat\(32\) \}\)/, 'and on send_invite');
+  assert.match(SOURCE, /must\(S\.C, 'invite_list'\)/, 'a paired device lists its invites (none)');
+  assert.match(SOURCE, /must\(S\.C, 'send_invite', \{ p_peer: 'f'\.repeat\(32\) \}\)/, 'a handle that names nobody is unavailable');
+  assert.match(SOURCE, /\/\^user:\[0-9a-f\]\{32\}\$\/\.test\(list\.topic\)/, 'invite_list gives C its topic, a handle (4.1r)');
+  assert.match(SOURCE, /join\(S\.C, list\.topic\)/, 'C joins its own player\'s topic');
+  assert.match(SOURCE, /join\(S\.B, list\.topic\)/, 'another player\'s device is refused there');
+  const at = (re) => SOURCE.search(re);
+  assert.ok(at(/await step\(13,/) > at(/await step\(12,/) && at(/await step\(14,/) > at(/await step\(13,/), 'before the teardown');
+});
+
+// Plan 39, 5.3b: 5.2b's answer_guest refuses a decline within 2 s of the code's minting (AUD-136), so
+// step 8, which mints a code and declines its guest, waits that out before the decline, or the run fails
+// at that step on a real project. The wait is tied to the schema's own interval.
+test('step 8 waits out answer_guest\'s decline pacing before it declines', async () => {
+  const { DECLINE_WAIT_MS } = await import('../tools/online_live_check.mjs');
+  const SCHEMA = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8');
+  const fn = SCHEMA.slice(SCHEMA.indexOf('create or replace function public.answer_guest('));
+  const secs = Number(/not coalesce\(p_accept, false\) and v_room\.created_at > now\(\) - interval '(\d+) seconds?'/.exec(fn)?.[1]);
+  assert.ok(secs > 0, 'answer_guest paces declines by an interval in seconds');
+  assert.ok(Number.isFinite(DECLINE_WAIT_MS) && DECLINE_WAIT_MS > secs * 1000, `the wait (${DECLINE_WAIT_MS} ms) is longer than the pacing (${secs} s)`);
+  const step8 = SOURCE.slice(SOURCE.search(/await step\(8,/), SOURCE.search(/await step\(9,/));
+  const at = (re) => step8.search(re);
+  assert.ok(at(/'create_room'/) >= 0 && at(/sleep\([^)]*DECLINE_WAIT_MS/) > at(/'create_room'/), 'the wait comes after the code is minted');
+  assert.ok(at(/p_accept: false/) > at(/sleep\([^)]*DECLINE_WAIT_MS/), 'and before the decline');
 });
