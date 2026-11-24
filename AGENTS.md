@@ -212,7 +212,7 @@ the other half plays on); a shopper is never ready, so the count cannot start un
 the other player; a respawning half's clock stops with it). Chrome decisions in a match read
 `chromeState()` (the match's state, not the half's), so a finished or respawning half still pauses and
 resumes the match. The match ends once **both** have cleared the rectum (the first one out waits under
-"Made it out!" / "Waiting for P2…", `showEscapedBanner`); the result panel names the higher score
+"Made it out!" / "Waiting for P2…", `showEscapedBanner`; once the match is over the second finisher's half drops the waiting line, and `Versus.onRunEnded` redraws both halves, so both read only "Made it out!"; plan 35, 4.3, tests/versusEnd.test.js); the result panel names the higher score
 (`raceOutcome`, below) on a `versus.resultPanelW` (820 px) panel with each player's 🏁 level wins and 💀
 count, and offers Continue | Bracket (the Tournament paragraph). A race adds nothing to a best, the
 save-code score or the career, but it posts (plan 39, 2.5): a two-player tournament to 🏅 (the Tournament
@@ -420,7 +420,11 @@ drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` ha
 `splashReady(() => scene.start('Play'))`: once the ring is full (or after a timer backstop, since rAF
 stops in a hidden tab) Continue lights up and glows, and **Play starts only on its
 release** (click, Enter / Space up, the pad's A up), since Play's keydown-SPACE flap repeats while held
-and the pad plugin reports a held button. Any error in the splash removes it and starts the game.
+and the pad plugin reports a held button. With the **`skipSplash` setting** on (Settings "Skip to home when loaded"; off by
+default; plan 35, 4.2) Continue presses itself the moment it lights (`skipWanted(storage)`, read from the settings
+store then, so a change counts from the next load; the full ring still shows, and the failed splash never skips). The
+splash's tap never unlocked iOS sound (`Play.flap` does), so skipping loses nothing. Plan 01's rule that Continue
+stays on every load holds unless the player turned that on. Any error in the splash removes it and starts the game.
 Held-key flaps stay in split screen and single player; an **online race drops a key's auto-repeat** (flap, Ready, P
 and Esc: Play's `onlineRepeat(event)`, plan 39 5.2b, AUD-149 / AUD-144), tests/raceRun.test.js, tests/runStamp.test.js.
 
@@ -684,7 +688,9 @@ when the gate is open and something was answered; while the gate holds (new card
 quitting the run (`breakGaveUp`: ungraded, and 🏳️ with nothing answered; plan 26, A2). It reads Quit
 either way; armed it reads "Quit? Tap again", or "Quit ungraded? Tap again" while the gate holds
 (`breakQuitDueSure`), and an armed Quit ends with its break (`startLevelBreak` and `endLevelBreak` clear
-`breakQuitArmedAt`; plan 27), so a level cleared within the confirm time never opens a break armed. **The level choice** (plan 26, A2: Michael's image 12): once the gate is open
+`breakQuitArmedAt`; plan 27), so a level cleared within the confirm time never opens a break armed. The armed Quit is dimmed and ignores a second tap for
+`education.explainMinMs` (`Play.breakQuitHeld()`, as the revive's Quit; the 4 s confirm time is unchanged; plan 35, 4.6), so a
+double tap never passes the warning. **The level choice** (plan 26, A2: Michael's image 12): once the gate is open
 (`breakGate`: nothing left that the break asks), never in a test run (or with test mode on) or a match, **[◀] LV n [▶]** shows on ⏸'s row, centred
 (`eduBreakLayout`'s `levelDown` / `levelLabel` / `levelUp`, `levelStrip` swallowing the tap; ring items `levelDown`,
 `levelUp`). ◀ ▶ cycle 1 … the higher of the next level and `unlockedLevel`, wrapping (`stepBreakLevel` →
@@ -1164,7 +1170,7 @@ src/
                             levelSpeed, levelColor, levelProgress,
                             levelBarLayout, lerpColor),
                             best-score store, settings store (incl. locale,
-                            howToSeenAt and hand: HANDS 'left' | 'right', the
+                            howToSeenAt, skipSplash (plan 35, 4.2; off by default) and hand: HANDS 'left' | 'right', the
                             bean button's side; eduStartLevel 1 … levels.lastLevel,
                             plan 25;
                             eduNewOrder after / mixed / before, plan 26;
@@ -1205,8 +1211,8 @@ src/
                             the 💰 in a race's shared level break), shopLayout / shopHit, chromeIntent's
                             shop / breaking args and 'shop' input; test mode:
                             isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
-                            settingsLayout (Settings panel + rows, taller with the
-                            test section). Fully unit-tested.
+                            settingsLayout (Settings panel 1010 px + rows, taller with the
+                            test section, 1240). Fully unit-tested.
   changelog.js              What's new data, NO Phaser/DOM: CHANGELOG (one entry per
                             version, newest first: version, date like LAST_UPDATED's
                             day, notes per locale), changelogEntry, changelogNotes
@@ -1717,7 +1723,12 @@ src/
                             the page; boardPage(rows, { offset, limit }) splits a
                             ranked board's answer: the page's rows (the caller's only
                             on its own page), mine (the caller's row, wherever it
-                            is: the footer), last (no page follows).
+                            is: the footer), last (no page follows). Plan 35, 4.5:
+                            opts.peek makes a fetcher ask limit + 1 (p_limit 26; the
+                            server caps at 100); boardPage reads the row at place
+                            offset + limit + 1 (ranks are row_number), drops it, and
+                            calls the page last when none came back; 🏆 (no ranks) is
+                            last when rawRows.length <= limit. 🌞 and 📚 keep their total.
                             The 📚 board (plan 21): createEduShareStore
                             (flappyPoop.eduShare: on, the round sharedAt, the name
                             last sent, what was sent, one batch in flight, and the
@@ -1764,7 +1775,8 @@ src/
                             createSplashStore (flappyPoop.splash, throw-guarded).
                             DOM, document / window injected: startSplash
                             (idempotent; the inline import or Boot, whichever is
-                            first), setSplashProgress, splashReady(onContinue).
+                            first), setSplashProgress, splashReady(onContinue), skipWanted(storage)
+                            (plan 35, 4.2: the skipSplash setting, read when Continue lights).
                             Fails open: an error removes the splash and starts the
                             game. tests/splash.test.js.
   streak.js                 Day streaks (plan 34), NO Phaser, no imports: dayNumber,
@@ -2754,8 +2766,8 @@ src/
                             installs; when the page itself answers from the network it
                             first removes this scope's service worker and our caches,
                             else keeps both: see "Service worker"), About link, version. Tap outside the panel
-                            closes (overlayOutsideHit), same as X. The panel is 860
-                            px; in test mode 1240 px with the test section (start level ◀ ▶,
+                            closes (overlayOutsideHit), same as X. The panel is 1010
+                            px (plan 35, 4.2: the "Skip to home when loaded" row and its hint, the label fitted by fitScale); in test mode 1240 px with the test section (start level ◀ ▶,
                             Invincible, TEST_POWERS buttons live only while a test run
                             is paused, Exit → setTestMode(false) + scene.restart()).
     About.js                Overlay: How to play + feedback links, then the
@@ -2853,8 +2865,9 @@ src/
                             arrows (footerTop) so a second line grows down, and
                             setFooter shrinks a longer one (both places and the
                             name note) to fit above the version line; – rows fill
-                            page 1 only. Known edges: a board of exactly 25, 50, …
-                            on 🏆 or 🏅 (no total) offers one empty page; on 🏆's
+                            page 1 only. A board of exactly 25, 50, … no longer offers an
+                            empty page (plan 35, 4.5; see the fetchers' opts.peek).
+                            Known edge: on 🏆's
                             table-read fallback a hidden or held player's spliced
                             row pushes one place off page 1 (score_board answers
                             their own view, so this needs score_board to fail).
@@ -3306,7 +3319,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             mergeDayStreak, the store's merge with its floor,
                             Play.pullPlayDays, a late merge asking again
   store.test.js             best-score store incl. throwing/missing storage
-  settings.test.js          settings store (incl. hand; a set() storage refused kept
+  versusEnd.test.js         plan 35, 4.3: the second finisher's half never reads "Waiting for P1…" once the match is over; both halves redrawn
+  settings.test.js          settings store (incl. skipSplash, plan 35 4.2; incl. hand; a set() storage refused kept
                             for the page load and shared by the stores over it,
                             AUD-030) + vibrate helper; plan 28 Stage 3b:
                             eduNewPerLevel (3, 5, 'all'; 5 by default); plan 28, 4.2:
@@ -3478,7 +3492,7 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             submitCounters, claimAchievements, fetchPlayerStats;
                             plan 28 5.2: the four fetchers' p_offset (page 1's
                             requests unchanged, the table read's offset=),
-                            withOwnRows per page, boardPage (the page, mine, last)
+                            withOwnRows per page, boardPage (the page, mine, last), opts.peek's limit + 1 (plan 35 4.5)
   nerdAlert.test.js         🤓 Nerd Alert's rule since plan 34: won, perfect, caught
                             up (eduCaughtUp), graded, any start level; the pending
                             run's caughtUp, moved by bonus answers
@@ -3814,7 +3828,7 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             the 🚩 never navigates the game's tab, tapLocked, the
                             numbers' explainer (plan 25); plan 26: the next wait,
                             caught up with Keep practicing, the purse; plan 26 A2:
-                            Quit's warning on every card, holdFor's timer, the
+                            Quit's warning on every card, holdFor's timer, the break's armed Quit held (breakQuitHeld, plan 35 4.6), the
                             ⭐ choice's own line, the already-earned note, Skip
                             (price, warning, lockout, keys, why it is dimmed); plan
                             28 Stage 3b: the stop before a due card past the gate
@@ -4167,7 +4181,7 @@ tools/
                             board's and the pilot's calls are stubbed at boot
                             (globalThis.__edu / __eduAnswer), like the career's.
                             OVERLAYS lists Quiz; NEEDS_RUN keeps the ready-screen
-                            overlay loops off it. Two sections of plan 35: phaser-fallback
+                            overlay loops off it. Plan 35's skip-splash (4.2: the setting off then on, Continue pressed by itself, the failed splash not) and its other sections: phaser-fallback
                             (the page reloaded with the CDN blocked, then stalled, boots from
                             assets/vendor/; both blocked, the splash reads Couldn't load and a
                             tap reloads; then back on the CDN) and error-card (an error thrown
@@ -4207,7 +4221,7 @@ tools/
                             the wait, a no and Resend in the same room. Plan 39's online-join-link (4.3): the
                             real page opened at ?join= takes the code out of the address, opens 🌐, keeps it
                             through a failed sign-in, joins on Retry; a gone room says the link expired.
-                            Full smoke: 43 sections, 994 checks.
+                            Full smoke: 44 sections, 1001 checks.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
