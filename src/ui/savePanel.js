@@ -109,6 +109,9 @@ let keep = 'device';
 let explain = false;
 // The dashboard's (?) card: what each thing on the page does (Michael, A2).
 let help = false;
+// The flow the panel opened on ('newPlayer' from a Create user button elsewhere, else null): ✕ from it goes
+// back where the player came from, so it closes the panel.
+let entryFlow = null;
 
 // The parse writes nothing (plan 44): an empty player and a storage that keeps nothing, as the tournament lobby's claimFromCode.
 const NO_STORAGE = { getItem: () => null, setItem() {}, removeItem() {} };
@@ -195,7 +198,7 @@ function build() {
   const mergeGo = h('button', { type: 'button', id: 'save-merge-confirm', disabled: true });
   const mergeBlock = h('div', { class: 'confirm', id: 'save-merge' }, h('div', { class: 'row' }, mergeIn), cards, pickLine, checkLine, onlineLine, h('div', { class: 'row buttons' }, mergeCancel, mergeGo));
   const status = h('p', { class: 'status', id: 'save-status' });
-  const close = h('button', { type: 'button', class: 'close', 'aria-label': 'close' }, '✕');
+  const close = h('button', { type: 'button', class: 'close', id: 'save-close', 'aria-label': 'close' }, '✕');
   const helpBtn = h('button', { type: 'button', class: 'help', id: 'save-help-btn', 'aria-label': 'help' }, '?');
   const helpTitle = h('h3');
   const helpList = h('dl');
@@ -209,15 +212,12 @@ function build() {
   const root = h('div', { id: PANEL_ID, role: 'dialog', 'aria-modal': 'true', hidden: true }, card);
   document.body.append(root);
 
-  close.addEventListener('click', () => closeSavePanel());
+  close.addEventListener('click', () => stepBack());
   root.addEventListener('click', (e) => {
     if (e.target === root) closeSavePanel();
   });
   root.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      if (help) closeHelp(); // the help first: back to what was under it
-      else closeSavePanel();
-    }
+    if (e.key === 'Escape') stepBack();
     e.stopPropagation();
   });
   newBtn.addEventListener('click', () => openFlow('newPlayer', true));
@@ -348,6 +348,29 @@ function onEduData() {
   const play = ctx?.play;
   closeSavePanel();
   play?.openEduData?.({ onClose: () => play.openSavePanel?.() }); // closing it comes back here (Michael, A2)
+}
+
+/**
+ * ✕ and Escape: one step back, to the page before, as Got it, ‹ Back and Cancel do (Michael's playtest,
+ * 24 Nov): the help to what is under it, the popup after Create user to the dashboard, a Sign out or Merge
+ * confirm to the dashboard (nothing done), a Sign in or Create user screen to its two buttons. From the
+ * top (the dashboard, the two buttons, or the screen a Create user button elsewhere opened on) it closes.
+ */
+function stepBack() {
+  if (help) return closeHelp();
+  if (explain) {
+    explain = false;
+    setStatus('');
+    render();
+    return;
+  }
+  if (flow && flow !== entryFlow) {
+    const from = flow;
+    openFlow(null);
+    ({ newPlayer: dom.newBtn, haveCode: dom.haveBtn, logout: dom.clearBtn, merge: dom.mergeBtn })[from]?.focus();
+    return;
+  }
+  closeSavePanel();
 }
 
 /** Close the (?) layer: back to what was under it, as it was, the focus on the (?). */
@@ -891,6 +914,7 @@ export function openSavePanel(options) {
   dom.mergeIn.value = '';
   dom.copy.textContent = t(ctx.locale, 'saveCopy');
   if (options.focusName && !state.name) flow = 'newPlayer';
+  entryFlow = flow;
   render();
   // The last sync was refused because another player holds this username: say so, with the way out.
   setStatus(state.name && ctx.play?.boardNameTaken ? t(ctx.locale, 'saveNameTaken') : '', state.name && ctx.play?.boardNameTaken ? 'error' : '');

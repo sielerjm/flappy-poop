@@ -359,6 +359,57 @@ test('Escape with the help open closes the help, not the panel; a second Escape 
   assert.equal(root().hidden, true);
 });
 
+// Michael's playtest (24 Nov): ✕ should go back to the page before, as Got it, ‹ Back and Cancel do; only
+// from the top (the dashboard, or Sign in | Create user) does it close. Escape is the same key.
+test('✕ steps back one level: the help, the popup after Create user, a confirm, a Sign in or Create user screen; from the top it closes', async () => {
+  globalThis.localStorage = fakeStorage();
+  const x = () => el('save-close').click();
+  const signedIn = fakePlay({ save: { id: ME, name: 'Mike', top: [], exportedAt: null } });
+  open(signedIn);
+  await tick();
+  await el('save-help-btn').click();
+  await x();
+  assert.ok(root().hidden === false && !shown('save-help') && shown('save-code'), 'the help: back to the dashboard');
+  await el('save-clear-btn').click();
+  await el('save-help-btn').click();
+  await x();
+  assert.ok(shown('save-logout'), 'the help over Sign out: back to the confirm');
+  await x();
+  assert.ok(root().hidden === false && !shown('save-logout') && shown('save-code'), 'the Sign out confirm: back to the dashboard');
+  await el('save-merge-btn').click();
+  await x();
+  assert.ok(root().hidden === false && !shown('save-merge') && shown('save-code'), 'Merge: back to the dashboard');
+  assert.deepEqual(signedIn.calls, [], 'nothing signed out or merged');
+  await x();
+  assert.equal(root().hidden, true, 'the dashboard: ✕ closes');
+
+  const fresh = fakePlay();
+  open(fresh);
+  await el('save-have-btn').click();
+  await x();
+  assert.ok(root().hidden === false && shown('save-have-btn') && shown('save-new-btn'), 'Sign in: back to the two buttons');
+  await el('save-new-btn').click();
+  await root().fire('keydown', { key: 'Escape' });
+  assert.ok(root().hidden === false && shown('save-have-btn'), 'Create user: Escape goes back too');
+  await x();
+  assert.equal(root().hidden, true, 'the two buttons: ✕ closes');
+
+  open(fakePlay(), { focusName: true });
+  await x();
+  assert.equal(root().hidden, true, 'Create user opened by a Create user button elsewhere: ✕ goes back there (closes)');
+
+  const creating = fakePlay();
+  open(creating);
+  await el('save-new-btn').click();
+  el('save-name').value = 'Newbie';
+  await el('save-save-btn').click();
+  await tick();
+  assert.ok(shown('save-explain'));
+  await x();
+  assert.ok(root().hidden === false && !shown('save-explain') && shown('save-code'), 'the popup after Create user: back to the dashboard');
+  closeSavePanel();
+});
+
 test('📚 Education data shows signed out only when education is off for everyone and this device still needs it (AUD-037)', () => {
   globalThis.localStorage = fakeStorage();
   open(fakePlay({ education: true }));

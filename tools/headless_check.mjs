@@ -545,6 +545,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await press();
           const closed = await seen();
           ok(opened.open && opened.help && opened.y === at.y && closed.open && !closed.help && closed.logout === (over === 'sign out'), `over the ${over}, the (?) stays put (y ${at.y} → ${opened.y}); a second click on the same spot closes the help and the panel stays${over === 'sign out' ? ', still on the confirm' : ''}`);
+          // ✕ over the help steps back too (Michael's playtest): to the dashboard, or to the confirm.
+          await press();
+          const xAt = await evaluate(`JSON.stringify(document.getElementById('save-close').getBoundingClientRect())`).then(JSON.parse);
+          for (const type of ['mousePressed', 'mouseReleased']) await cdp.send('Input.dispatchMouseEvent', { type, x: xAt.x + xAt.width / 2, y: xAt.y + xAt.height / 2, button: 'left', clickCount: 1 });
+          await sleep(200);
+          const backed = await seen();
+          ok(backed.open && !backed.help && backed.logout === (over === 'sign out'), `over the ${over}, ✕ on the help goes back to the ${over === 'sign out' ? 'confirm' : 'dashboard'}, the panel stays`);
           if (over === 'sign out') await evaluate(`document.getElementById('save-logout-cancel').click(), true`);
         }
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
