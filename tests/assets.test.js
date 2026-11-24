@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING } from '../src/config.js';
 
 const root = new URL('..', import.meta.url).pathname;
 
@@ -49,6 +49,26 @@ test('every spritesheet is a whole number of its frames', () => {
     assert.equal(real.h, l.frameHeight, `${l.path}: one row of ${l.frameHeight} px frames`);
     assert.equal(real.w % l.frameWidth, 0, `${l.path}: width ${real.w} is not a whole number of ${l.frameWidth} px frames`);
   }
+});
+
+// Plan 35, 2.1: the runtime art is exported at 2x the size it is drawn at, not 4x (a phone at 3x DPR
+// shows a 96 logical px sprite at about 156 device px, so 192 px frames still look sharp at a quarter
+// of the decoded texture memory). The poop set shares one scale, so the plain frames carry the rule.
+test('the sprite art is exported at 2x its drawn size (plan 35, 2.1)', () => {
+  const drawn = 96; // logical px a poop frame, an item or a mystery-box frame is drawn at
+  assert.equal(TUNING.spriteDisplayScale, 0.5, 'spriteDisplayScale: 2x frames are drawn at half size');
+  for (const name of ['poop.png', 'poop-dead.png', 'poop-scared.png', 'fiber.png', 'probiotic.png', 'bacteria.png', 'bean.png', 'postbiotic.png', 'mystery-icon.png']) {
+    const real = pngSize(join(root, 'assets', name));
+    assert.deepEqual({ w: real.w, h: real.h }, { w: 2 * drawn, h: 2 * drawn }, `${name}: frames at 2x of ${drawn} px`);
+    assert.equal(real.w * TUNING.spriteDisplayScale, drawn, `${name}: drawn at ${drawn} logical px`);
+  }
+  const mystery = loads.find((l) => l.key === 'mystery');
+  assert.equal(mystery.frameWidth, 2 * drawn, "Boot's mystery spritesheet frames");
+  assert.equal(pngSize(join(root, 'assets/mystery.png')).h, 2 * drawn, 'mystery.png: one row of 2x frames');
+  const coin = loads.find((l) => l.key === 'coin');
+  assert.equal(coin.frameWidth, 2 * TUNING.coin.displayPx, 'coin.png: frames at 2x of coin.displayPx');
+  const q = pngSize(join(root, 'assets/question.png'));
+  assert.equal(q.w, 2 * TUNING.education.superQ.displayPx, 'question.png: 2x of superQ.displayPx');
 });
 
 const readme = readFileSync(join(root, 'assets/README.md'), 'utf8');

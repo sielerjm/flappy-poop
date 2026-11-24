@@ -32,7 +32,7 @@ export const TUNING = {
   gapMargin: 80, // keep the gap this far from the ceiling and the ground
   poopXFrac: 0.25, // 0–1 share of the field width where the player sits (180 px of a 720 field; the same share on a wider desktop field; poopX())
   poopRadius: 48, // px circular hitbox = half the 96 logical-px sprite (the whole drawing, square corners excluded)
-  spriteDisplayScale: 0.25, // 384 px textures drawn at 96 logical px
+  spriteDisplayScale: 0.5, // 192 px textures (2x) drawn at 96 logical px (plan 35, 2.1; was 384 px at 0.25)
   hudProbioticSize: 96, // logical px; HUD icon uses setDisplaySize
   hudProbioticPulse: { scale: 1.1, ms: 600 }, // the probiotic / postbiotic HUD icon breathes 1 → scale and back every ms while its count runs; it grows hudProbioticSize × (scale − 1) / 2 per side, which must stay under hudRightLayout's 8 px gap to the count (tests/tuning.test.js)
   hudScoreY: 116, // px centre line of the 80 px score (and the 🚽 beside it): below the progress bar with air between

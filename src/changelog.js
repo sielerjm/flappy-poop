@@ -8,6 +8,18 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.28.1',
+    date: '24 Nov 2026',
+    notes: {
+      en: [
+        '⚡ Faster loading: the game’s drawings now download at less than half the size, and look the same.',
+      ],
+      'zh-Hans': [
+        '⚡ 加载更快：游戏里的图画下载大小不到原来的一半，看起来和以前一样。',
+      ],
+    },
+  },
+  {
     version: '0.28.0',
     date: '24 Nov 2026',
     notes: {

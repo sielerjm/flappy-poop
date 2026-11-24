@@ -72,7 +72,7 @@ test('fartVolume is audible but not clipping', () => {
 });
 
 test('HUD probiotic icon is at least as large as the world item sprite', () => {
-  const worldPx = 384 * T.spriteDisplayScale;
+  const worldPx = 192 * T.spriteDisplayScale; // poop.png and the items are 192 px (2x, plan 35, 2.1)
   assert.ok(T.hudProbioticSize >= worldPx, `hudProbioticSize ${T.hudProbioticSize} < world ${worldPx}`);
   assert.ok(T.hudProbioticSize <= 128, `hudProbioticSize ${T.hudProbioticSize} too tall for the score band`);
   // Its pulse: a visible breath that never reaches the ×n count (hudRightLayout's gap is 8 px) nor the level bar above.

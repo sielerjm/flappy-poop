@@ -2,21 +2,26 @@
 """process_art.py — crop, knock out background white, and resize Michael's
 drawings into the gameplay art-contract PNGs.
 
-Created by Michael Sieler. Last updated: 2026-11-11 (the corn kernel's spin sheet, the near-miss faces).
+Created by Michael Sieler. Last updated: 2026-11-24 (plan 35, 2.1: frames at 2x their drawn size, 192 px, and
+every PNG losslessly recompressed with oxipng when it is installed).
 
 Run:    uv run --with pillow python3 tools/process_art.py   (or any Python with Pillow)
+        With oxipng on PATH (`brew install oxipng`) every output is recompressed losslessly
+        (`oxipng -o 4 --strip safe`, about 20 % smaller than Pillow's own optimizer); without it,
+        Pillow's optimized save is kept.
 Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,PoopFalling,
                     PoopStinkFalling1,PoopStinkFalling2,PoopScared,PoopScaredStink1,PoopScaredStink2,
                     Poop_Fart,Poop_Speech,
                     Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean,Postbiotic,MysteryBox_Icon}.png,
         assets/src/{MysteryBox,CornKernel}.gif (animated) and assets/src/FlappyPoopAppArt.png (the app icon)
-Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic,mystery-icon}.png at 384x384 RGBA,
+Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic,mystery-icon}.png at 192x192 RGBA
+        (2x the 96 logical px they are drawn at, spriteDisplayScale 0.5),
         assets/coin.png: the kernel GIF's frames side by side, 106x106 each (drawn at 53 px: a clean
         2:1 shrink instead of 8:1),
-        assets/poop-scared.png (the near-miss face) at 384x384 too,
+        assets/poop-scared.png (the near-miss face) at 192x192 too,
         assets/{poop-stink1,poop-stink2,poop-falling,poop-stink-falling1,poop-stink-falling2,
                 poop-stink-scared1,poop-stink-scared2,poop-fart,poop-speech}.png on larger squares,
-        assets/mystery.png: the GIF's frames side by side, 384x384 each (a Phaser spritesheet), and
+        assets/mystery.png: the GIF's frames side by side, 192x192 each (a Phaser spritesheet), and
         assets/{icon-192,icon-512,apple-touch-icon}.png from the app art (see process_icons).
 
 Only white connected to the image border is made transparent, so eyes and
@@ -31,14 +36,26 @@ centred there; the cloud trails left of the body in the game.
 """
 from collections import deque
 from pathlib import Path
+import shutil
+import subprocess
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "assets" / "src"
 OUT = ROOT / "assets"
-SIZE = 384
+SIZE = 192  # 2x the 96 logical px a poop frame or an item is drawn at (plan 35, 2.1; was 384 at 4x)
 WHITE_CUTOFF = 245  # near-white on the border is treated as background
 PAD = 4  # px of source padding kept around the ink after trim
+
+
+OXIPNG = shutil.which("oxipng")
+
+
+def save_png(im: Image.Image, dest: Path) -> None:
+    """Save with Pillow's optimizer, then (if installed) oxipng's lossless pass: same pixels, fewer bytes."""
+    im.save(dest, optimize=True)
+    if OXIPNG:
+        subprocess.run([OXIPNG, "-q", "-o", "4", "--strip", "safe", str(dest)], check=True)
 
 
 def knock_background(im: Image.Image) -> Image.Image:
@@ -158,7 +175,7 @@ def process_poop_set():
     for src_name, dest in (("Poop_Emoji_Alive.png", "poop.png"), ("Poop_Emoji_Dead.png", "poop-dead.png")):
         im = alive if dest == "poop.png" else dead
         out = scale_to(crop_centred(im, body_centre, body_half), SIZE)
-        out.save(OUT / dest)
+        save_png(out, OUT / dest)
         print(f"{dest}: {out.size}")
 
     # Stink / falling frames: same body centre and scale, bigger square for the
@@ -169,7 +186,7 @@ def process_poop_set():
         ("PoopFalling.png", "poop-falling.png"),
         ("PoopStinkFalling1.png", "poop-stink-falling1.png"),
         ("PoopStinkFalling2.png", "poop-stink-falling2.png"),
-        ("PoopScared.png", "poop-scared.png"),  # near miss with a pipe: no lines, so the body box (384)
+        ("PoopScared.png", "poop-scared.png"),  # near miss with a pipe: no lines, so the body box (192)
         ("PoopScaredStink1.png", "poop-stink-scared1.png"),
         ("PoopScaredStink2.png", "poop-stink-scared2.png"),
     ):
@@ -181,7 +198,7 @@ def process_poop_set():
         size = int(round(2 * half * k))
         size += size % 2
         out = scale_to(crop_centred(im, body_centre, half), size)
-        out.save(OUT / dest)
+        save_png(out, OUT / dest)
         print(f"{dest}: {out.size}")
 
     # Fart frame: body is elsewhere on the canvas; centre on the brown body.
@@ -195,7 +212,7 @@ def process_poop_set():
     size = int(round(2 * half * k))
     size += size % 2
     out = scale_to(crop_centred(fart, fart_centre, half), size)
-    out.save(OUT / "poop-fart.png")
+    save_png(out, OUT / "poop-fart.png")
     print(f"poop-fart.png: {out.size}  (body centre {tuple(round(v) for v in fart_centre)} of {fart.size})")
 
     # Speech frame (ready screen "TAP TO FLAP!" bubble): same rule as the fart frame.
@@ -209,7 +226,7 @@ def process_poop_set():
     size = int(round(2 * half * k))
     size += size % 2
     out = scale_to(crop_centred(speech, speech_centre, half), size)
-    out.save(OUT / "poop-speech.png")
+    save_png(out, OUT / "poop-speech.png")
     print(f"poop-speech.png: {out.size}  (body centre {tuple(round(v) for v in speech_centre)} of {speech.size})")
 
 
@@ -222,7 +239,7 @@ def process_item(src: Path, dest_name: str, size: int = SIZE):
     side = max(im.width, im.height)
     im = scale_to(fit_on_square(im, side), size)
     dest = OUT / dest_name
-    im.save(dest)
+    save_png(im, dest)
     print(f"{dest_name}: {im.size}")
 
 
@@ -243,7 +260,7 @@ def process_sheet(src: Path, dest_name: str, size: int = SIZE):
     sheet = Image.new("RGBA", (size * len(frames), size), (0, 0, 0, 0))
     for i, f in enumerate(frames):
         sheet.paste(scale_to(crop_centred(f, centre, half), size), (i * size, 0))
-    sheet.save(OUT / dest_name)
+    save_png(sheet, OUT / dest_name)
     print(f"{dest_name}: {sheet.size} ({len(frames)} frames of {size}x{size})")
 
 
@@ -269,11 +286,11 @@ def process_icons(src: Path):
         inner = int(round(size * ICON_SAFE_FRAC))
         out = Image.new("RGBA", (size, size), bg)
         out.paste(scale_to(art, inner), ((size - inner) // 2, (size - inner) // 2))
-        out.save(OUT / name)
+        save_png(out, OUT / name)
         print(f"{name}: {out.size} (drawing {inner} px on {bg[:3]})")
     name, size = APPLE_ICON
     out = scale_to(art, size)
-    out.save(OUT / name)
+    save_png(out, OUT / name)
     print(f"{name}: {out.size} (full bleed)")
 
 

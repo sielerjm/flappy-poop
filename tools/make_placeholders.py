@@ -181,12 +181,14 @@ def ground(path, w=720, h=128):
     img.save(path)
 
 
-def question(path, size=384):
+def question(path, size=230):
     """Plan 34's challenge question bubble: a black "?" in a see-through soap bubble (Michael at Preview G:
     "a little transparent like a bubble"): a faint white fill, denser towards the rim, a thin dark outline,
-    a white shine top left and a small one bottom right; 384x384 like the items (drawn at about 115 px).
+    a white shine top left and a small one bottom right; 230x230, 2x the 115 px it is drawn at (superQ.displayPx;
+    plan 35, 2.1: it was 384x384, so its line widths scale with `size` from that look).
     A placeholder for Michael's drawing (assets/src/), so the main block only writes it when the file is missing."""
     s = 4  # draw at 4x, then shrink: smooth edges
+    u = size / 384  # the outline and shine were tuned at 384 px; keep them the same share of the bubble
     big = Image.new("RGBA", (size * s, size * s), (0, 0, 0, 0))
     c, r = size * s / 2, size * s * 0.44
     # The film: clear in the middle, whiter towards the rim (rings of rising alpha).
@@ -200,10 +202,10 @@ def question(path, size=384):
         fd.ellipse((c - rr, c - rr, c + rr, c + rr), fill=(235, 245, 255, alpha))
     big = Image.alpha_composite(big, film)
     d = ImageDraw.Draw(big)
-    d.ellipse((c - r, c - r, c + r, c + r), outline=(42, 26, 16, 210), width=7 * s)
+    d.ellipse((c - r, c - r, c + r, c + r), outline=(42, 26, 16, 210), width=round(7 * s * u))
     # The shine: a white arc top left and a dot bottom right.
     hr = r * 0.74
-    d.arc((c - hr, c - hr, c + hr, c + hr), start=195, end=255, fill=(255, 255, 255, 235), width=13 * s)
+    d.arc((c - hr, c - hr, c + hr, c + hr), start=195, end=255, fill=(255, 255, 255, 235), width=round(13 * s * u))
     dr = r * 0.07
     dx, dy = c + r * 0.52, c + r * 0.52
     d.ellipse((dx - dr, dy - dr, dx + dr, dy + dr), fill=(255, 255, 255, 220))
