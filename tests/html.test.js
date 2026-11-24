@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -22,6 +22,17 @@ test('index.html loads Phaser pinned to an exact version from jsDelivr', () => {
 
 test('index.html loads src/main.js as an ES module', () => {
   assert.match(html, /<script type="module" src="src\/main\.js">/);
+});
+
+// Plan 35, 2.4: a modulepreload only helps when its URL is exactly the one an import uses.
+test('index.html modulepreloads real modules by their bare URL (no ?v=), main.js included', () => {
+  const hrefs = [...html.matchAll(/<link rel="modulepreload" href="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(hrefs.includes('src/main.js'), 'main.js is preloaded');
+  assert.equal(new Set(hrefs).size, hrefs.length, 'no module is preloaded twice');
+  for (const h of hrefs) {
+    assert.match(h, /^src\/[\w/]+\.js$/, `${h}: a bare src/ path`);
+    assert.ok(existsSync(new URL(`../${h}`, import.meta.url)), `${h} exists`);
+  }
 });
 
 // The loading splash (src/splash.js reads these ids and classes; the CSS paints before any module).

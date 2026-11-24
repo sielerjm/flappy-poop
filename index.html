@@ -10,6 +10,13 @@
   <link rel="manifest" href="manifest.webmanifest">
   <!-- Phaser's CDN: the connection opens while the page parses (plan 35, 1.2). -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <!-- The module graph is four levels deep, and a browser only learns a level once the one above has arrived: these start the big first-run modules at once (plan 35, 2.4). The hrefs are exactly the URLs the imports use (bare, no ?v=), or the preload is wasted. -->
+  <link rel="modulepreload" href="src/main.js">
+  <link rel="modulepreload" href="src/config.js">
+  <link rel="modulepreload" href="src/logic.js">
+  <link rel="modulepreload" href="src/i18n.js">
+  <link rel="modulepreload" href="src/scenes/Boot.js">
+  <link rel="modulepreload" href="src/scenes/Play.js">
   <!-- ?v= on the icons: browsers cache favicons and manifest icons by URL for a long time; bump it when the icon art changes. -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=2">
