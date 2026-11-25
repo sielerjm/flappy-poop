@@ -71,6 +71,37 @@ test('the sprite art is exported at 2x its drawn size (plan 35, 2.1)', () => {
   assert.equal(q.w, 2 * TUNING.education.superQ.displayPx, 'question.png: 2x of superQ.displayPx');
 });
 
+// Plan 17, 1.3: the December art in assets/advent/. Each entry is a square (px) the file must have once it
+// exists: items are 192 (drawn at 96); the poop twins and the hatted bacterium sit at their measured squares
+// because they are drawn at spriteDisplayScale like the stock frames. An entry whose file is not there yet is
+// skipped (the art arrives step by step), so the table never fails an empty or partly filled folder.
+const adventSquares = {
+  'candy-cane.png': 192,
+  'gingerbread.png': 192,
+  'poop-santa.png': 234,
+  'poop-scared-santa.png': 234,
+  'poop-stink1-santa.png': 358,
+  'poop-stink2-santa.png': 358,
+  'poop-stink-scared1-santa.png': 358,
+  'poop-stink-scared2-santa.png': 358,
+  'poop-falling-santa.png': 366,
+  'poop-stink-falling1-santa.png': 366,
+  'poop-stink-falling2-santa.png': 366,
+  'poop-fart-santa1.png': 438,
+  'poop-fart-santa2.png': 446,
+  'poop-speech-santa.png': 510,
+  'bacteria-santa.png': 196, // approximate until the art is built (plan 17, "Art workflow")
+};
+
+test('the assets/advent/ art named in the size table has the listed square (plan 17, 1.3)', () => {
+  for (const [name, square] of Object.entries(adventSquares)) {
+    const file = join(root, 'assets/advent', name);
+    if (!existsSync(file)) continue; // not delivered yet
+    const real = pngSize(file);
+    assert.deepEqual({ w: real.w, h: real.h }, { w: square, h: square }, `advent/${name}: ${square}x${square} expected`);
+  }
+});
+
 const readme = readFileSync(join(root, 'assets/README.md'), 'utf8');
 const rows = [...readme.matchAll(/^\|\s*`([^`]+)`\s*\|\s*(\d+)x(\d+)\s*\|/gm)].map((m) => ({
   file: m[1],
@@ -78,8 +109,17 @@ const rows = [...readme.matchAll(/^\|\s*`([^`]+)`\s*\|\s*(\d+)x(\d+)\s*\|/gm)].m
   h: Number(m[3]),
 }));
 
+// Every PNG under assets/, by path relative to assets/ (top-level files are bare names, subfolder files
+// like 'advent/poop-santa.png'). assets/src/ (sources) and assets/vendor/ (libraries) are not game art.
+function assetPngs(dir = join(root, 'assets'), prefix = '') {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    if (e.isDirectory()) return prefix === '' && (e.name === 'src' || e.name === 'vendor') ? [] : assetPngs(join(dir, e.name), `${prefix}${e.name}/`);
+    return e.name.endsWith('.png') ? [`${prefix}${e.name}`] : [];
+  });
+}
+
 test('assets/README.md table lists every PNG in assets/ with its real size', () => {
-  const pngs = readdirSync(join(root, 'assets')).filter((n) => n.endsWith('.png'));
+  const pngs = assetPngs();
   assert.ok(rows.length > 0, 'no size rows parsed from assets/README.md');
   for (const name of pngs) {
     const row = rows.find((r) => r.file === name);
