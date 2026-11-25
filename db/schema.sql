@@ -3195,7 +3195,9 @@ revoke execute on function public.day_streak(date[], date) from public, anon, au
 -- set right by the clock offset measured when its batch arrived (run_log.ended_at + clock_offset_ms),
 -- for a row that arrived within 48 hours of it (a device back from offline). A row that arrived later,
 -- one with no end time and a held run (hold_run) count for no day (Checkpoint 34c): the day it arrived
--- was not a day played. run_log keeps 90 days and starts with 0.19.1 (2026-11-15).
+-- was not a day played. Nor does a run that crossed no pipe (plan 48, call S: data.pipes = 0; the game
+-- counts it as no run but still sends its summary); a row with no pipes key still counts, so older
+-- history stays. run_log keeps 90 days and starts with 0.19.1 (2026-11-15).
 create or replace function public.streak_days(v_id text, p_kind text, p_tz text)
 returns date[]
 language sql
@@ -3212,6 +3214,7 @@ as $$
     where p_kind = 'single' and r.player_id = v_id and r.mode = 'single' and not r.held and r.ended_at is not null
       and r.received_at - (r.ended_at + r.clock_offset_ms * interval '1 millisecond')
           between interval '-5 minutes' and interval '48 hours'
+      and coalesce((r.data ->> 'pipes')::numeric > 0, true)
     order by 1 desc
     limit 400
   ) x;
@@ -6035,7 +6038,7 @@ returns text
 language sql
 immutable
 as $$
-  select '9dddfc220813a5f3'::text; -- schema stamp
+  select '49b8460b70e11ce5'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

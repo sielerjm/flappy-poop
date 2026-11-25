@@ -79,6 +79,24 @@ test('a Singleplayer day counts by the server\'s clock (34.14; Checkpoint 34c): 
   assert.deepEqual((await single()).at(-1), '2026-11-15', 'neither the 16th (no end time) nor the 17th (held) counts');
 });
 
+test('plan 48 (call S): a Singleplayer run that crossed no pipe is no day; one pipe is, and a row with no pipes key still counts', async () => {
+  const db = await freshDb();
+  const P = id('PZ');
+  const pipes = (tag, n) => db.query('update public.run_log set data = $2::jsonb where run_id = $1', [id(`R${tag}`), JSON.stringify({ pipes: n })]);
+  await run(db, P, 1, 'single', '2026-11-20 12:00+00'); // no pipes key (none expected: the key is as old as the log)
+  await run(db, P, 2, 'single', '2026-11-21 12:00+00');
+  await pipes(2, 0); // died before the first pipe: its summary is still sent (call E)
+  await run(db, P, 3, 'single', '2026-11-22 12:00+00');
+  await pipes(3, 3);
+  await run(db, P, 4, 'single', '2026-11-23 09:00+00');
+  await pipes(4, 0);
+  await run(db, P, 5, 'single', '2026-11-23 18:00+00');
+  await pipes(5, 1); // the same day, one real run: the day counts
+  assert.deepEqual((await days(db, P, 'UTC')).single, ['2026-11-20', '2026-11-22', '2026-11-23']);
+  const streaks = (await db.query("select public.day_streak(public.streak_days($1, 'single', 'UTC'), '2026-11-23'::date) as s", [P])).rows[0].s;
+  assert.deepEqual(streaks, { now: 2, best: 2 }, 'a day with only an empty run breaks the streak (every profile shows it: player_stats)');
+});
+
 test('play_days answers the newest 400 days of each kind', async () => {
   const db = await freshDb();
   const P = id('PL');
