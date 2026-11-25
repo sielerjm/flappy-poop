@@ -1,6 +1,7 @@
 // Plan 46 (plan 48, Stage 2): in a match's level break the level bar stays on the level just crossed,
-// full, until the next level's GO, and the other player's marker keeps moving along it; an ended
-// rival's marker is dimmed where it stopped. Single player and the education break keep today's bar.
+// full, until the next level's GO, and the other player's marker keeps moving along it. Single player
+// and the education break keep today's bar. (Call 3's dimmed marker was dropped at the stage review:
+// a crash never ends a match run, so only a finisher's run ends, and its marker is not dimmed.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T, LEVEL_COLORS } from '../src/config.js';
@@ -29,14 +30,13 @@ test('barShown: a match\'s crossed level (done) shows full; without it, today\'s
   }
 });
 
-test('rivalMarker: on my crossed level (me.done) a rival over the same line sits at the 🏁 beside me, not ahead; an ended rival is out', () => {
+test('rivalMarker: on my crossed level (me.done) a rival over the same line sits at the 🏁 beside me, not ahead; a finished rival is not marked apart', () => {
   const done1 = { level: 1, done: true };
   assert.deepEqual(V.rivalMarker(done1, { level: 1, pipesPassed: 6 }, T), { frac: levelProgress(6, 1, T), relation: 'same' }, 'still flying my crossed level: its share');
   assert.deepEqual(V.rivalMarker(done1, { level: 2, pipesPassed: END1 }, T), { frac: 1, relation: 'same' }, 'over the same line: at the flag, untinted');
   assert.deepEqual(V.rivalMarker({ level: 1 }, { level: 2, pipesPassed: END1 }, T), { frac: 1, relation: 'ahead' }, 'flying, a level behind them: ahead (unchanged)');
-  assert.deepEqual(V.rivalMarker(done1, { level: 1, pipesPassed: 6, ended: true }, T), { frac: levelProgress(6, 1, T), relation: 'same', out: true }, 'ended at pipe 6: there, out');
-  assert.deepEqual(V.rivalMarker({ level: 2 }, { level: 1, pipesPassed: 6, ended: true }, T), { frac: 0, relation: 'behind', out: true }, 'ended, me flying on: out too');
-  assert.equal('out' in V.rivalMarker(done1, { level: 1, pipesPassed: 6, ended: false }, T), false, 'a live rival carries no out');
+  const last = T.levels.lastLevel;
+  assert.deepEqual(V.rivalMarker({ level: last }, { level: last, pipesPassed: levelEnd(last, T), ended: true, won: true }, T), { frac: 1, relation: 'same' }, 'they finished the course: at the flag, drawn as any marker');
 });
 
 /** A half about to cross level 1's line, with the bar real (refreshLevelBar) and the rest stubbed. */
@@ -77,7 +77,7 @@ test('Play.endLevelBreak (GO): the held level goes and the bar moves on to the n
   assert.deepEqual([s.levelBar.label, s.levelBar.frac], [levelLabel('en', 2), 0], 'level 2, empty');
 });
 
-test('Play.refreshRival: the marker moves along my crossed level, moves on at GO, and dims once the rival is out', () => {
+test('Play.refreshRival: the marker moves along my crossed level and moves on at GO', () => {
   const match = V.createMatch(1);
   Object.assign(match.slots[1], { level: 1, pipesPassed: 6 });
   const s = playScene({ match, player: 1, level: 2, barDoneLevel: 1, state: 'paused', levelBar: fakeBar(), tune: T, rivalKey: null });
@@ -92,21 +92,4 @@ test('Play.refreshRival: the marker moves along my crossed level, moves on at GO
   s.barDoneLevel = null; // GO
   s.refreshRival();
   assert.deepEqual(s.levelBar.rival, { frac: levelProgress(END1, 2, T), relation: 'same' }, 'GO: re-placed on level 2');
-  match.slots[1].ended = true;
-  s.refreshRival();
-  assert.equal(s.levelBar.rival?.out, true, 'their run ended: re-placed, out');
-});
-
-test('the level bar draws an out marker at versus.barRivalOutAlpha and a live one at versus.barRivalAlpha', async () => {
-  const { createLevelBar } = await import('../src/ui/levelBar.js');
-  const img = { alpha: null };
-  for (const m of ['setDisplaySize', 'setDepth', 'setVisible', 'setPosition', 'setTint', 'clearTint']) img[m] = () => img;
-  img.setAlpha = (a) => ((img.alpha = a), img);
-  const scene = { add: { graphics: () => absorb(), text: () => absorb(), image: () => img }, tweens: absorb() };
-  const bar = createLevelBar(scene, { x: 10, y: 20, width: 200, height: 12, radius: 6, labelX: 110, flagX: 220 });
-  assert.ok(T.versus.barRivalOutAlpha > 0 && T.versus.barRivalOutAlpha < T.versus.barRivalAlpha, 'dimmer than a live marker, still seen');
-  bar.setRival({ frac: 0.5, relation: 'same', out: true });
-  assert.equal(img.alpha, T.versus.barRivalOutAlpha, 'out: dimmed');
-  bar.setRival({ frac: 0.5, relation: 'same' });
-  assert.equal(img.alpha, T.versus.barRivalAlpha, 'live again (a rematch): the marker\'s own alpha');
 });

@@ -94,7 +94,7 @@ export function createLevelBar(scene, layout, { depth = 20 } = {}) {
         return this;
       }
       const { x, y, width } = layout;
-      rivalImg.setPosition(x + width * rival.frac, y).setVisible(visibleBar).setAlpha(rival.out ? v.barRivalOutAlpha : v.barRivalAlpha);
+      rivalImg.setPosition(x + width * rival.frac, y).setVisible(visibleBar);
       if (rival.relation === 'ahead') rivalImg.setTint(0xffd700);
       else if (rival.relation === 'behind') rivalImg.setTint(0x9a9a9a);
       else rivalImg.clearTint();

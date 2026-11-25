@@ -1149,7 +1149,7 @@ src/
                             cached-load fill, plan 35, 2.5). TUNING.versus = the
                             two-player knobs: minViewportH (the gate), keys (the
                             two keyboard groups), countdownMs, ghostRangePx /
-                            ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha / barRivalOutAlpha (0.25, an ended rival),
+                            ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
                             dividerPx, catchUp (superBehind, beanBehindMin,
                             beanOddsMul), scoring (deathPenaltyPerLevel,
                             levelClearBonus: the first over a line only),
@@ -1435,8 +1435,7 @@ src/
                             allClaimed / deviceLabel (the join screen), ghostPlacement
                             (scaled by the other's alpha, 0 once ended), barShown (the bar's level and
                             fill; `done` = a match's crossed level, full), rivalMarker
-                            (me.done: a rival over the same line is 'same' at the flag;
-                            out: true once their run ended),
+                            (me.done: a rival over the same line is 'same' at the flag),
                             catchUpTier / catchUpDraws, matchResult (score, fewer
                             deaths, draw), respawnPose (the crash →
                             glide → blink → done timeline, pure in elapsed ms),
@@ -1937,8 +1936,7 @@ src/
                             geometry from levelBarLayout(). setRival(marker) /
                             rival(): the other player's marker in a match (a small
                             faded poop at rivalMarker's share; gold at the 🏁 a level
-                            ahead, grey at the start behind; alpha barRivalAlpha, or
-                            versus.barRivalOutAlpha once marker.out, at any time).
+                            ahead, grey at the start behind).
     perfMeter.js            The frame meter, debug only (?perf / ?perf=var, perfMode):
                             a DOM <pre> over the canvas (no texture upload, survives
                             Play's restarts) redrawn every perf.refreshMs from
@@ -2499,8 +2497,8 @@ src/
                             publishSlot() every frame; refreshGhost (this.ghost at
                             depth 9.5 from ghostPlacement; a live ghost follows its
                             alpha, an ended one fades over ghostFadeMs) and refreshRival
-                            (levelBar.setRival; its key holds the level, the held barDoneLevel,
-                            the other's level / pairs and whether their run ended); a match
+                            (levelBar.setRival; its key holds the level, the held barDoneLevel
+                            and the other's level / pairs); a match
                             records nothing: endRun reports to Versus.onRunEnded;
                             showOver is a no-op. die() in a match → startRespawn
                             (state 'respawn', the world halted, scoreAfterDeath +
@@ -3512,9 +3510,9 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             against Play's source and Versus, the tournament panel over
                             Play, launch's two routes, splitFits vs versusOffered.
   matchBar.test.js          Plan 46 (48, 2): barShown (a match's crossed level full, else
-                            the old bar), rivalMarker with me.done / out, Play.barDoneLevel set
-                            at the line in a match only and cleared at GO, refreshRival's key,
-                            the ended marker's alpha. Smoke: versus-match and online-race
+                            the old bar), rivalMarker with me.done, Play.barDoneLevel set
+                            at the line in a match only and cleared at GO, refreshRival's key.
+                            Smoke: versus-match and online-race
                             check the bar through a break.
   versus.test.js            TUNING.versus sanity (gate, ghost, disjoint key groups,
                             catch-up tiers), versusAvailable, versusLayout (= the wide

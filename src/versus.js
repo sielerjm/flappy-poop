@@ -201,18 +201,14 @@ export function barShown({ level, pipesPassed = 0, pick = null, done = null }, t
  * on the same one, pinned at the 🏁 (1) when they are a level or more ahead and
  * at the start (0) when behind. `me.done`: my bar shows the level I have just
  * crossed (barShown), so a rival over the same line sits beside me at the 🏁
- * ('same'), not ahead. `out: true` once their run has ended (the bar dims the
- * marker where it stopped). null without an opponent.
+ * ('same'), not ahead. null without an opponent.
  */
 export function rivalMarker(me, other, t) {
   if (!me || !other) return null;
-  const spot = (() => {
-    if (me.done && other.level === me.level + 1) return { frac: 1, relation: 'same' };
-    if (other.level > me.level) return { frac: 1, relation: 'ahead' };
-    if (other.level < me.level) return { frac: 0, relation: 'behind' };
-    return { frac: levelProgress(other.pipesPassed ?? 0, me.level, t), relation: 'same' };
-  })();
-  return other.ended ? { ...spot, out: true } : spot;
+  if (me.done && other.level === me.level + 1) return { frac: 1, relation: 'same' };
+  if (other.level > me.level) return { frac: 1, relation: 'ahead' };
+  if (other.level < me.level) return { frac: 0, relation: 'behind' };
+  return { frac: levelProgress(other.pipesPassed ?? 0, me.level, t), relation: 'same' };
 }
 
 /**

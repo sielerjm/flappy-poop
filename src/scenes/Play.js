@@ -5632,13 +5632,13 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * The other player's marker on this level bar (rivalMarker), re-placed only when a level, a pair count,
-   * the level held in a break (plan 46: so it moves on at GO) or their run's end changed.
+   * The other player's marker on this level bar (rivalMarker), re-placed only when a level, a pair count
+   * or the level held in a break (plan 46: so it moves on at GO) changed.
    */
   refreshRival() {
     const other = this.match.slots[this.player === 1 ? 1 : 0];
     const done = this.barDoneLevel ?? null;
-    const key = `${this.level}:${done}:${other.level}:${other.pipesPassed}:${other.ended ? 1 : 0}:${this.state === 'ready' ? 0 : 1}`;
+    const key = `${this.level}:${done}:${other.level}:${other.pipesPassed}:${this.state === 'ready' ? 0 : 1}`;
     if (key === this.rivalKey) return;
     this.rivalKey = key;
     const me = done === null ? { level: this.level } : { level: done, done: true };
