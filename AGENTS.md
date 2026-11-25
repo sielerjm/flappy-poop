@@ -359,12 +359,21 @@ level's pairs, score 0) and never leaves the level: no finish line (the spawn br
 pre-fill stop), a box's skip and coin draws open as fiber (`dailyDraw`), no kernel or rolled coin,
 `takeCoins` refuses, "🌞 LV n" (`dailyHud`) in place of the level bar. A box's reward comes from
 its pair's own stream (`course.reward(pair)`), so it is the same for everyone. The attempt is
-claimed at the start (`dailyStore`, `flappyPoop.daily`) and rewritten from `update()` as the score
-moves; `endRun` makes it final and queues it (`dailyQueue`, `flappyPoop.dailyQueue`) without
-touching the 🏆 list or best; `syncLeaderboard` finalises an *unfinished* record left by a reload
-(never the run in flight) and `drainDaily` posts under the current name. Over shows the daily
-result: date headline, the score as a link to the board's 🌞 tab, the rank read off
+claimed at the start (`claimDailyAttempt`, split out of `start`; `dailyStore`, `flappyPoop.daily`) and
+rewritten from `update()` as the score moves; `endRun` makes it final and queues it (`dailyQueue`,
+`flappyPoop.dailyQueue`) without touching the 🏆 list or best; `syncLeaderboard` finalises an
+*unfinished* record left by a reload (never the run in flight) and `drainDaily` posts under the current
+name. A run that crosses no pipe is no attempt (plan 48, calls D and G): `endRun` releases the record
+before its sync (`dailyStore.release(day, playerId)`: only that player's unfinished record for the day
+with 0 pipes), posts no 🌞 score and counts no career; `finishAbandonedDaily` releases an unfinished
+0-pipe record (a reload before the first pipe) instead of finalizing, posting and stubbing it, and never
+finalizes one. `dailyStore.spent(day, playerId)` (final, or pipes above 0) backs `dailyPlayedToday` and
+"See today's result". Over shows the daily result: date headline, the score as a link to the board's 🌞 tab, the rank read off
 `daily_board` once the post settles, the countdown to 00:00 UTC, Share (the card, and the link as its message).
+A Daily Dump that crossed no pipe (plan 48, call H, option a) instead offers Play again, which starts
+today's Daily Dump again (Over sets the registry flag `playAgain` to 'daily'; `Play.startAgain(kind)`
+starts it only while the popup would offer it: a username and the day not used), leaves the rank cell
+blank (no board lookup) and shows `dailyNotCounted` in the countdown's place.
 The server (`submit_daily_score`) takes today or yesterday (UTC), checks the day's level with its
 own FNV-1a (`daily_level` = the client's `dailyLevel`), keeps the first post per player and day
 ('duplicate' after), and follows the score board's name claim.
@@ -380,7 +389,12 @@ turns it into the profile once a name is saved, and back on Sign out).
 for single player, dailyGames for a Daily Dump, deaths / pipes / falls / closeCalls / farts / superFarts / the pickups
 for both, pipes being the pairs flown that day in a Daily Dump;
 `runFarts` / `runSuperFarts` from `activatePower`; `runFalls` once per drop past `fallLookVy` (`fallStarted`) and `runCloseCalls` when the near-miss clock starts in `tickScared`, both outside a fart, its grace and Invincible; `runCeilingHits` (☀️, set before `die()` when the poop ended on the ceiling) and `runBoxesBought` (🎰, `buyItem('mystery')`). Run facts for v0.16.0 badges: `closeCallsByLevel` → `closeShave` (💈, `levelCloseShave` on `levelPipes`), the same-draw streak in `openMystery` → `fourOfAKind` (🃏, `nextDrawStreak`), and from `careerStore.markRun` this device's `daysSinceLastRun` (🧱) and `winsLast7Days` (🏃). that wait in the career store (`createCareerStore`,
-`flappyPoop.career`); test runs and match halves return before it. **Badges:** `evaluate` judges the
+`flappyPoop.career`); test runs and match halves return before it. **No pipe, no count** (plan 48, call A:
+pipes, not score; a Daily Dump's pipes are the pairs flown that day): `countsAsRun` (`src/achievements.js`)
+is false for a single-player or Daily run that crossed no pipe, and `Play.recordCareer` then returns before
+`markRun`, `addRun`, the Singleplayer streak and the badges; `Play.endRun` sets `runNotCounted` and, for single
+player, skips the best, the top list and the career. `runDeltas` is unchanged. Over shows `runNotCounted`
+under the cells (tests/zeroRun.test.js). **Badges:** `evaluate` judges the
 `ACHIEVEMENTS` catalog (run feats from a normal single-player run only; lifetime milestones on the
 totals; time-boxed quests by UTC day) and `careerStore.unlock` records them with a claim; Over names
 the run's (`runBadges`, "🏆 New: …"). `creditCareer` quietly credits the score and level badges the
@@ -404,7 +418,7 @@ behind it: the module-private press stamp set by the input listeners through `wi
 pass `internal`), the listeners (press, release), pipes, falls, close calls, the death, levels and a
 level picked at a break (skip), the break, the shop, pauses. `endRun` queues the row
 (`queueRunSummary` → `createRunQueue`, `flappyPoop.runQueue`, 50, never dropping the run behind a best
-not yet posted); `finishAbandonedDaily` queues a short stub row (`stubRow`). **Sync:** `drainRuns` runs
+not yet posted); `finishAbandonedDaily` queues a short stub row (`stubRow`) for a record with a pipe crossed, none for a 0-pipe one (plan 48: a run that is not counted still sends its summary, call E, and the sync still runs). **Sync:** `drainRuns` runs
 before `drainDaily` in both of `syncLeaderboard`'s paths (`submitRuns`, up to 20 per player id); a 🏆
 or 🌞 post whose run is still queued after a paced send waits (`postWaits`, `waitsForRun`, at most
 `runWaitSyncs` syncs). The row's fields are `RUN_DATA_KEYS`, equal to `run_data_keys()` in
@@ -816,7 +830,8 @@ never lowered, a day more than one ahead of today left out; the server's `single
 Singleplayer best, so a Sign in or a new device shows the Longest everyone sees). The server counts by its own clock
 (`streak_days`, 34.14 and Checkpoint 34c): Daily Dump course days from `daily_scores` alone (since 10 Nov 2026,
 kept; it takes a day only on that day or the next), and a Singleplayer day as the local day of the run's
-`ended_at + clock_offset_ms`, for a row that arrived within 48 hours of it (a row that came later, one with no end
+`ended_at + clock_offset_ms`, for a row that arrived within 48 hours of it and has `data.pipes` above 0 or no `pipes`
+key (plan 48, call S; schema stamp 49b8460b70e11ce5; a row that came later, one with no end
 time and a held run count for no day; the log starts with 0.19.1, 15 Nov 2026, and keeps 90 days). So the streaks
 of players from before 0.24.0 come back too. Offline, nothing changes and the next sync asks again; a merge that
 lands on a later sync forgets `playDaysFor`, so the next sync asks again too. Every profile shows them (34.14, Michael: "Users should be
@@ -825,8 +840,8 @@ player's from `player_stats`' `streaks` (`cleanStreaks`; `day_streak` over `stre
 zone `play_days` keeps in `player_meta.tz`, its best never below `player_meta.single_best`, which `play_days` keeps past
 the run log's 90 days and raises only in a zone that has stood for a week, `player_meta.tz_at`; `known_tz` takes
 IANA Area/Location names and UTC only; `play_days` writes the row only when something changed). A one-player run that is neither education nor test counts the local day it
-ends on (`recordCareer('single')`, at the game over); a Daily Dump
-counts its course's UTC day once claimed (`countDailyStreak` in `start`; a practice Daily counts nothing). Every
+ends on (`recordCareer('single')`, at the game over) only once it crossed a pipe (plan 48); a Daily Dump
+counts its course's UTC day at the run's first pipe (`saveDailyAttempt`, once a run, `this.daily.counted`; no longer at the claim; a practice Daily counts nothing). Every
 profile shows 🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer and under Daily Dump
 (`streakProfileRows`; yours from `Stats.streakView`, another player's from the server, above); the ready screen shows a small orange number at the 🌞's bottom right
 (the Daily Dump streak) and at the 📚's (the learning streak, under the gold due count), while the streak is alive
@@ -1241,7 +1256,8 @@ src/
   achievements.js           Achievements and lifetime counters (plan 08), NO
                             Phaser/DOM: ACHIEVEMENTS (id, kind 'run' / 'lifetime' /
                             'seasonal', glyph, title / desc i18n keys, n, counters,
-                            from / to, check), runDeltas (one run's counters, capped
+                            from / to, check), countsAsRun (plan 48: a run that
+                            crossed no pipe is not counted), runDeltas (one run's counters, capped
                             as submit_counters checks), addCounters (= the SQL's
                             merge_counters), cleanCounters, evaluate (newly earned
                             ids), windowOpen, progressOf, bestFacts (veteran
@@ -1719,7 +1735,9 @@ src/
                             drains joined per storage, outcomes for the podium).
                             Both queues sit on createPostQueue. Daily Dump:
                             createDailyStore (flappyPoop.daily: this device's
-                            attempt, read back for the same day and player),
+                            attempt, read back for the same day and player;
+                            release drops an unfinished 0-pipe record, spent is
+                            final or pipes above 0; plan 48),
                             createDailyQueue (flappyPoop.dailyQueue, one entry per
                             player and day, outcome 'nameTaken' kept),
                             submitDailyScore ('ok' / 'keep' / 'rejected' /
@@ -3142,7 +3160,9 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             when it changed) and the longest Singleplayer streak in
                             player_meta.single_best (raised once the zone has stood
                             a week; sent back as singleBest), and player_stats
-                            returns everyone's streaks (day_streak, streak_days,
+                            returns everyone's streaks (day_streak, streak_days
+                            (a 'single' day needs pipes above 0 or no pipes key,
+                            plan 48),
                             known_tz: internal); fold_player keeps either player's
                             zone and the larger single_best.
                             schema_version()
@@ -3343,8 +3363,16 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             the profile rows, refreshStreakMarks, the subscripts'
                             spots inside the 🌞 and 📚 hit boxes; another player's
                             profile carrying their streaks; a Sign in clearing them
+  zeroRun.test.js           plan 48: a run that crosses no pipe is not counted
+                            (countsAsRun, recordCareer, endRun's runNotCounted), an
+                            empty Daily Dump gives back its attempt (release, spent,
+                            finishAbandonedDaily), the streak day at the first pipe,
+                            Play.startAgain (Over's Play again after an empty
+                            Daily Dump); Over's note itself is checked by the
+                            smoke's daily and streaks sections
   playDays.test.js          The day streaks from the server (plan 34, 34.13, 34.14,
-                            Checkpoint 34c): play_days and player_stats' streaks in
+                            Checkpoint 34c; plan 48 call S: a 0-pipe row gives no
+                            Singleplayer day): play_days and player_stats' streaks in
                             PGlite (the sources, the server's clock and its 48 hours,
                             time zones, aliases, the 400 cap, tz and single_best, a
                             zone taken back, no rewrite), fetchPlayDays,
