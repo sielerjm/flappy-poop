@@ -139,7 +139,7 @@ export const SECTIONS = [
   { name: 'online-invites', needs: [], about: "invites, the ✉️ (plan 39, 4.2, Preview I), on a stand-in transport under Play (no network) on a 320 phone: invite_list once linked and the topic it names; ✉️ 1 on 🤝 Friends; the inviting 🟢 friend first with the ✉️ and its time, the buttons inside the row under a 16-character name (Michael's ask); a topic invite adds one; the ✉️ tapped: the ready screen as the guest; Invite on a 🟢 friend: the room screen waiting, their no with Resend, Resend in the same room" },
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
   { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
-  { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the stock dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run; on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same ?perf read" },
+  { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the stock dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -8232,10 +8232,42 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         await evaluate(`globalThis.__flappyPerf?.reset(), true`);
         await sleep(ms);
         const s = await evaluate(`JSON.stringify(globalThis.__flappyPerf?.summary() ?? null)`).then(JSON.parse);
-        await evaluate(`${play}.setTestMode(false), true`);
+        // Back to the home screen with test mode off (a two-player race cannot start in test mode or mid-run).
+        await evaluate(`${play}.setTestMode(false), __flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
+        await until(`${play}.state === 'ready' && !${play}.launching`, 60);
         return s;
       };
       const perfLine = (s) => (s ? `${s.frames} frames, ${s.fps.toFixed(1)} fps, cpu ${s.cpuMs.toFixed(2)} ms (max ${s.cpuMaxMs.toFixed(1)}), ${s.long} long, worst ${s.worstMs.toFixed(1)} ms` : 'no meter');
+      // A two-player race on the wide field (Michael, 26 Nov: the snow falls in both halves), its frame meter
+      // read as perfRun reads one half's; then back to single player at the phone size.
+      const metrics = (w, h) => cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+      const versusPerf = async (ms) => {
+        const P1 = play;
+        const P2 = `__flappy.scene.getScene('PlayB')`;
+        const VS = `__flappy.scene.getScene('Versus')`;
+        await metrics(1800, 1000);
+        await until(`__flappy.scale.width > 1000 && ${P1}.state === 'ready' && !${P1}.launching`, 60);
+        await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
+        const joined = await lobbyToRace();
+        await evaluate(`${P1}.onVersusKey('Space'), ${P1}.onVersusKey('ArrowUp'), true`);
+        const racing = await until(`${VS}.match?.status === 'playing' && ${P1}.state === 'playing' && ${P2}?.state === 'playing'`, 100);
+        if (!joined || !racing) {
+          const why = await evaluate(`JSON.stringify({ versus: __flappy.scene.isActive('Versus'), status: ${VS}?.match?.status ?? null, a: ${P1}.state, b: ${P2}?.state ?? null })`);
+          ok(false, `versusPerf: a two-player race started (${why})`);
+          return { s: null, snow: null, racing: false };
+        }
+        await evaluate(`[${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
+        const snow = await evaluate(`[${P1}, ${P2}].map((p) => p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length).join(',')`);
+        await evaluate(`globalThis.__flappyPerf?.reset(), true`);
+        await sleep(ms);
+        const s = await evaluate(`JSON.stringify(globalThis.__flappyPerf?.summary() ?? null)`).then(JSON.parse);
+        await leaveVersus();
+        await until(`!__flappy.scene.isActive('Versus') && ${P1}.state === 'ready' && ${P1}.match === null`, 60);
+        await evaluate(`__flappy.registry.set('versus', false), true`);
+        await metrics(720, 1280);
+        await until(`__flappy.scale.width === 720 && ${P1}.state === 'ready'`, 60);
+        return { s, snow, racing: Boolean(joined && racing) };
+      };
 
       // --- 5 Dec ---
       const dec = await pinClock('2026-12-05');
@@ -8291,6 +8323,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       ok(want.santas.includes(h3.glyph) && h3.glyph !== h2.glyph, `a reload never repeats the last 🎅 (${h2.glyph} → ${h3.glyph})`);
       const perfDec = await perfRun(6000);
       ok(Boolean(perfDec?.frames > 60), `?perf on ${dec}: ${perfLine(perfDec)}`);
+      const vDec = await versusPerf(6000);
+      ok(vDec.racing && vDec.snow === `${TT.advent.snow.count},${TT.advent.snow.count}` && Boolean(vDec.s?.frames > 60), `?perf on ${dec}, a two-player race (snow ${vDec.snow}): ${perfLine(vDec.s)}`);
 
       // --- 15 Nov (the default pin): a fresh page, none of it ---
       const nov = await pinClock(SMOKE_PIN_DAY);
@@ -8303,6 +8337,9 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       } else console.log(`note: --date=${date}: the off-season half is skipped (the page is on ${nov})`);
       const perfNov = await perfRun(6000);
       ok(Boolean(perfNov?.frames > 60), `?perf on ${nov}: ${perfLine(perfNov)}`);
+      const vNov = await versusPerf(6000);
+      ok(vNov.racing && (date || vNov.snow === '0,0') && Boolean(vNov.s?.frames > 60), `?perf on ${nov}, a two-player race (snow ${vNov.snow}): ${perfLine(vNov.s)}`);
+      if (vDec.s && vNov.s) console.log(`note: ?perf two-player race, December vs off season: cpu ${vDec.s.cpuMs.toFixed(2)} vs ${vNov.s.cpuMs.toFixed(2)} ms a frame, ${vDec.s.long} vs ${vNov.s.long} long frames, ${vDec.s.fps.toFixed(1)} vs ${vNov.s.fps.toFixed(1)} fps`);
       if (perfDec && perfNov) console.log(`note: ?perf December vs off season: cpu ${perfDec.cpuMs.toFixed(2)} vs ${perfNov.cpuMs.toFixed(2)} ms a frame, ${perfDec.long} vs ${perfNov.long} long frames, ${perfDec.fps.toFixed(1)} vs ${perfNov.fps.toFixed(1)} fps`);
       // Home again on a plain page, for the closing checks.
       await evaluate(`${play}.scene.restart(), true`);
