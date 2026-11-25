@@ -2,7 +2,7 @@
 """process_art.py — crop, knock out background white, and resize Michael's
 drawings into the gameplay art-contract PNGs.
 
-Created by Michael Sieler. Last updated: 2026-11-25 (plan 17, 1.1: --only / --out / --src, a layer mode, a same-body-scale mode for
+Created by Michael Sieler. Last updated: 2026-11-25 (plan 17, 1.2: the December art entries, run only through --only; 1.1: --only / --out / --src, a layer mode, a same-body-scale mode for
 poop twins and items, and a fit-height option; plan 35, 2.1: frames at 2x their drawn size, 192 px, and
 every PNG losslessly recompressed with oxipng when it is installed).
 
@@ -502,6 +502,39 @@ add_stock("mystery", {"kind": "sheet", "src": "MysteryBox.gif"})
 add_stock("coin", {"kind": "sheet", "src": "CornKernel.gif", "size": 106})  # 12 spin frames, drawn at 53 px (coin.displayPx) in the field
 for _name, _size in ICONS + (APPLE_ICON,):
     add_stock(_name[:-4], {"kind": "icon", "src": "FlappyPoopAppArt.png"})
+
+# The December art (plan 17, 1.2). Not in DEFAULT_RUN: these run only through --only, with --src at the Dropbox
+# meta/advent-previews/art-in/ and --out at its art-fit/ until Gate A approves. A twin is cut on its STOCK
+# frame's centre (ref omitted: the stock frames always come from assets/src/) and the poop set's scale k, never
+# on its own pixels. The two fart twins sit on the stock fart's brown-mask centre (the hat does not move it),
+# the speech twin on the stock speech centre after the pre-transform that matches its drawing to the stock
+# canvas (scale 1.09, dx -181, dy -180). poop-dead-santa has no art yet (D13): add it here, stock "body",
+# when Poop_Emoji_Dead-santa.png arrives.
+ADVENT_TWINS = (
+    ("poop-santa", "Poop_Emoji_Alive-santa.png", "body", None),
+    ("poop-scared-santa", "PoopScared-santa.png", "body", None),
+    ("poop-stink1-santa", "Poop_Stink1-santa.png", "body", None),
+    ("poop-stink2-santa", "Poop_Stink2-santa.png", "body", None),
+    ("poop-stink-scared1-santa", "PoopScaredStink1-santa.png", "body", None),
+    ("poop-stink-scared2-santa", "PoopScaredStink2-santa.png", "body", None),
+    ("poop-falling-santa", "PoopFalling-santa.png", "body", None),
+    ("poop-stink-falling1-santa", "PoopStinkFalling1-santa.png", "body", None),
+    ("poop-stink-falling2-santa", "PoopStinkFalling2-santa.png", "body", None),
+    ("poop-fart-santa1", "Poop_Fart-santa-1.png", "fart", None),
+    ("poop-fart-santa2", "Poop_Fart-santa-2.png", "fart", None),
+    ("poop-speech-santa", "Poop_Speech-santa.png", "speech", (1.09, -181, -180)),
+)
+for _name, _src, _stock, _pre in ADVENT_TWINS:
+    ENTRIES[_name] = {"kind": "twin", "src": _src, "stock": _stock, **({"pre": _pre} if _pre else {})}
+# The hatted bacterium is the aligned file in art-out/ (a sibling of art-in/, so its path is relative to --src).
+ENTRIES["bacteria-santa"] = {"kind": "item", "src": "../art-out/Bad_Bacteria-santa-aligned.png", "body_like": "bacteria.png"}
+ENTRIES["gingerbread"] = {"kind": "item", "src": "gingerbread.png", "fit_height": "probiotic.png"}
+ENTRIES["candy-cane"] = {"kind": "item", "src": "candy-cane.png"}
+# Layers: no knockout, cropped to the ink (fairy-lights' ink is already the strip, y 374 to 677 of 1536 x 1024).
+# Scale 0.5 (4x art to 2x) is the layer default; the Bowelidays and fairy-light scales are not settled (see 1.2's report).
+ENTRIES["pipe-snow"] = {"kind": "layer", "src": "pipe-snow-layer.png", "scale": 0.5, "anchor": (96, 128)}
+ENTRIES["bowelidays"] = {"kind": "layer", "src": "Bowelidays-straight.png", "scale": 0.5}
+ENTRIES["fairy-lights"] = {"kind": "layer", "src": "fairy-lights.png", "scale": 0.5}
 
 RUNNERS = {
     "body": process_body_frame,
