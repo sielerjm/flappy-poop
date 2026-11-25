@@ -6,17 +6,20 @@ your own drawing, overwrite the file keeping the same name and size, or change
 the size in BOTH assets/README.md and the scene code (tests/assets.test.js
 checks that the README table matches the PNG headers).
 
-Run:  python3 tools/make_placeholders.py
+Run:  python3 tools/make_placeholders.py   [--only NAME[,NAME]] [--out DIR] [--src DIR]
+  --only  pipe, villi, ceiling, ground, question (default: all five, as before)
+  --out   output folder (default assets/)
+  --src   accepted for symmetry with process_art.py; the placeholders are drawn in code and read no source art
 Requires Pillow. Uses Noto Color Emoji for the poop if present, else draws a blob.
 Only pipe / villi / ceiling / ground: the player, items and the app icons come from
 tools/process_art.py (Michael's drawings in assets/src/), never from here.
 """
+import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import math, random
 
 OUT = Path(__file__).resolve().parent.parent / "assets"
-OUT.mkdir(exist_ok=True)
 
 PINK = (232, 94, 150, 255)
 PINK_DARK = (176, 50, 108, 255)
@@ -219,15 +222,30 @@ def question(path, size=230):
     d.text((c, c + r * 0.04), "?", font=font, fill=(20, 12, 8, 255), anchor="mm")
     big.resize((size, size), Image.LANCZOS).save(path)
 
-if __name__ == "__main__":
+def main(argv=None):
+    global OUT
+    ap = argparse.ArgumentParser(description="Generate placeholder art (pipe, villi, ceiling, ground, question).")
+    ap.add_argument("--only", help="NAME[,NAME]: pipe, villi, ceiling, ground, question (default: all)")
+    ap.add_argument("--out", help="output folder (default assets/)")
+    ap.add_argument("--src", help="accepted for symmetry with process_art.py; unused (nothing here reads source art)")
+    args = ap.parse_args(argv)
+    names = [n.strip() for n in args.only.split(",") if n.strip()] if args.only else list(MAKERS)
+    unknown = [n for n in names if n not in MAKERS]
+    if unknown:
+        raise SystemExit(f"unknown --only name(s): {', '.join(unknown)}. Known: {', '.join(MAKERS)}")
+    if args.out:
+        OUT = Path(args.out).resolve()
+    OUT.mkdir(parents=True, exist_ok=True)
     # poop.png and the icons are Michael's drawings (tools/process_art.py). Do not overwrite them.
-    pipe(OUT / "pipe.png")
-    villi(OUT / "villi.png")
-    ceiling(OUT / "ceiling.png")
-    ground(OUT / "ground.png")
-    # The challenge bubble (plan 34): only while it is missing, so Michael's drawing is never overwritten.
-    if not (OUT / "question.png").exists():
-        question(OUT / "question.png")
-    for f in ["pipe.png", "villi.png", "ceiling.png", "ground.png", "question.png"]:
-        im = Image.open(OUT / f)
-        print(f"{f}: {im.width}x{im.height}")
+    for name in names:
+        # The challenge bubble (plan 34): only while it is missing, so Michael's drawing is never overwritten.
+        if not (name == "question" and (OUT / "question.png").exists()):
+            MAKERS[name](OUT / f"{name}.png")
+        im = Image.open(OUT / f"{name}.png")
+        print(f"{name}.png: {im.width}x{im.height}")
+
+
+MAKERS = {"pipe": pipe, "villi": villi, "ceiling": ceiling, "ground": ground, "question": question}
+
+if __name__ == "__main__":
+    main()
