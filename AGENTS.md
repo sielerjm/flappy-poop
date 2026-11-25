@@ -866,7 +866,7 @@ gate) with a study day, pays or charges the purse, and stays out of `runQuiz`, t
 events (the server takes break, revive and bonus contexts only; RESEARCH.md says so: once a challenge card is in the bank,
 its answers in a level break, after a crash or in the bonus quiz are sent like any card's); a test run saves nothing.
 Fly on (held after a miss) closes it and `endSuperQ` resumes with half a flap and at least `beans.graceMs`. The 21
-challenge cards (`SQ-01`…, deck `super`; Michael reviews them, `.claude/plans/34-super-cards-review.md`) are never
+challenge cards (`SQ-01`…, deck `super`; Michael reviews them, `.claude/plans/Archive/34-super-cards-review.md`) are never
 a quiz's new card (`inScope`, `chooseCard`'s fresh pool, `browseCard`, `breakDecks`), count in `masteryByDeck`
 once met, and come back at any level once in the bank.
 **Backup and restore** (plan 28, 3.1b): the cards live in this browser only, so the top of 📚 Education
