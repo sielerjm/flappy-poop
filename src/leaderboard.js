@@ -394,8 +394,10 @@ export function createRacePostQueue(storage = browserStorage(), { key = LEADERBO
 // ---------------------------------------------------------------------------
 // Daily Dump (🌞). The attempt record lives on this device under dailyKey: claimed when the run
 // starts (final: false), rewritten as the score grows, final at the crash. A record left unfinished
-// (a reload mid-run) is the day's result all the same. Its score waits in the daily queue until
-// submit_daily_score answers; the name is read when the post is sent.
+// (a reload mid-run) is the day's result all the same, once it crossed a pipe; one that crossed none
+// is not an attempt (plan 47, calls D and G): it is released at its game over or by the next sync,
+// and the day is free (spent). Its score waits in the daily queue until submit_daily_score answers;
+// the name is read when the post is sent.
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const nonNegInt = (n) => Number.isInteger(n) && n >= 0;
@@ -420,15 +422,40 @@ export function createDailyStore(storage = browserStorage(), { key = LEADERBOARD
       return null;
     }
   };
+  /** This player's attempt for `day`, or null (another day or another player on this device). */
+  const load = (day, playerId) => {
+    const rec = read();
+    return rec && rec.day === day && rec.playerId === playerId ? rec : null;
+  };
   return {
-    /** This player's attempt for `day`, or null (another day or another player on this device). */
-    load(day, playerId) {
-      const rec = read();
-      return rec && rec.day === day && rec.playerId === playerId ? rec : null;
-    },
+    load,
     /** Whatever record is stored, any day or player (the sync finalises an unfinished one). */
     peek() {
       return read();
+    },
+    /**
+     * Has this player used the day's attempt here: a record for `day` that is final or crossed a pipe?
+     * An unfinished one with no pipe yet is a run in the air or one cut off before its first pipe
+     * (plan 47, call G): not spent.
+     */
+    spent(day, playerId) {
+      const rec = load(day, playerId);
+      return Boolean(rec && (rec.final || rec.pipes > 0));
+    },
+    /**
+     * Give the attempt back (plan 47, calls D and G): remove the stored record only when it is this
+     * player's unfinished record for `day` with no pipe crossed. Anything else stays (clear() drops
+     * any record). Returns whether a record was removed.
+     */
+    release(day, playerId) {
+      const rec = load(day, playerId);
+      if (!rec || rec.final || rec.pipes !== 0) return false;
+      try {
+        storage?.removeItem(key);
+      } catch {
+        return false;
+      }
+      return true;
     },
     /** Store the attempt (junk is ignored). Returns the stored record or null. */
     save(rec) {

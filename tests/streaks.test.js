@@ -88,7 +88,7 @@ test('Play.recordCareer: a one-player run counts its local day for the Singlepla
   assert.equal(daily.streakStore.load().single, undefined, 'a Daily Dump is not a Singleplayer day');
 });
 
-test('Play.countDailyStreak: the Daily Dump streak counts the course day once the attempt is claimed; a practice Daily (test mode) counts nothing (plan 34)', () => {
+test('Play.countDailyStreak: the Daily Dump streak counts the course day once (saveDailyAttempt calls it at the first pipe, plan 48); a practice Daily (test mode) counts nothing (plan 34)', () => {
   const p = careerScene({ runIsTest: false });
   p.countDailyStreak('2026-11-17');
   p.countDailyStreak('2026-11-17');

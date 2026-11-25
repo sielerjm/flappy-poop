@@ -100,7 +100,7 @@ test('Play.endRun: a single run with no pipe crossed keeps its summary and the s
   assert.ok(counted.scene.careerStore.calls.some((c) => c[0] === 'addRun'));
 });
 
-test('dailyStore.release: removes only this player\'s unfinished record for that day with 0 pipes; spent() is a final record or one with a pipe', { todo: 'plan 48, 1.3' }, () => {
+test('dailyStore.release: removes only this player\'s unfinished record for that day with 0 pipes; spent() is a final record or one with a pipe', () => {
   const day = '2026-11-25';
   const rec = { day, playerId: P, level: 2, score: 0, pipes: 0, collected: {}, final: false };
   const cases = [
@@ -129,7 +129,7 @@ test('dailyStore.release: removes only this player\'s unfinished record for that
   assert.equal(store.spent(day, Q), false, "another player's");
 });
 
-test('the Daily Dump streak day counts at the run\'s first pipe, not at the claim; practice counts nothing', { todo: 'plan 48, 1.3' }, () => {
+test('the Daily Dump streak day counts at the run\'s first pipe, not at the claim; practice counts nothing', () => {
   const { scene, day } = dailyScene(5);
   assert.deepEqual(scene.streakStore.load(), {}, 'claimed: no day yet');
   assert.equal(scene.dailyStore.load(day, P)?.final, false, 'the attempt is claimed all the same (a reload with a pipe crossed keeps it)');
@@ -147,7 +147,7 @@ test('the Daily Dump streak day counts at the run\'s first pipe, not at the clai
   assert.deepEqual(practice.streakStore.load(), {}, 'a practice Daily counts nothing');
 });
 
-test('Play.endRun: a Daily Dump that crossed no pipe gives the attempt back before the sync: no 🌞 post, no stub, no streak day, no career (calls D, E)', { todo: 'plan 48, 1.3' }, async () => {
+test('Play.endRun: a Daily Dump that crossed no pipe gives the attempt back before the sync: no 🌞 post, no stub, no streak day, no career (calls D, E)', async () => {
   // The real syncLeaderboard: it opens with finishAbandonedDaily once the run is 'dead', which would
   // make a still-stored unfinished record final, post it and queue a stub.
   const { scene, calls, day } = dailyScene(4, { score: 20 });
@@ -164,7 +164,7 @@ test('Play.endRun: a Daily Dump that crossed no pipe gives the attempt back befo
   assert.deepEqual(scene.careerStore.calls, [], 'no career');
 });
 
-test('Play.endRun: a Daily Dump that crossed a pipe is spent as before: final, posted, its streak day kept', { todo: 'plan 48, 1.3' }, async () => {
+test('Play.endRun: a Daily Dump that crossed a pipe is spent as before: final, posted, its streak day kept', async () => {
   const { scene, day } = dailyScene(4, { score: 20 });
   scene.pipesPassed = 5;
   scene.endRun();
@@ -178,7 +178,7 @@ test('Play.endRun: a Daily Dump that crossed a pipe is spent as before: final, p
   assert.equal(scene.dailyPlayedToday(), true, 'the day is used');
 });
 
-test('finishAbandonedDaily (call G): a record cut off at 0 pipes is released, not spent; at 1 pipe it is final, posted and stubbed', { todo: 'plan 48, 1.3' }, () => {
+test('finishAbandonedDaily (call G): a record cut off at 0 pipes is released, not spent; at 1 pipe it is final, posted and stubbed', () => {
   const day = utcDayKey();
   const rec = { day, playerId: P, level: 1, score: 0, pipes: 0, collected: {}, final: false };
   const empty = overScene({ state: 'ready' }).scene;

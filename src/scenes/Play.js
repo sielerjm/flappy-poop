@@ -1005,15 +1005,8 @@ export class Play extends Phaser.Scene {
     this.bgFade = null;
     this.bgColor.setFillStyle(levelColor(this.level, LEVEL_COLORS, T.levels.whiteBlend), 1);
     this.prefillPipes();
-    // The attempt is claimed now (not at the crash), so a reload mid-run cannot hand the day back.
-    // Practice (a test run) claims nothing.
     this.daily = null;
-    if (daily) {
-      if (!this.save.id) this.save = ensureId(this.save);
-      this.daily = { day: daily.day, level: daily.level, startPipes: begin.pipes, playerId: this.save.id, saved: null };
-      this.saveDailyAttempt(false);
-      this.countDailyStreak(daily.day);
-    }
+    if (daily) this.claimDailyAttempt(daily, begin.pipes);
     // This run's summary (plan 30): single-player and Daily runs, and a split-screen race's half
     // (plan 39, 2.8); never a test run, an education run (its popup promises its data stays here)
     // or an online race's half (runSummaryMode).
@@ -1193,21 +1186,40 @@ export class Play extends Phaser.Scene {
     }
   }
 
-  /** The Daily Dump streak (plan 34) counts course `day` once its attempt is claimed (start), on its UTC day; a practice Daily (a test run) counts nothing. */
+  /** The Daily Dump streak (plan 34) counts course `day`, on its UTC day, once the run crosses its first pipe (saveDailyAttempt; plan 47); a practice Daily (a test run) counts nothing. */
   countDailyStreak(day) {
     if (!this.runIsTest) this.streakStore.played('daily', day);
   }
 
   /**
+   * Claim the day's Daily Dump attempt as the run starts (start), not at the crash, so a reload once a
+   * pipe is crossed cannot hand the day back: the record is written at once, unfinished. A run that
+   * crosses no pipe is no attempt (plan 47, calls D and G): its record is released at the game over
+   * (endRun) or by the next sync (finishAbandonedDaily). Its streak day waits for the first pipe
+   * (saveDailyAttempt), so a released run has nothing to take back. Practice (a test run) claims nothing.
+   */
+  claimDailyAttempt(daily, startPipes) {
+    if (!this.save.id) this.save = ensureId(this.save);
+    this.daily = { day: daily.day, level: daily.level, startPipes, playerId: this.save.id, saved: null, counted: false };
+    this.saveDailyAttempt(false);
+  }
+
+  /**
    * This device's Daily Dump attempt (dailyStore): the day, the level, the score and pipes so far and
-   * what was picked up; `final` once the run is over. Practice writes nothing. Returns the record.
+   * what was picked up; `final` once the run is over. The first pipe flown that day counts the day's
+   * streak (once a run). Practice writes nothing. Returns the record.
    */
   saveDailyAttempt(final = false) {
     if (!this.runIsDaily || this.runIsTest || !this.daily) return null;
     perfMark(PERF_TAGS.daily);
     const pipes = Math.max(0, this.pipesPassed - this.daily.startPipes);
     this.daily.saved = { score: this.score, pipes };
-    return this.dailyStore.save({ day: this.daily.day, playerId: this.daily.playerId, level: this.daily.level, score: this.score, pipes, collected: { ...this.collected }, final });
+    const rec = this.dailyStore.save({ day: this.daily.day, playerId: this.daily.playerId, level: this.daily.level, score: this.score, pipes, collected: { ...this.collected }, final });
+    if (pipes > 0 && !this.daily.counted) {
+      this.daily.counted = true;
+      this.countDailyStreak(this.daily.day);
+    }
+    return rec;
   }
 
   /** Crossfade the background to `level`'s colour (the current level's at each break; a level chosen there: plan 26, A2). */
@@ -1652,9 +1664,13 @@ export class Play extends Phaser.Scene {
     this.scene.get('Stats')?.refresh?.(); // the profile's gate ⟷ the profile (a name saved, or Clear)
   }
 
-  /** Has this player used today's Daily Dump on this device (a record for today, finished or cut off)? */
+  /**
+   * Has this player used today's Daily Dump on this device (a record for today, finished or cut off
+   * after a pipe)? One cut off before its first pipe is not used (plan 47, call G): the ready screen
+   * reads this at page load, before the first sync releases it.
+   */
   dailyPlayedToday() {
-    return Boolean(this.save?.id && this.dailyStore.load(utcDayKey(), this.save.id));
+    return Boolean(this.save?.id && this.dailyStore.spent(utcDayKey(), this.save.id));
   }
 
   /**
@@ -1698,7 +1714,7 @@ export class Play extends Phaser.Scene {
   showDailyResult() {
     if (this.match || this.state !== 'ready' || this.launching) return false;
     const day = utcDayKey();
-    const rec = this.save?.id ? this.dailyStore.load(day, this.save.id) : null;
+    const rec = this.save?.id && this.dailyStore.spent(day, this.save.id) ? this.dailyStore.load(day, this.save.id) : null;
     if (!rec) return false;
     const sync = this.syncLeaderboard();
     const after = this.dailyStore.load(day, this.save.id) ?? rec;
@@ -5112,9 +5128,16 @@ export class Play extends Phaser.Scene {
     // A Daily Dump records only itself: the attempt is final and its score queued for the 🌞 board,
     // never the 🏆 top list or best (an endless score above maxScore would stop every 🏆 post).
     if (this.runIsDaily) {
-      const rec = this.saveDailyAttempt(true);
-      if (rec) this.dailyQueue.add({ ...rec, name: this.save?.name ?? null });
-      this.recordCareer('daily');
+      if (this.runNotCounted) {
+        // No pair flown today (plan 47, call D): the attempt goes back, before the sync below, whose
+        // finishAbandonedDaily would otherwise find the unfinished record. No 🌞 post, no career; the
+        // streak day was never counted (it waits for the first pipe), so nothing is taken back.
+        if (this.daily) this.dailyStore.release(this.daily.day, this.daily.playerId);
+      } else {
+        const rec = this.saveDailyAttempt(true);
+        if (rec) this.dailyQueue.add({ ...rec, name: this.save?.name ?? null });
+        this.recordCareer('daily');
+      }
       this.dailySync = this.syncLeaderboard();
       return;
     }
@@ -5688,10 +5711,18 @@ export class Play extends Phaser.Scene {
     slot.alpha = this.poop.alpha; // the respawn blink, so the ghost blinks too
   }
 
-  /** A Daily Dump record still unfinished (its run was cut off by a reload): final as it stands, its score queued. */
+  /**
+   * A Daily Dump record still unfinished (its run was cut off by a reload): final as it stands, its
+   * score queued. One cut off before its first pipe is no attempt (plan 47, call G): released, nothing
+   * posted, no stub, and never made final even if storage refuses the release.
+   */
   finishAbandonedDaily() {
     const rec = this.dailyStore.peek();
     if (!rec || rec.final) return;
+    if (rec.pipes === 0) {
+      this.dailyStore.release(rec.day, rec.playerId);
+      return;
+    }
     const done = this.dailyStore.save({ ...rec, final: true });
     if (done) this.dailyQueue.add({ ...done, name: done.playerId === this.save?.id ? (this.save?.name ?? null) : null });
     // Its summary was lost with the page: a short row stands behind the score (plan 30).

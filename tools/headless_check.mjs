@@ -72,7 +72,7 @@ export const SECTIONS = [
   { name: 'versus-match', needs: [], about: 'two players: shared pause, level sync and ready check, catch-up, respawn, result, the result panel\'s gate, the smoke\'s rematch' },
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
   { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players; each race post backed by its half\'s run (2.8)' },
-  { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
+  { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised; a run that crosses no pipe gives the attempt back (at its crash, or cut off, at the next sync)" },
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats (with their day streaks, 34.14), the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
   { name: 'education-unlock', needs: [], about: "📚 for everyone (plan 28, 2.3; the section keeps its old name): the 📚 switch from the first boot and remembered across a restart, the old word refused as a name with its line, the off switch hiding 📚, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, each DOM window inside an iPhone's faked safe area (plan 28, 4.1), the 📚 popup's Show / Hide remembered (4.2)" },
   { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), corn for a right answer by the card's kind (3 / 2 / 1) and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
@@ -1857,7 +1857,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const runAndDie = async (score, start) => {
           if (start) await evaluate(start);
           await waitUntil(`${play}.state === 'playing'`);
-          await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.score = ${score}; p.die(); return true; })()`);
+          // One pipe crossed: a run that crosses none is not counted, so it could set no best (plan 48).
+          await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.score = ${score}; p.pipesPassed = Math.max(p.pipesPassed, 1); p.die(); return true; })()`);
           await waitUntil(`__flappy.scene.isActive('Over')`);
           await sleep(TT.retryLockoutMs + 400);
           return evaluate(`JSON.stringify({ texts: ${O}.children.list.filter((c) => c.type === 'Text').map((c) => c.text), again: ${O}.buttons.again, card: JSON.stringify(${O}.cardData ?? {}) })`).then(JSON.parse);
@@ -3638,18 +3639,33 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const gaps1 = await gapsNow();
         ok(gaps0 === gaps1 && JSON.parse(gaps0).length >= 9 && new Set(JSON.parse(gaps0)).size > 3, `two runs on ${DAY} lay the same ${JSON.parse(gaps0).length} gaps (${gaps0})`);
 
-        // A run cut off mid-flight (a reload; restart stands in) is the day's result all the same.
+        // A run cut off mid-flight (a reload; restart stands in) once it crossed a pipe is the day's result all the same.
         await home();
         await evaluate(`${P}.startDaily({ day: '${DAY2}' })`);
         await waitFor(`${P}.state === 'playing'`);
-        await evaluate(`(${P}.graceLeftMs = 1e9, ${P}.score = 9, true)`);
+        await evaluate(`(${P}.graceLeftMs = 1e9, ${P}.score = 9, ${P}.pipesPassed = ${P}.daily.startPipes + 2, true)`);
         await sleep(200);
         await evaluate(`(globalThis.__dailyBoxes = ${P}.readyBoxes, ${P}.scene.restart(), true)`);
         await waitFor(`${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'ready'`);
         const r3a = await stored();
         await evaluate(`${P}.syncLeaderboard(), true`);
         const r3 = await stored();
-        ok(r3a.rec?.day === DAY2 && r3a.rec.final === false && r3.rec?.final === true && r3.rec.score === 9 && r3.queue.some((q) => q.day === DAY2 && q.score === 9), `a run abandoned at 9 is left unfinished (final ${r3a.rec?.final}); the next sync makes it final and queues it (${r3.queue.map((q) => q.day).join(', ')})`);
+        ok(r3a.rec?.day === DAY2 && r3a.rec.final === false && r3a.rec.pipes === 2 && r3.rec?.final === true && r3.rec.score === 9 && r3.queue.some((q) => q.day === DAY2 && q.score === 9), `a run abandoned at 9 after 2 pipes is left unfinished (final ${r3a.rec?.final}); the next sync makes it final and queues it (${r3.queue.map((q) => q.day).join(', ')})`);
+        // One cut off before its first pipe is no attempt (plan 48, call G): the next sync releases it,
+        // posts nothing and leaves the day free (the online check below finds no post for it).
+        const DAY3 = '2026-11-08';
+        await home();
+        await evaluate(`${P}.startDaily({ day: '${DAY3}' })`);
+        await waitFor(`${P}.state === 'playing'`);
+        await evaluate(`(${P}.graceLeftMs = 1e9, ${P}.score = 4, true)`);
+        await sleep(200);
+        await evaluate(`(globalThis.__dailyBoxes = ${P}.readyBoxes, ${P}.scene.restart(), true)`);
+        await waitFor(`${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'ready'`);
+        const r4a = await stored();
+        const free4a = await evaluate(`!${P}.dailyStore.spent('${DAY3}', ${P}.save.id)`);
+        await evaluate(`${P}.syncLeaderboard(), true`);
+        const r4 = await stored();
+        ok(r4a.rec?.day === DAY3 && r4a.rec.final === false && r4a.rec.pipes === 0 && free4a && r4.rec === null && !r4.queue.some((q) => q.day === DAY3) && r4.queue.some((q) => q.day === DAY2), `a run cut off at 0 pipes is not a spent attempt (free ${free4a}); the next sync releases it (record ${JSON.stringify(r4.rec)}) and queues nothing for its day (${r4.queue.map((q) => q.day).join(', ')})`);
 
         // Online (a stubbed board): the next sync posts both queued days once each, under the player's
         // current name (they were queued before it had one), and the queue empties.
@@ -3709,6 +3725,21 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await waitFor(`${P}.state === 'playing'`);
         const run = await evaluate(`JSON.stringify({ daily: ${P}.runIsDaily, day: ${P}.daily?.day, level: ${P}.level, open: __flappy.scene.isActive('Daily') })`).then(JSON.parse);
         ok(run.daily && run.day === today.day && run.level === today.level && !run.open, `Play closes the popup and starts today's Daily Dump (${run.day}, LV ${run.level})`);
+        // A crash before the first pipe gives the attempt back (plan 48, call D): the 🌞 glows again and
+        // the popup offers Play; nothing is stored or queued for the day.
+        await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
+        await waitFor(`__flappy.scene.isActive('Over')`, 40);
+        const e0 = await stored();
+        await home();
+        const e1 = await popup();
+        await clickSun();
+        const e2 = await popup();
+        ok(e0.rec === null && !e0.queue.some((q) => q.day === today.day) && e1.halo && e2.open && e2.label === (await tx('dailyPlay')), `a Daily Dump that crashes at pipe 0 can be started again: no record (${JSON.stringify(e0.rec)}), nothing queued, the 🌞 glows (${e1.halo}), the popup offers "${e2.label}"`);
+        // Again, and this time one pipe crossed: the day is spent.
+        await clickButton();
+        await waitFor(`${P}.state === 'playing'`);
+        await evaluate(`(${P}.graceLeftMs = 1e9, ${P}.pipesPassed = ${P}.daily.startPipes + 1, true)`);
+        await waitFor(`JSON.parse(localStorage.getItem('${keys[0]}') ?? 'null')?.pipes === 1`, 40);
         await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
         await waitFor(`__flappy.scene.isActive('Over')`, 40);
         await home();
@@ -3719,7 +3750,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await clickButton();
         await waitFor(`__flappy.scene.isActive('Over')`, 30);
         const res = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), daily: __flappy.scene.getScene('Over').scene.settings.data?.daily?.day ?? null, open: __flappy.scene.isActive('Daily') })`).then(JSON.parse);
-        ok(!p0.halo && p1.label === (await tx('dailySeeResult')) && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(p1.countdown ?? '') && res.over && res.daily === today.day && !res.open, `played: no glow; the popup offers "${p1.label}" with "${p1.countdown}", which opens today's result`);
+        ok(!p0.halo && p1.label === (await tx('dailySeeResult')) && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(p1.countdown ?? '') && res.over && res.daily === today.day && !res.open, `played (a pipe crossed): no glow; the popup offers "${p1.label}" with "${p1.countdown}", which opens today's result`);
         // Today's result is a finished screen: Play sits 'dead' under it, so no tap or key on it starts a
         // run behind it (it used to stay 'ready', and every tap on Over also reached Play's flap()).
         const playNow = () => evaluate(`JSON.stringify({ state: ${P}.state, launching: ${P}.launching, over: __flappy.scene.isActive('Over'), board: __flappy.scene.isActive('Leaderboard'), versus: __flappy.scene.isActive('Versus') })`).then(JSON.parse);
@@ -6798,22 +6829,33 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await home();
       ok((await evaluate(`${P}.dailyStreakText?.visible === false && ${P}.dailyStreakText.text === ''`)), 'no Daily Dump streak yet: no number on the 🌞');
 
-      // A one-player run (not education, not a test run) counts today's local day.
-      await evaluate(`${P}.flap(), true`);
-      await waitFor(`${P}.state === 'playing'`);
-      await sleep(400);
-      await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
-      await waitFor(`${P}.state === 'dead'`, 80);
-      await sleep(800);
-      const single = await evaluate(`JSON.stringify(${P}.streakStore.load().single ?? null)`).then(JSON.parse);
+      // A one-player run (not education, not a test run) counts today's local day, once it crossed a
+      // pipe (plan 48): one that dies before the first pipe counts none.
+      const singleRun = async (pipes) => {
+        await evaluate(`${P}.flap(), true`);
+        await waitFor(`${P}.state === 'playing'`);
+        await sleep(400);
+        await evaluate(`(${P}.graceLeftMs = 0, ${P}.pipesPassed = ${pipes}, ${P}.die(), true)`);
+        await waitFor(`${P}.state === 'dead'`, 80);
+        await sleep(800);
+        return evaluate(`JSON.stringify(${P}.streakStore.load().single ?? null)`).then(JSON.parse);
+      };
+      const empty = await singleRun(0);
+      ok(empty === null, `a one-player run that crossed no pipe counts no Singleplayer day (${JSON.stringify(empty)})`);
+      await home();
+      const single = await singleRun(1);
       ok(single && single.day === today && single.streak >= 1, `a one-player run counts the local day for the Singleplayer streak (${JSON.stringify(single)}; today ${today})`);
 
-      // A Daily Dump counts its course day once claimed.
+      // A Daily Dump counts its course day once its run crosses a pipe (plan 48), not at the claim.
       await home();
       await evaluate(`${P}.startDaily({ day: '${utc}' })`);
       await waitFor(`${P}.state === 'playing' && ${P}.runIsDaily`, 80);
+      await evaluate(`${P}.graceLeftMs = 1e9, true`);
+      const claimed = await evaluate(`JSON.stringify(${P}.streakStore.load().daily ?? null)`).then(JSON.parse);
+      await evaluate(`${P}.pipesPassed = ${P}.daily.startPipes + 1, true`);
+      await waitFor(`${P}.streakStore.load().daily != null`, 40);
       const daily = await evaluate(`JSON.stringify(${P}.streakStore.load().daily ?? null)`).then(JSON.parse);
-      ok(daily && daily.day === utc && daily.streak >= 1, `a Daily Dump counts its course day at the start (${JSON.stringify(daily)}; course day ${utc})`);
+      ok(claimed === null && daily && daily.day === utc && daily.streak >= 1, `a Daily Dump counts its course day at its first pipe (at the claim ${JSON.stringify(claimed)}; then ${JSON.stringify(daily)}; course day ${utc})`);
       await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
       await waitFor(`${P}.state === 'dead'`, 80);
       await sleep(600);
