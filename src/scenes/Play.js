@@ -148,7 +148,7 @@ import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPad
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { registerWorker } from '../swClient.js';
-import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, matchHostKey, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
+import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, matchHostKey, ghostPlacement, barShown, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
 import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, studyStreakNow, pickSuperCard, paidOn, buriedIdsOn, skipUntil, boardRecord, educationBackup, readEducationBackup, restoredSettings } from '../education.js';
 
 const TEXT_STYLE = {
@@ -424,6 +424,7 @@ export class Play extends Phaser.Scene {
     // distance scrolled (ghostPlacement), under the live poop and over its glow. Hidden until the race.
     this.ghost = this.match ? this.add.image(this.poopX, GAME_HEIGHT / 2, 'poop').setScale(T.spriteDisplayScale).setDepth(9.5).setAlpha(0).setVisible(false) : null;
     this.rivalKey = null; // what the rival marker on the level bar was last placed for
+    this.barDoneLevel = null; // a match half's crossed level, held on the bar from the line to GO (plan 46)
 
     // HUD
     this.scoreText = this.add.text(W / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
@@ -1011,6 +1012,7 @@ export class Play extends Phaser.Scene {
     this.finishLine = null;
     this.finishSpawned = false;
     this.levelBreak = false;
+    this.barDoneLevel = null; // no crossed level held on the bar (plan 46)
     this.applyLevel();
     this.levelBar.setVisible(!daily);
     this.refreshLevelBar();
@@ -1251,12 +1253,15 @@ export class Play extends Phaser.Scene {
     });
   }
 
-  /** Bar label and fill for the current level and pipes passed; in a break, the level chosen there (plan 26, A2), empty. */
+  /**
+   * Bar label and fill (barShown): the current level and pipes passed; in a break, the level chosen there
+   * (plan 26, A2), empty; in a match's break, the level just crossed, full, until GO (plan 46).
+   */
   refreshLevelBar() {
-    const level = this.levelBreak ? this.breakShownLevel() : this.level;
+    const { level, frac } = barShown({ level: this.level, pipesPassed: this.pipesPassed, pick: this.levelBreak ? this.breakShownLevel() : null, done: this.barDoneLevel }, this.tune);
     this.levelBar?.setColor(levelColor(level, LEVEL_COLORS)); // the level's own colour, raw (plan 28, 4.4)
     this.levelBar?.setLabel(levelLabel(this.locale, level));
-    this.levelBar?.setProgress(level === this.level ? levelProgress(this.pipesPassed, this.level, this.tune) : 0);
+    this.levelBar?.setProgress(frac);
   }
 
   /** The checkered line one spacing after a level's last pair, at the right edge or `shift` px left of it; crossing it ends the level. */
@@ -1280,7 +1285,10 @@ export class Play extends Phaser.Scene {
       this.level += 1;
       this.statCall('level', this.level);
       this.runTopLevel = Math.max(this.runTopLevel ?? 0, this.level);
-      this.refreshLevelBar(); // new level: label steps, fill back to 0
+      // A match keeps the crossed level on the bar, full, until GO (plan 46), so the other player's marker
+      // can still move along it; elsewhere the label steps and the fill goes back to 0.
+      this.barDoneLevel = this.match ? done : null;
+      this.refreshLevelBar();
     }
     this.playSample('level-up', T.levelUpVolume, sfx.levelUp);
     if (this.effects.cancelPower()) this.endPower(); // endPower stops the clip
@@ -1509,6 +1517,7 @@ export class Play extends Phaser.Scene {
     this.armSuperQ(); // and its challenge question bubble (plan 34)
     this.crashesThisLevel = 0;
     this.prefillPipes();
+    this.barDoneLevel = null; // GO: a match's bar moves on to this level (plan 46)
     this.refreshLevelBar();
   }
 
@@ -5622,13 +5631,18 @@ export class Play extends Phaser.Scene {
     if (this.ghost.texture.key !== g.frame && this.textures.exists(g.frame)) this.ghost.setTexture(g.frame);
   }
 
-  /** The other player's marker on this level bar (rivalMarker), re-placed only when a level or pair count changed. */
+  /**
+   * The other player's marker on this level bar (rivalMarker), re-placed only when a level, a pair count,
+   * the level held in a break (plan 46: so it moves on at GO) or their run's end changed.
+   */
   refreshRival() {
     const other = this.match.slots[this.player === 1 ? 1 : 0];
-    const key = `${this.level}:${other.level}:${other.pipesPassed}:${this.state === 'ready' ? 0 : 1}`;
+    const done = this.barDoneLevel ?? null;
+    const key = `${this.level}:${done}:${other.level}:${other.pipesPassed}:${other.ended ? 1 : 0}:${this.state === 'ready' ? 0 : 1}`;
     if (key === this.rivalKey) return;
     this.rivalKey = key;
-    this.levelBar.setRival(this.state === 'ready' ? null : rivalMarker({ level: this.level }, other, this.tune));
+    const me = done === null ? { level: this.level } : { level: done, done: true };
+    this.levelBar.setRival(this.state === 'ready' ? null : rivalMarker(me, other, this.tune));
   }
 
   /**

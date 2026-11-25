@@ -331,6 +331,7 @@ export const TUNING = {
     ghostFadeMs: 600, // ms the ghost takes to fade out once the other player is out
     barRivalPx: 28, // px size of the other player's marker on the level bar
     barRivalAlpha: 0.55, // 0–1 alpha of that marker
+    barRivalOutAlpha: 0.25, // 0–1 alpha of that marker once the other player's run has ended (plan 46, call 3)
     dividerPx: 4, // px width of the line between the two halves
     // Catch-up: what a trailing player's mystery box does, by pipes passed behind the other when it opens.
     catchUp: {
