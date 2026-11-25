@@ -238,3 +238,14 @@ test("the 📚 popup's keys (plan 26, A2; AUD-032: eduIntroKey, the decision ui/
   eduIntroKey({ ...SPACE, down: false, held });
   assert.deepEqual([...held], ['Space'], 'the set passed in is left alone (pure)');
 });
+
+test("December's 🎅 stands in the 🌞's box (plan 17, 1.9): the layout reads no date, and every variant is one glyph", async () => {
+  const { dailyGlyph, SUN } = await import('../src/logic.js');
+  // readyLayout takes no day: the button the 🎅 is drawn on is the 🌞's round button, wherever the season is.
+  assert.deepEqual(readyLayout(GAME_WIDTH, GAME_HEIGHT, T), layout);
+  const seg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+  const glyphs = [SUN, ...T.advent.santas.map((s) => dailyGlyph('2026-12-05', s, T))];
+  assert.equal(glyphs.length, 19);
+  for (const g of glyphs) assert.equal([...seg.segment(g)].length, 1, `${g} is one grapheme, as the 🌞 is, so it fits the same 52 px round button`);
+  assert.deepEqual(glyphs.slice(1), T.advent.santas, 'in season the glyph is the visit\'s variant, unchanged');
+});

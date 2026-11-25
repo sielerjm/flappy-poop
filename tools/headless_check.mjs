@@ -25,6 +25,40 @@ import { join } from 'node:path';
 
 export const DEFAULT_URL = 'http://localhost:8000';
 
+/**
+ * The smoke's clock pin (plan 17, 1.9). Every check below was written for a day outside the
+ * Christmas season (stock textures, the 🌞), so the page's clock and this process's Date.now are
+ * offset to a pinned start and keep running from it; the offset is fixed once per pin, so time
+ * still moves forward across reloads. A section may pin its own day (pinClock in run); --date
+ * overrides every pin for one run. Noon UTC is the same day in every time zone near Europe.
+ */
+export const SMOKE_PIN_DAY = '2026-11-15';
+
+/** 'YYYY-MM-DD' → that day's 12:00 UTC in ms; throws on anything that is not a real day. */
+export function pinMs(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day));
+  const ms = m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12) : NaN;
+  if (!m || new Date(ms).toISOString().slice(0, 10) !== day) throw new Error(`--date: ${day} is not a day (use YYYY-MM-DD)`);
+  return ms;
+}
+
+/**
+ * The page's Date, shifted by offsetMs: Date.now(), new Date() and Date() read the real clock plus
+ * the offset; new Date(x), Date.UTC and Date.parse are unchanged, and instanceof Date still holds.
+ * Injected before any page script (Page.addScriptToEvaluateOnNewDocument), in every frame.
+ */
+export function clockStubSource(offsetMs) {
+  return `(() => {
+  const Real = Date; const off = ${Number(offsetMs)}; const now = () => Real.now() + off;
+  function PinnedDate(...a) { if (!new.target) return new Real(now()).toString(); return a.length ? new Real(...a) : new Real(now()); }
+  PinnedDate.prototype = Real.prototype;
+  Object.defineProperty(PinnedDate, 'name', { value: 'Date' });
+  PinnedDate.now = now; PinnedDate.UTC = Real.UTC; PinnedDate.parse = Real.parse;
+  globalThis.Date = PinnedDate;
+  globalThis.__smokeClock = { offsetMs: off };
+})();`;
+}
+
 /** chromeIntent input → the overlay scene it opens. Every overlay has close(). */
 export const OVERLAYS = {
   settings: 'Settings',
@@ -116,18 +150,20 @@ export function expandOnly(names, sections = SECTIONS) {
 }
 
 /**
- * Command line → { url, only, list }. A positional argument or --url= is the URL;
- * --only=a,b names sections (null: all); --list prints them. Throws on anything else
- * or on a name SECTIONS does not have, listing the valid ones.
+ * Command line → { url, only, list, date }. A positional argument or --url= is the URL;
+ * --only=a,b names sections (null: all); --list prints them; --date=YYYY-MM-DD runs every
+ * section on that day instead of its pin (null: the pins). Throws on anything else, on a
+ * date that is not a day, or on a name SECTIONS does not have, listing the valid ones.
  */
 export function parseArgs(argv, sections = SECTIONS) {
-  const out = { url: DEFAULT_URL, only: null, list: false };
+  const out = { url: DEFAULT_URL, only: null, list: false, date: null };
   for (const arg of argv) {
     if (arg === '--list') out.list = true;
     else if (arg.startsWith('--only=')) out.only = arg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean);
     else if (arg.startsWith('--url=')) out.url = arg.slice('--url='.length);
+    else if (arg.startsWith('--date=')) { out.date = arg.slice('--date='.length); pinMs(out.date); }
     else if (!arg.startsWith('-')) out.url = arg;
-    else throw new Error(`unknown option ${arg} (use --list, --only=a,b or --url=…)`);
+    else throw new Error(`unknown option ${arg} (use --list, --only=a,b, --date=YYYY-MM-DD or --url=…)`);
   }
   if (out.only) {
     const names = sections.map((s) => s.name);
@@ -239,9 +275,15 @@ async function connect(port) {
   return { send, evaluate, exceptions, consoleErrors, close: () => ws.close() };
 }
 
-export async function run(url = DEFAULT_URL, { only = null } = {}) {
+export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) {
   const selected = only ? new Set(expandOnly(only)) : null;
   if (selected) console.log(`sections: ${[...selected].join(', ')}`);
+  // The clock pin (plan 17, 1.9): this process's Date.now takes the page's offset too, since
+  // checks compare times made here with times the page made. Restored in the finally below.
+  const realNow = Date.now;
+  let clockOffset = 0;
+  let clockScriptId = null;
+  Date.now = () => realNow() + clockOffset;
   const { proc, port, profile } = launchChrome();
   const failures = [];
   let checks = 0;
@@ -273,6 +315,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     // (globalThis.__flappy) exists only on local hosts unless a driver opts in before the page's
     // scripts run (debugHandleAllowed): opt in, so --url=<any host> keeps working.
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `globalThis.__flappyDebug = true; Object.defineProperty(navigator, 'getGamepads', { value: () => [], configurable: true });` });
+    // The clock pin (plan 17, 1.9): the page and this process run from `day` 12:00 UTC on (--date wins
+    // over every pin). It takes effect on the next navigation, so a section that pins its own day reloads.
+    const pinClock = async (day) => {
+      const want = date ?? day;
+      clockOffset = pinMs(want) - realNow();
+      if (clockScriptId) await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: clockScriptId });
+      ({ identifier: clockScriptId } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: clockStubSource(clockOffset) }));
+      return want;
+    };
+    const pinnedDay = await pinClock(SMOKE_PIN_DAY);
+    console.log(`clock pinned to ${pinnedDay} 12:00 UTC${date ? ' (--date)' : ''}`);
     // The field follows the viewport (fieldWidth): pin it to the portrait 720×1280 so every number
     // below is the phone layout (--window-size includes browser chrome, so the viewport is smaller).
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
@@ -305,6 +358,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await sleep(500);
       splash = await splashNow();
     }
+    const pageClock = await evaluate(`JSON.stringify({ day: new Date().toISOString().slice(0, 10), now: Date.now(), stub: Boolean(globalThis.__smokeClock), date: Date().slice(0, 15) === new Date().toString().slice(0, 15) })`).then(JSON.parse);
+    ok(pageClock.stub && pageClock.day === pinnedDay && Math.abs(pageClock.now - Date.now()) < 5000 && pageClock.date, `the page's clock runs on the pin, ${pinnedDay}, as this process's does (${JSON.stringify(pageClock)})`);
     ok(Boolean(splash?.live && splash.text), `splash: a note card shows (${JSON.stringify(splash?.text ?? null)})`);
     ok(Boolean(splash?.enabled && splash.glow), 'splash: Continue lights up and glows once Boot has loaded');
     ok(splash?.enabled && splash.ring < 0.5, `splash: the ring is full when Continue lights up (offset ${splash?.ring})`);
@@ -8125,6 +8180,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     if (cdp?.exceptions.length) console.log(`  page exceptions:\n  ${cdp.exceptions.join('\n  ')}`);
     if (cdp?.consoleErrors.length) console.log(`  console errors/warnings:\n  ${cdp.consoleErrors.join('\n  ')}`);
   } finally {
+    Date.now = realNow;
     console.log(`\n${checks} checks; by section: ${ran.map((s) => `${s.name} ${s.checks}`).join(' · ') || 'none ran'}`);
     cdp?.close();
     const exited = new Promise((resolve) => proc.once('exit', resolve));
@@ -8147,8 +8203,8 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
     console.log(listSections());
     process.exit(0);
   }
-  console.log(`headless_check: ${args.url}${args.only ? ` (--only=${args.only.join(',')})` : ''}`);
-  const failures = await run(args.url, { only: args.only });
+  console.log(`headless_check: ${args.url}${args.only ? ` (--only=${args.only.join(',')})` : ''}${args.date ? ` (--date=${args.date})` : ''}`);
+  const failures = await run(args.url, { only: args.only, date: args.date });
   console.log(failures.length ? `\n${failures.length} check(s) failed` : '\nall checks passed');
   process.exit(failures.length ? 1 : 0);
 }
