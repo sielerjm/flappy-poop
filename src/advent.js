@@ -20,8 +20,13 @@ export const ADVENT_ART = {
     'poop-stink-falling2': 'poop-stink-falling2-santa',
     'poop-fart': 'poop-fart-santa1',
     'poop-speech': 'poop-speech-santa',
+    // The world pickups only (D2; 1.11): the HUD, the cards, Over and Stats keep the stock items.
+    fiber: 'candy-cane',
+    probiotic: 'gingerbread',
+    bacteria: 'bacteria-santa',
   },
   fartFrames: ['poop-fart-santa1', 'poop-fart-santa2'],
+  snowCap: 'pipe-snow', // on each bottom pipe's cap, at TUNING.advent.snowCap from the cap's top-left (Play.addSnowCap)
   files: {
     'poop-santa': 'assets/advent/poop-santa.png',
     'poop-scared-santa': 'assets/advent/poop-scared-santa.png',
@@ -35,5 +40,9 @@ export const ADVENT_ART = {
     'poop-fart-santa1': 'assets/advent/poop-fart-santa1.png',
     'poop-fart-santa2': 'assets/advent/poop-fart-santa2.png',
     'poop-speech-santa': 'assets/advent/poop-speech-santa.png',
+    'candy-cane': 'assets/advent/candy-cane.png',
+    gingerbread: 'assets/advent/gingerbread.png',
+    'bacteria-santa': 'assets/advent/bacteria-santa.png',
+    'pipe-snow': 'assets/advent/pipe-snow.png',
   },
 };

@@ -90,7 +90,7 @@ const adventSquares = {
   'poop-fart-santa1.png': 438,
   'poop-fart-santa2.png': 446,
   'poop-speech-santa.png': 510,
-  'bacteria-santa.png': 196, // approximate until the art is built (plan 17, "Art workflow")
+  'bacteria-santa.png': 196, // built at 1.11 (plan 17)
 };
 
 test('the assets/advent/ art named in the size table has the listed square (plan 17, 1.3)', () => {

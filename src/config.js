@@ -537,6 +537,7 @@ export const TUNING = {
   advent: {
     seasonMonth: 12, // the season's month (1–12): adventSeason holds from day 1 of it
     seasonLastDay: 31, // the season's last day of that month (inclusive)
+    snowCap: { ox: -6.5, oy: -14.5 }, // px from a bottom pipe's cap top-left to the snow layer's top-left (process_art's --anchor report)
     // The 🎅 that stands in for the 🌞 all December, a new one each time the home screen shows (pickSanta):
     // Santa, Mrs. Claus and Mx Claus in the five skin tones and plain. The first is the fallback; variants a
     // device cannot draw as one glyph are dropped at the first pick (supportedSantas). Drop the plain three here.

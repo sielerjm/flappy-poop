@@ -2418,8 +2418,8 @@ export function adventSeason(day, t) {
  * while the season holds, nothing off season. Decoration only: it changes textures, never a hitbox or a rule.
  */
 export function seasonalSkin(day, t, art) {
-  if (!adventSeason(day, t)) return { twins: {}, fartFrames: [], files: {} };
-  return { twins: art.twins, fartFrames: art.fartFrames, files: art.files };
+  if (!adventSeason(day, t)) return { twins: {}, fartFrames: [], snowCap: null, files: {} };
+  return { twins: art.twins, fartFrames: art.fartFrames, snowCap: art.snowCap, files: art.files };
 }
 
 /**

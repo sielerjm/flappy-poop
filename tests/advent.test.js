@@ -166,8 +166,8 @@ test('seasonalSkin: every stock poop frame the game loads has its December twin 
   for (const k of stock) assert.equal(Boolean(on.twins[k]), k !== 'poop-dead', `${k}: ${on.twins[k] ?? 'stock'}`);
   assert.deepEqual(on.fartFrames, ['poop-fart-santa1', 'poop-fart-santa2']);
   assert.equal(on.twins['poop-fart'], on.fartFrames[0], 'the ghost, with no fart clock, wears the first fart twin');
-  for (const key of new Set([...Object.values(on.twins), ...on.fartFrames])) assert.equal(on.files[key], `assets/advent/${key}.png`, key);
-  for (const day of ['2026-11-30', '2027-01-01']) assert.deepEqual(seasonalSkin(day, T, ADVENT_ART), { twins: {}, fartFrames: [], files: {} }, day);
+  for (const key of new Set([...Object.values(on.twins), ...on.fartFrames, on.snowCap])) assert.equal(on.files[key], `assets/advent/${key}.png`, key);
+  for (const day of ['2026-11-30', '2027-01-01']) assert.deepEqual(seasonalSkin(day, T, ADVENT_ART), { twins: {}, fartFrames: [], snowCap: null, files: {} }, day);
 });
 
 test('twinKey: the twin once it has loaded, else the stock key; the fart alternates its two twins', async () => {

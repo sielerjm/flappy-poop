@@ -457,7 +457,11 @@ export class Play extends Phaser.Scene {
     // The lazy flight (loadLazyAudio) may land in either half's scene: every Play re-applies its skin then.
     const reapplySkin = () => this.reapplySkin();
     this.game.events.on('advent-art', reapplySkin);
-    this.events.once('shutdown', () => this.game.events.off('advent-art', reapplySkin));
+    this.events.on('postupdate', this.placeSnowCaps, this); // after the physics step, so the snow never trails its pipe
+    this.events.once('shutdown', () => {
+      this.game.events.off('advent-art', reapplySkin);
+      this.events.off('postupdate', this.placeSnowCaps, this); // the scene's emitter outlives a restart
+    });
 
     // HUD
     this.scoreText = this.add.text(W / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
@@ -3767,6 +3771,7 @@ export class Play extends Phaser.Scene {
     const bottom = this.pipes.create(x, gapBot, 'pipe', '__BASE');
     bottom.setOrigin(0.5, 0);
     bottom.setDisplaySize(T.pipeWidth, Math.max(bottom.frame.height, GAME_HEIGHT - gapBot + 4));
+    this.addSnowCap(bottom); // December (plan 17, 1.11)
 
     for (const p of [top, bottom]) {
       // Body uses unscaled frame units; scale comes from setDisplaySize.
@@ -3863,7 +3868,7 @@ export class Play extends Phaser.Scene {
     const phase = this.course.phase(this.pipesSpawned, 'band');
     const period = kind === 'mystery' ? T.mystery.periodMs : T.items.fiberPeriodMs;
     const y = stillY ?? bobY(0, phase, this.beanBounds, period);
-    const item = this.items.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, kind);
+    const item = this.items.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, this.itemTexture(kind));
     item.setDepth(8);
     this.finishItem(item, kind);
     if (stillY == null) {
@@ -3969,7 +3974,7 @@ export class Play extends Phaser.Scene {
    */
   spawnGapItem(kind, x, gapY, gapH, pair = null) {
     const y = this.course.itemY(this.pipesSpawned, gapY, gapH, kind);
-    const item = this.items.create(x, y, kind);
+    const item = this.items.create(x, y, this.itemTexture(kind));
     item.setDepth(-1); // under the pipes (0), over the background layers
     this.finishItem(item, kind);
     if (pair) {
@@ -4133,6 +4138,55 @@ export class Play extends Phaser.Scene {
   /** The lazy flight landed or the season changed (plan 17, 1.10): show the current stock key's twin now, or the stock face. */
   reapplySkin() {
     if (this.poop?.active && this.poopStockKey) this.setPoopTexture(this.poopStockKey);
+    for (const item of this.items?.getChildren() ?? []) this.skinItem(item);
+    for (const pipe of this.pipes?.getChildren() ?? []) {
+      if (pipe.originY !== 0) continue; // a bottom pipe stands up from its gap (origin at its top)
+      if (this.skin.snowCap) this.addSnowCap(pipe);
+      else pipe.getData('snow')?.destroy();
+    }
+  }
+
+  /** A world pickup's texture (plan 17, 1.11; D2): its December twin once loaded, else the stock one. The kind stays the item's data. */
+  itemTexture(kind) {
+    return twinKey(kind, this.skin, 0, (k) => this.textures.exists(k));
+  }
+
+  /** Re-skin a pickup already in the field (the flight landed, or the season changed): the texture, then its circle for that frame. */
+  skinItem(item) {
+    const kind = item.getData('kind');
+    if (!item.active || !kind || item.getData('baseScale') === undefined) return;
+    const key = this.itemTexture(kind);
+    if (item.texture.key === key || item.anims?.isPlaying) return;
+    item.setTexture(key);
+    const body = scaledCircleBody(item.frame.width, item.getData('baseScale'), item.getData('radius'));
+    item.body?.setCircle(body.radius, body.offset, body.offset);
+  }
+
+  /**
+   * December's snow on a bottom pipe's cap (plan 17, 1.11): one Image per bottom pipe, at the cap's top-left plus
+   * TUNING.advent.snowCap, drawn at spriteDisplayScale over the pipe (moving or still) and under the ground and
+   * ceiling strips; it goes when its pipe does. Nothing off season or before the file has landed.
+   */
+  addSnowCap(pipe) {
+    const key = this.skin.snowCap;
+    if (!key || !this.textures.exists(key) || pipe.getData('snow')) return;
+    const snow = this.add.image(0, 0, key).setOrigin(0, 0).setScale(T.spriteDisplayScale).setDepth(0.5);
+    pipe.setData('snow', snow);
+    pipe.once('destroy', () => snow.destroy());
+    snow.once('destroy', () => pipe.active && pipe.setData('snow', null));
+    this.placeSnowCap(pipe, snow);
+  }
+
+  placeSnowCap(pipe, snow) {
+    snow.setPosition(pipe.x - T.pipeWidth / 2 + T.advent.snowCap.ox, pipe.y + T.advent.snowCap.oy);
+  }
+
+  /** Each frame after the physics step: every snow layer onto its pipe (the pipes scroll and some bob). */
+  placeSnowCaps() {
+    for (const pipe of this.pipes?.getChildren() ?? []) {
+      const snow = pipe.getData('snow');
+      if (snow?.active) this.placeSnowCap(pipe, snow);
+    }
   }
 
   collectBean(bean) {
