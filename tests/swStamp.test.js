@@ -5,6 +5,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -252,4 +253,59 @@ test('the committed tree is unstamped or consistently stamped (the push restamps
     return;
   }
   assert.ok(mapOf(html), 'a stamped sw.js comes with a stamped index.html');
+});
+
+// AUD-155 and AUD-156 (audit 2026-11-25): a stamp that names a file git does not track would 404 for every
+// player at install, and a stamped tree whose files moved on would deploy old modules behind new bytes.
+const git = (dir, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-C', dir, ...args], { stdio: 'pipe' }).toString();
+const SW_STAMP = join(REPO, 'tools/sw_stamp.mjs');
+
+test('AUD-156: checkStamp refuses a stamped file git does not track (push only commits tracked files)', () => {
+  const t = tree();
+  git(t.dir, 'init', '-q');
+  git(t.dir, 'add', '-A');
+  git(t.dir, 'commit', '-q', '-m', 'base');
+  writeStamp(t.dir);
+  assert.deepEqual(checkStamp(t.dir), [], 'every listed file is tracked: nothing wrong');
+  t.put('src/extra.js', 'export const x = 1;\n');
+  t.put('assets/vendor/new.js', 'x');
+  writeStamp(t.dir);
+  const problems = checkStamp(t.dir).join('\n');
+  assert.match(problems, /src\/extra\.js: .*not track/);
+  git(t.dir, 'add', 'src/extra.js');
+  assert.doesNotMatch(checkStamp(t.dir).join('\n'), /extra\.js/, 'tracked once added');
+});
+
+test('AUD-156: a tree that is not its own git repo is not judged on tracking', () => {
+  const t = tree();
+  writeStamp(t.dir);
+  assert.deepEqual(checkStamp(t.dir), []);
+});
+
+test('AUD-155: --check-if-stamped passes an unstamped tree and a fresh stamp, and fails a stamp the files moved past', () => {
+  const run = (dir) => {
+    try {
+      execFileSync('node', [SW_STAMP, `--root=${dir}`, '--check-if-stamped'], { stdio: 'pipe' });
+      return 0;
+    } catch (err) {
+      return err.status;
+    }
+  };
+  const t = tree();
+  assert.equal(run(t.dir), 0, 'unstamped (before the first push): nothing to be stale');
+  writeStamp(t.dir);
+  assert.equal(run(t.dir), 0, 'fresh');
+  t.put('src/main.js', "import './logic.js';\nconsole.log('changed after the stamp');\n");
+  assert.equal(run(t.dir), 1, 'stale: new bytes behind the old ?h=');
+});
+
+test('AUD-155: the pre-push hook checks the stamp of a push to main, and only of main', () => {
+  const hook = join(REPO, 'tools/git-hooks/pre-push');
+  assert.ok(statSync(hook).mode & 0o100, 'executable');
+  const text = readFileSync(hook, 'utf8');
+  assert.match(text, /refs\/heads\/main/);
+  assert.match(text, /sw_stamp\.mjs" --check-if-stamped/);
+  const run = (ref) => execFileSync('sh', [hook], { cwd: REPO, input: `${ref} abc ${ref} def\n`, stdio: 'pipe' });
+  run('refs/heads/main'); // the real tree is unstamped or fresh: exits 0
+  run('refs/heads/other');
 });

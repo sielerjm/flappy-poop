@@ -12,9 +12,11 @@
 // supabase-js with their own pins). Icons and the manifest stay out (the OS keeps those).
 // An sw.js holding FLAPPY_SW_OFF (tools/sw-off.js copied over it) is left as it is.
 //
-// Usage: node tools/sw_stamp.mjs [--check] [--root=DIR]   (stamp and check; --check only checks)
+// Usage: node tools/sw_stamp.mjs [--check | --check-if-stamped] [--root=DIR]   (stamp and check; --check only checks;
+//        --check-if-stamped is the pre-push hook's: an unstamped tree passes, a stamped one must be fresh)
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -150,6 +152,30 @@ export function writeStamp(root = ROOT) {
   return plan;
 }
 
+/**
+ * Of these paths (relative to root), the ones git does not track: `npm run push` commits only tracked
+ * files, so a stamp that names one would 404 for every player at install (AUD-156). [] when root is not
+ * the top of a git work tree (a temp tree in a test), so only the real repo is judged.
+ */
+export function untrackedPaths(root, paths) {
+  let tracked;
+  try {
+    const git = (...a) => execFileSync('git', ['-C', root, ...a], { stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1 << 26 }).toString();
+    const top = git('rev-parse', '--show-toplevel').trim();
+    if (!top || realpathSync(top) !== realpathSync(root)) return []; // (realpathSync('') is the cwd)
+    tracked = new Set(git('ls-files').split('\n'));
+  } catch {
+    return [];
+  }
+  return [...new Set(paths)].filter((p) => !tracked.has(p));
+}
+
+/** True when index.html or sw.js carries a stamp (the first push stamps; before it the tree is plain). */
+export function isStamped(root = ROOT) {
+  const read = reader(root);
+  return Boolean(importMapOf(read('index.html', 'utf8'))) || Boolean(readSwStamp(read('sw.js', 'utf8')).build);
+}
+
 /** What is wrong with the tree's stamp as it is on disk ([] when nothing): push refuses on any. */
 export function checkStamp(root = ROOT) {
   const read = reader(root);
@@ -169,6 +195,8 @@ export function checkStamp(root = ROOT) {
       if (map[`./${path}`] && map[`./${path}`] !== `./${hit[1]}`) problems.push(`index.html: ${hit[1]} is not the import map's URL for ${path}`);
     }
   }
+  const notTracked = (paths) => untrackedPaths(root, paths).map((p) => `${p}: stamped, but git does not track it (a push would not commit it, so it would 404 for every player)`);
+  problems.push(...notTracked(['index.html', ...modules]));
   const swSource = read('sw.js', 'utf8');
   if (swIsOff(swSource)) return problems;
   const stamp = readSwStamp(swSource);
@@ -187,13 +215,18 @@ export function checkStamp(root = ROOT) {
     if (!listed.has(url)) problems.push(`${url}: not in sw.js FILES`);
   }
   for (const url of assetUrls(root, version)) if (!listed.has(url)) problems.push(`${url}: not in sw.js FILES`);
+  problems.push(...notTracked(stamp.files.map(([u]) => u.split('?')[0])));
   return problems;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const rootArg = process.argv.find((a) => a.startsWith('--root='));
   const root = rootArg ? resolve(rootArg.slice('--root='.length)) : ROOT;
-  if (!process.argv.includes('--check')) {
+  if (process.argv.includes('--check-if-stamped') && !isStamped(root)) {
+    console.log('sw_stamp: the tree is not stamped yet (the first push stamps it): nothing to check');
+    process.exit(0);
+  }
+  if (!process.argv.includes('--check') && !process.argv.includes('--check-if-stamped')) {
     const plan = writeStamp(root);
     console.log(plan.off ? 'sw_stamp: sw.js is the kill switch, left as it is; index.html stamped' : `sw_stamp: build ${plan.build}, ${plan.files.length} files`);
   }
