@@ -75,6 +75,19 @@ test("the smoke's clock pin (plan 17, 1.9): off season by default; pinMs is the 
   assert.equal(new Date(pinMs(SMOKE_PIN_DAY)).toISOString(), `${SMOKE_PIN_DAY}T12:00:00.000Z`);
 });
 
+test("the smoke's pins are absolute (plan 17, 1.16): a December host clock still runs every section on its pin; --date overrides them", async () => {
+  const { pinOffset, pinMs, SMOKE_PIN_DAY } = await import('../tools/headless_check.mjs');
+  for (const host of ['2026-12-01T00:00:01Z', '2026-12-05T08:00:00Z', '2026-12-31T23:59:59Z', '2027-01-01T00:00:00Z', '2026-11-15T03:00:00Z']) {
+    const hostMs = Date.parse(host);
+    const off = pinOffset(SMOKE_PIN_DAY, null, hostMs);
+    assert.equal(off.want, SMOKE_PIN_DAY, host);
+    assert.equal(new Date(hostMs + off.offsetMs).toISOString(), `${SMOKE_PIN_DAY}T12:00:00.000Z`, `a host on ${host}: the page reads the pin`);
+    const xmas = pinOffset('2026-12-05', null, hostMs);
+    assert.equal(hostMs + xmas.offsetMs, pinMs('2026-12-05'), `christmas's own pin from a host on ${host}`);
+    assert.deepEqual(pinOffset(SMOKE_PIN_DAY, '2026-12-24', hostMs), { want: '2026-12-24', offsetMs: pinMs('2026-12-24') - hostMs }, '--date wins over the pin');
+  }
+});
+
 test("the smoke's Date stub: now, new Date() and Date() shift by the offset and keep running; the rest of Date is unchanged", async () => {
   const { clockStubSource, pinMs } = await import('../tools/headless_check.mjs');
   const vm = await import('node:vm');

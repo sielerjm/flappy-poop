@@ -43,6 +43,16 @@ export function pinMs(day) {
 }
 
 /**
+ * The clock offset for a pin (plan 17, 1.9 and 1.16): the page and this process read `day` 12:00 UTC (or --date's
+ * day when given) from `hostNowMs` on. The pin is absolute, so the host's own date never reaches a section: a
+ * December host clock (from 1 Dec) still runs every section on its pin.
+ */
+export function pinOffset(day, date, hostNowMs) {
+  const want = date ?? day;
+  return { want, offsetMs: pinMs(want) - hostNowMs };
+}
+
+/**
  * The page's Date, shifted by offsetMs: Date.now(), new Date() and Date() read the real clock plus
  * the offset; new Date(x), Date.UTC and Date.parse are unchanged, and instanceof Date still holds.
  * Injected before any page script (Page.addScriptToEvaluateOnNewDocument), in every frame.
@@ -129,6 +139,7 @@ export const SECTIONS = [
   { name: 'online-invites', needs: [], about: "invites, the ✉️ (plan 39, 4.2, Preview I), on a stand-in transport under Play (no network) on a 320 phone: invite_list once linked and the topic it names; ✉️ 1 on 🤝 Friends; the inviting 🟢 friend first with the ✉️ and its time, the buttons inside the row under a 16-character name (Michael's ask); a topic invite adds one; the ✉️ tapped: the ready screen as the guest; Invite on a 🟢 friend: the room screen waiting, their no with Resend, Resend in the same room" },
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
   { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
+  { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, the countdown line and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating), the snow on each bottom pipe's cap, the twinned pickups, the stock dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run; on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same ?perf read" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -318,8 +329,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
     // The clock pin (plan 17, 1.9): the page and this process run from `day` 12:00 UTC on (--date wins
     // over every pin). It takes effect on the next navigation, so a section that pins its own day reloads.
     const pinClock = async (day) => {
-      const want = date ?? day;
-      clockOffset = pinMs(want) - realNow();
+      const { want, offsetMs } = pinOffset(day, date, realNow());
+      clockOffset = offsetMs;
       if (clockScriptId) await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: clockScriptId });
       ({ identifier: clockScriptId } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: clockStubSource(clockOffset) }));
       return want;
@@ -8165,6 +8176,137 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       await evaluate(`${play}.settings.set({ skipSplash: false }), true`);
       const waits = await boot({ press: true });
       ok(waits.stillWaiting && waits.state === 'ready' && waits.gone, `with it off, Continue lit still waits for a press, then Play starts (${JSON.stringify(waits)})`);
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+    });
+
+    await section('christmas', async () => {
+      // December (plan 17, 1.16): the decorations on a 5 Dec pin, then none of them on a fresh page on the
+      // 15 Nov pin (the default every other section runs on). Each half reloads, since a pin takes effect on
+      // the next navigation; the live board is blocked at the browser (the reload drops the page's stubs).
+      // A ?perf read of one December run against one off-season run: logged, not judged (headless Chrome is
+      // not a phone; the phone check reads it by hand).
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const ex0 = exceptions.length;
+      const ART = await evaluate(`import('./src/advent.js').then((m) => JSON.stringify(m.ADVENT_ART))`).then(JSON.parse);
+      const files = Object.keys(ART.files);
+      const until = async (expr, tries = 60, ms = 100) => {
+        for (let i = 0; i < tries; i += 1) {
+          if (await evaluate(expr).catch(() => false)) return true;
+          await sleep(ms);
+        }
+        return false;
+      };
+      const load = async (query = '') => {
+        await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}${query}` });
+        let sp = null;
+        for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+          await sleep(500);
+          sp = await splashNow().catch(() => null);
+        }
+        if (sp?.enabled) {
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(250);
+        // The one lazy flight starts on Play's first frame: wait for it to land (or for nothing to be in flight).
+        await until(`(() => { const p = ${play}; return p.state === 'ready' && !__flappy.registry.get('lazyAudio') && __flappy.cache.audio.exists('flush'); })()`, 100);
+      };
+      const loaded = () => evaluate(`JSON.stringify(${JSON.stringify(files)}.filter((k) => __flappy.textures.exists(k)))`).then(JSON.parse);
+      const home = () =>
+        evaluate(`(() => { const p = ${play}; return JSON.stringify({
+          day: new Date().toISOString().slice(0, 10), stock: p.poopStockKey, shown: p.poop.texture.key, glyph: p.dailySun?.text ?? null,
+          line: p.countdownText?.visible ? p.countdownText.text : null, image: Boolean(p.countdownImage?.visible),
+          flakes: p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length, santa: localStorage.getItem('flappyPoop.santa'),
+        }); })()`).then(JSON.parse);
+      // A test-mode run on Invincible, the poop held mid-field (the pins do not change what a run records:
+      // test runs record nothing).
+      const startRun = async () => {
+        await evaluate(`${play}.setTestMode(true), ${play}.setTestSettings({ invincible: true }), true`);
+        await evaluate(`${play}.flap(), true`);
+        for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, true`);
+      };
+      const perfRun = async (ms) => {
+        await startRun();
+        await evaluate(`globalThis.__flappyPerf?.reset(), true`);
+        await sleep(ms);
+        const s = await evaluate(`JSON.stringify(globalThis.__flappyPerf?.summary() ?? null)`).then(JSON.parse);
+        await evaluate(`${play}.setTestMode(false), true`);
+        return s;
+      };
+      const perfLine = (s) => (s ? `${s.frames} frames, ${s.fps.toFixed(1)} fps, cpu ${s.cpuMs.toFixed(2)} ms (max ${s.cpuMaxMs.toFixed(1)}), ${s.long} long, worst ${s.worstMs.toFixed(1)} ms` : 'no meter');
+
+      // --- 5 Dec ---
+      const dec = await pinClock('2026-12-05');
+      if (date) console.log(`note: christmas runs both halves on --date=${date}`);
+      await load();
+      const want = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => JSON.stringify({ season: l.adventSeason('${dec}', c.TUNING), line: l.countdownLine('${dec}', 'en', c.TUNING), santas: c.TUNING.advent.santas }))`).then(JSON.parse);
+      const h1 = await home();
+      const in1 = await loaded();
+      ok(want.season && h1.day === dec, `the page's day is the pin, ${dec}, in the season (${h1.day})`);
+      ok(in1.length === files.length, `every December file is in after the one lazy flight (${in1.length} / ${files.length}${in1.length < files.length ? `; missing ${files.filter((k) => !in1.includes(k)).join(', ')}` : ''})`);
+      ok(h1.stock === 'poop-speech' && h1.shown === 'poop-speech-santa', `the ready poop wears the hatted bubble frame, its state the stock key (${h1.stock} → ${h1.shown})`);
+      ok(want.santas.includes(h1.glyph) && h1.glyph !== '\u{1F31E}' && h1.santa === h1.glyph, `the 🌞 is this visit's 🎅 (${h1.glyph}), kept as the last pick`);
+      ok(h1.line === want.line?.text && !h1.image, `the countdown line under the title: "${h1.line}"`);
+      ok(h1.flakes === TT.advent.snow.count, `the home snowfall: ${h1.flakes} flakes (want ${TT.advent.snow.count})`);
+
+      // One run: the hatted frames follow the stock key, the pickups and the bottom pipes take their December look.
+      await startRun();
+      await sleep(4000); // pairs scroll in from the right edge
+      const run1 = await evaluate(`(() => { const p = ${play}; const twins = ${JSON.stringify(ART.twins)};
+        const bottoms = p.pipes.getChildren().filter((q) => q.originY === 0 && q.active);
+        const snowOk = bottoms.filter((q) => { const s = q.getData('snow'); return s?.active && s.texture.key === '${ART.snowCap}' && Math.abs(s.x - (q.x - ${TT.pipeWidth} / 2 + ${TT.advent.snowCap.ox})) < 0.5 && Math.abs(s.y - (q.y + ${TT.advent.snowCap.oy})) < 0.5; }).length;
+        const items = p.items.getChildren().filter((i) => i.active && twins[i.getData('kind')]);
+        const itemsOk = items.filter((i) => i.texture.key === twins[i.getData('kind')]).length;
+        return JSON.stringify({ state: p.state, stock: p.poopStockKey, shown: p.poop.texture.key, want: twins[p.poopStockKey] ?? p.poopStockKey, bottoms: bottoms.length, snowOk, items: items.length, itemsOk, kinds: items.map((i) => i.getData('kind') + ':' + i.texture.key), flakes: p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length, line: p.countdownText.visible }); })()`).then(JSON.parse);
+      ok(run1.state === 'playing' && !run1.stock.endsWith('santa') && run1.shown === run1.want, `in the run the poop wears its stock key's twin (${run1.stock} → ${run1.shown})`);
+      ok(run1.bottoms > 0 && run1.snowOk === run1.bottoms, `snow on every bottom pipe's cap, placed at TUNING.advent.snowCap (${run1.snowOk} / ${run1.bottoms})`);
+      ok(run1.itemsOk === run1.items, `every twinned pickup in the field wears its December twin (${run1.itemsOk} / ${run1.items}: ${run1.kinds.join(', ') || 'none in the field'})`);
+      ok(run1.flakes === 0 && !run1.line, `the snowfall and the countdown line hide in a run (${run1.flakes} flakes)`);
+      // A fart: the stock key stays poop-fart while the two hatted fart frames alternate on the stink frames' clock.
+      await evaluate(`(() => { const p = ${play}; p.effects.addBean(); p.effects.addBean(); p.setCharged(true); p.activatePower(); return true; })()`);
+      const farts = [];
+      for (let i = 0; i < 12; i += 1) {
+        farts.push(await evaluate(`${play}.poopStockKey + '|' + ${play}.poop.texture.key`));
+        await sleep(TT.beans.stinkFrameMs / 2);
+      }
+      const shownFarts = new Set(farts.filter((f) => f.startsWith('poop-fart|')).map((f) => f.split('|')[1]));
+      ok(farts.every((f) => f.startsWith('poop-fart|')) && shownFarts.size === 2 && [...shownFarts].every((k) => ART.fartFrames.includes(k)), `a fart alternates the two hatted fart frames, the state poop-fart throughout (${[...shownFarts].join(', ')})`);
+      // The crash: the stock dead frame (D13), then the hatted bubble frame on the home screen again.
+      await evaluate(`(() => { const p = ${play}; p.setTestSettings({ invincible: false }); if (p.effects.cancelPower()) p.endPower(); p.effects.clearPowerups(); p.graceLeftMs = 0; p.die(); return true; })()`);
+      const dead = await evaluate(`${play}.poopStockKey + '|' + ${play}.poop.texture.key`);
+      ok(dead === 'poop-dead|poop-dead', `the crash shows the stock dead frame (D13: no twin yet) (${dead})`);
+      await waitOver(300);
+      await evaluate(`__flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
+      for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+      await sleep(300);
+      const h2 = await home();
+      ok(h2.stock === 'poop-speech' && h2.shown === 'poop-speech-santa' && h2.flakes === TT.advent.snow.count && h2.line === want.line?.text, `back home after the run: the hatted bubble frame, the snowfall and the line again (${h2.shown}, ${h2.flakes} flakes)`);
+      ok(want.santas.includes(h2.glyph) && h2.glyph !== h1.glyph, `the home screen built again picks another 🎅 (${h1.glyph} → ${h2.glyph})`);
+
+      // A reload with ?perf on 5 Dec: a new 🎅 again, and the December run's frame meter.
+      await load('&perf');
+      const h3 = await home();
+      ok(want.santas.includes(h3.glyph) && h3.glyph !== h2.glyph, `a reload never repeats the last 🎅 (${h2.glyph} → ${h3.glyph})`);
+      const perfDec = await perfRun(6000);
+      ok(Boolean(perfDec?.frames > 60), `?perf on ${dec}: ${perfLine(perfDec)}`);
+
+      // --- 15 Nov (the default pin): a fresh page, none of it ---
+      const nov = await pinClock(SMOKE_PIN_DAY);
+      await load('&perf');
+      const h4 = await home();
+      const in4 = await loaded();
+      if (!date) {
+        ok(h4.day === SMOKE_PIN_DAY && in4.length === 0, `on ${SMOKE_PIN_DAY}, a fresh page loads no December file (${in4.join(', ') || 'none'})`);
+        ok(h4.stock === 'poop-speech' && h4.shown === 'poop-speech' && h4.glyph === '\u{1F31E}' && h4.line === null && !h4.image && h4.flakes === 0, `off season the home screen is stock: the bubble frame, the 🌞, no line, no snow (${JSON.stringify(h4)})`);
+      } else console.log(`note: --date=${date}: the off-season half is skipped (the page is on ${nov})`);
+      const perfNov = await perfRun(6000);
+      ok(Boolean(perfNov?.frames > 60), `?perf on ${nov}: ${perfLine(perfNov)}`);
+      if (perfDec && perfNov) console.log(`note: ?perf December vs off season: cpu ${perfDec.cpuMs.toFixed(2)} vs ${perfNov.cpuMs.toFixed(2)} ms a frame, ${perfDec.long} vs ${perfNov.long} long frames, ${perfDec.fps.toFixed(1)} vs ${perfNov.fps.toFixed(1)} fps`);
+      // Home again on a plain page, for the closing checks.
+      await evaluate(`${play}.scene.restart(), true`);
+      for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
       ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
     });
 
