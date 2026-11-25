@@ -2413,6 +2413,25 @@ export function adventSeason(day, t) {
   return month === t.advent.seasonMonth && date <= t.advent.seasonLastDay;
 }
 
+/**
+ * Christmas skins (plan 17, 1.10) in force on `day`: `art`'s twin map, fart frames and files (src/advent.js ADVENT_ART)
+ * while the season holds, nothing off season. Decoration only: it changes textures, never a hitbox or a rule.
+ */
+export function seasonalSkin(day, t, art) {
+  if (!adventSeason(day, t)) return { twins: {}, fartFrames: [], files: {} };
+  return { twins: art.twins, fartFrames: art.fartFrames, files: art.files };
+}
+
+/**
+ * The texture to show for a stock key under `skin`: its twin once `has(twin)` (the file has loaded), else the
+ * stock key itself. 'poop-fart' shows fartFrames[fartFrame] in turn (the hat in the wind).
+ */
+export function twinKey(stock, skin, fartFrame = 0, has = () => true) {
+  const frames = skin.fartFrames;
+  const twin = stock === 'poop-fart' && frames.length ? frames[fartFrame % frames.length] : skin.twins[stock];
+  return twin && has(twin) ? twin : stock;
+}
+
 /** The Daily Dump's glyph on `day`: this visit's 🎅 in the season (the first variant if none is picked yet), else the 🌞. */
 export function dailyGlyph(day, santa, t) {
   if (!adventSeason(day, t)) return SUN;

@@ -1,5 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE, EDUCATION, LEADERBOARD } from '../config.js';
+import { ADVENT_ART } from '../advent.js';
 import {
   createRng,
   createCourse,
@@ -28,6 +29,8 @@ import {
   dailyDay,
   dailyGlyphNow,
   adventSeason,
+  seasonalSkin,
+  twinKey,
   pickSanta,
   supportedSantas,
   dailySeed,
@@ -430,6 +433,11 @@ export class Play extends Phaser.Scene {
     // until launch() has swapped to the plain frame and slid it to this.poopX.
     // A match's join screen shows the plain face: the prompt there is the Versus scene's, not the bubble's.
     const readyFrame = this.match ? 'poop' : 'poop-speech';
+    // Christmas (plan 17, 1.10): the December twins in force (seasonalSkin), shown by setPoopTexture once loaded.
+    this.skin = seasonalSkin(dailyDay(this.registry), T, ADVENT_ART);
+    this.fartFrame = 0; // which fart twin is up (the fart clock, ensureFartClock)
+    this.fartClock = null;
+    this.poopStockKey = null; // the stock key the poop wears (setPoopTexture): the state, whatever twin shows
     this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, readyFrame).setDepth(10);
     this.poop.setScale(T.spriteDisplayScale * T.readyPoopScale); // bigger on the ready screen; launch() shrinks it back
     this.setPoopTexture(readyFrame);
@@ -445,6 +453,11 @@ export class Play extends Phaser.Scene {
     // distance scrolled (ghostPlacement), under the live poop and over its glow. Hidden until the race.
     this.ghost = this.match ? this.add.image(this.poopX, GAME_HEIGHT / 2, 'poop').setScale(T.spriteDisplayScale).setDepth(9.5).setAlpha(0).setVisible(false) : null;
     this.rivalKey = null; // what the rival marker on the level bar was last placed for
+    this.ensureFartClock();
+    // The lazy flight (loadLazyAudio) may land in either half's scene: every Play re-applies its skin then.
+    const reapplySkin = () => this.reapplySkin();
+    this.game.events.on('advent-art', reapplySkin);
+    this.events.once('shutdown', () => this.game.events.off('advent-art', reapplySkin));
 
     // HUD
     this.scoreText = this.add.text(W / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
@@ -2977,6 +2990,10 @@ export class Play extends Phaser.Scene {
 
   /** A Pretend date stepped in Settings (test mode): pick a 🎅 if it entered the season and redraw the button now. */
   refreshSeason() {
+    this.skin = seasonalSkin(dailyDay(this.registry), T, ADVENT_ART);
+    this.ensureFartClock();
+    this.loadLazyAudio(); // the twins, if the season just began; nothing to do otherwise
+    this.reapplySkin();
     if (!this.match) this.pickVisitSanta();
     if (this.dailySun?.active) this.dailySun.setText(this.dailyGlyph());
   }
@@ -3520,6 +3537,7 @@ export class Play extends Phaser.Scene {
   /** Freeze the run's timers, tweens, clip and box spin (pausePlay; grantTest while paused). Safe to repeat. */
   pauseEffects() {
     if (this.stinkTimer) this.stinkTimer.paused = true;
+    if (this.fartClock) this.fartClock.paused = true;
     this.fartSound?.pause();
     this.fartTween?.pause();
     this.popupTween?.pause();
@@ -3536,6 +3554,7 @@ export class Play extends Phaser.Scene {
   /** Undo pauseEffects (resumePlay). */
   resumeEffects() {
     if (this.stinkTimer) this.stinkTimer.paused = false;
+    if (this.fartClock) this.fartClock.paused = false;
     this.fartSound?.resume();
     this.fartTween?.resume();
     this.popupTween?.resume();
@@ -4070,9 +4089,14 @@ export class Play extends Phaser.Scene {
     this.scaredMs = near ? T.scaredHoldMs : Math.max(0, this.scaredMs - delta);
   }
 
-  /** Swap the player texture and rebuild the circle body for that frame size. */
+  /**
+   * Swap the player texture and rebuild the circle body for that frame size. `key` is the stock key, kept as
+   * poopStockKey; the texture shown is its December twin once loaded (twinKey; plan 17, 1.10), which is cut on
+   * the stock body centre, so the circle at the canvas centre is the stock one.
+   */
   setPoopTexture(key) {
-    this.poop.setTexture(key);
+    this.poopStockKey = key;
+    this.poop.setTexture(twinKey(key, this.skin, this.fartFrame, (k) => this.textures.exists(k)));
     const body = scaledCircleBody(this.poop.frame.width, T.spriteDisplayScale, T.poopRadius);
     this.poop.body.setCircle(body.radius, body.offset, body.offset);
   }
@@ -4087,7 +4111,28 @@ export class Play extends Phaser.Scene {
   refreshPoopLook() {
     // A start boost wears the fart face.
     const key = this.boost ? 'poop-fart' : poopFrame({ charged: this.charged, stinkFrame: this.stinkFrame, vy: this.poop.body.velocity.y, scared: this.scaredMs > 0 }, T);
-    if (this.poop.texture.key !== key) this.setPoopTexture(key);
+    if (this.poopStockKey !== key) this.setPoopTexture(key);
+  }
+
+  /**
+   * In season, one loop clock alternates the two fart twins (the hat in the wind) while the poop wears
+   * 'poop-fart' (a fart or a start boost), at the stink frames' rate. Paused with the run (pauseEffects).
+   */
+  ensureFartClock() {
+    if (this.fartClock || !this.skin.fartFrames.length) return;
+    this.fartClock = this.time.addEvent({
+      delay: T.beans.stinkFrameMs,
+      loop: true,
+      callback: () => {
+        this.fartFrame ^= 1;
+        if (this.poopStockKey === 'poop-fart') this.setPoopTexture('poop-fart');
+      },
+    });
+  }
+
+  /** The lazy flight landed or the season changed (plan 17, 1.10): show the current stock key's twin now, or the stock face. */
+  reapplySkin() {
+    if (this.poop?.active && this.poopStockKey) this.setPoopTexture(this.poopStockKey);
   }
 
   collectBean(bean) {
@@ -4516,6 +4561,8 @@ export class Play extends Phaser.Scene {
     if (!has('sparkle')) this.load.audio('sparkle', 'assets/sfx/Sparkle_Restore.mp3' + V); // a revive's streak wins everything back
     if (!has('bubble-pop')) this.load.audio('bubble-pop', 'assets/sfx/Bubble_Pop.mp3' + V); // the challenge question's bubble touched (plan 34)
     if (!has('flush')) this.load.audio('flush', 'assets/sfx/ToiletFlush_Win.mp3' + V); // a two-player GO
+    // In December the twins too (plan 17, 1.10; D8, D15), never in Boot: the stock frame shows until they land.
+    for (const [key, file] of Object.entries(this.skin.files)) if (!this.textures.exists(key)) this.load.image(key, file + V);
     if (!this.load.list.size) {
       registerWorker();
       return; // all in already
@@ -4526,6 +4573,7 @@ export class Play extends Phaser.Scene {
       this.load.off('complete', complete);
       this.events.off('shutdown', cut);
       if (arrived) registerWorker();
+      if (arrived) this.game.events.emit('advent-art'); // every Play shows the twins that just landed (reapplySkin)
     };
     const complete = () => done(true);
     const cut = () => done(false);
@@ -5690,7 +5738,8 @@ export class Play extends Phaser.Scene {
     this.ghost.setAlpha(alpha).setVisible(g.visible && alpha > 0);
     if (!g.visible) return;
     this.ghost.setPosition(g.x, g.y).setAngle(g.angle);
-    if (this.ghost.texture.key !== g.frame && this.textures.exists(g.frame)) this.ghost.setTexture(g.frame);
+    const frame = twinKey(g.frame, this.skin, 0, (k) => this.textures.exists(k)); // the rival's stock key, in this side's skin
+    if (this.ghost.texture.key !== frame && this.textures.exists(frame)) this.ghost.setTexture(frame);
   }
 
   /** The other player's marker on this level bar (rivalMarker), re-placed only when a level or pair count changed. */
@@ -5712,7 +5761,7 @@ export class Play extends Phaser.Scene {
     return {
       state: this.state, levelBreak: Boolean(this.levelBreak), ended: Boolean(slot.ended), won: Boolean(this.won), flaps: this.flapCount ?? 0,
       distance: this.distance, speed: this.state === 'playing' ? this.scrollSpeed() : 0, y: this.poop.y, vy, angle: this.poop.angle,
-      frame: this.poop.texture.key, alpha: this.poop.alpha, level: this.level, pipesPassed: this.pipesPassed, score: this.score,
+      frame: this.poopStockKey, alpha: this.poop.alpha, level: this.level, pipesPassed: this.pipesPassed, score: this.score,
       deaths: slot.deaths ?? 0, levelWins: slot.levelWins ?? 0, finalFirst: Boolean(slot.finalFirst),
     };
   }
@@ -5792,7 +5841,7 @@ export class Play extends Phaser.Scene {
     slot.distance = this.distance;
     slot.y = this.poop.y;
     slot.angle = this.poop.angle;
-    slot.frame = this.poop.texture.key;
+    slot.frame = this.poopStockKey; // the stock key: the other side maps it through its own skin
     slot.alpha = this.poop.alpha; // the respawn blink, so the ghost blinks too
   }
 

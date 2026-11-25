@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { ADVENT_ART } from '../src/advent.js';
 import { planStamp, writeStamp, checkStamp, stampSw, readSwStamp, swIsOff } from '../tools/sw_stamp.mjs';
 import { SPLASH_NOTES, splashArtUrl } from '../src/splash.js';
 import { SUPABASE_JS_VERSION } from '../src/supabaseLoader.js';
@@ -230,6 +231,9 @@ test('the real tree: every asset Boot, loadLazyAudio, the splash cards, the trap
   const play = read('src/scenes/Play.js');
   const lazy = play.slice(play.indexOf('  loadLazyAudio() {'), play.indexOf('\n  }\n', play.indexOf('  loadLazyAudio() {')));
   for (const m of lazy.matchAll(/this\.load\.audio\('[^']+', '(assets\/[^']+)' \+ V\)/g)) want.add(`${m[1]}?v=${VERSION}`);
+  // In December the same flight asks for the twins in src/advent.js (plan 17, 1.10), each with the same ?v=.
+  assert.match(lazy, /Object\.entries\(this\.skin\.files\)\) if \(!this\.textures\.exists\(key\)\) this\.load\.image\(key, file \+ V\)/, 'loadLazyAudio loads the season\'s files with ?v=');
+  for (const file of Object.values(ADVENT_ART.files)) want.add(`${file}?v=${VERSION}`);
   for (const n of SPLASH_NOTES) if (n.art?.file) want.add(splashArtUrl(n.art.file));
   const html = read('index.html');
   want.add(/s\.src = '(assets\/vendor\/phaser\.min\.js\?v=[^']+)'/.exec(html)[1]);

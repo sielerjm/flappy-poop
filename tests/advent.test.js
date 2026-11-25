@@ -154,3 +154,40 @@ test('the last 🎅 is kept beside the Daily Dump\'s key', () => {
   assert.equal(LEADERBOARD.santaKey, 'flappyPoop.santa');
   assert.ok(LEADERBOARD.dailyKey.startsWith('flappyPoop.'));
 });
+
+// 1.10: the hatted poop frames, a texture-twin map (the stock key stays the state; 1.16 adds the scene's checks).
+test('seasonalSkin: every stock poop frame the game loads has its December twin in season, none off season; the dead frame stays stock (D13)', async () => {
+  const { seasonalSkin } = await import('../src/logic.js');
+  const { ADVENT_ART } = await import('../src/advent.js');
+  const boot = readFileSync(new URL('../src/scenes/Boot.js', import.meta.url), 'utf8');
+  const stock = [...boot.matchAll(/load\.image\('(poop[\w-]*)'/g)].map((m) => m[1]);
+  assert.ok(stock.length >= 12 && stock.includes('poop-speech'), `Boot's poop frames: ${stock}`);
+  const on = seasonalSkin('2026-12-05', T, ADVENT_ART);
+  for (const k of stock) assert.equal(Boolean(on.twins[k]), k !== 'poop-dead', `${k}: ${on.twins[k] ?? 'stock'}`);
+  assert.deepEqual(on.fartFrames, ['poop-fart-santa1', 'poop-fart-santa2']);
+  assert.equal(on.twins['poop-fart'], on.fartFrames[0], 'the ghost, with no fart clock, wears the first fart twin');
+  for (const key of new Set([...Object.values(on.twins), ...on.fartFrames])) assert.equal(on.files[key], `assets/advent/${key}.png`, key);
+  for (const day of ['2026-11-30', '2027-01-01']) assert.deepEqual(seasonalSkin(day, T, ADVENT_ART), { twins: {}, fartFrames: [], files: {} }, day);
+});
+
+test('twinKey: the twin once it has loaded, else the stock key; the fart alternates its two twins', async () => {
+  const { seasonalSkin, twinKey } = await import('../src/logic.js');
+  const { ADVENT_ART } = await import('../src/advent.js');
+  const on = seasonalSkin('2026-12-05', T, ADVENT_ART);
+  const off = seasonalSkin('2026-11-15', T, ADVENT_ART);
+  assert.equal(twinKey('poop', on, 0, () => true), 'poop-santa');
+  assert.equal(twinKey('poop', on, 0, () => false), 'poop', 'not loaded yet: the stock face');
+  assert.equal(twinKey('poop', off, 0, () => true), 'poop');
+  assert.equal(twinKey('poop-dead', on, 0, () => true), 'poop-dead');
+  assert.equal(twinKey('poop-fart', on, 0, () => true), 'poop-fart-santa1');
+  assert.equal(twinKey('poop-fart', on, 1, () => true), 'poop-fart-santa2');
+  assert.equal(twinKey('poop-fart', on, 1, (k) => k !== 'poop-fart-santa2'), 'poop-fart');
+  assert.equal(twinKey('poop-fart', off, 1, () => true), 'poop-fart');
+});
+
+test('the stock key is the poop\'s state: the look, the race snapshot and the match slot never send a twin', () => {
+  const play = readFileSync(new URL('../src/scenes/Play.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(play, /poop\.texture\.key/, 'Play reads this.poopStockKey, never the shown texture');
+  assert.match(play, /frame: this\.poopStockKey/);
+  assert.match(play, /slot\.frame = this\.poopStockKey/);
+});
