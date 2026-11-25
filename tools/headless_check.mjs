@@ -2424,14 +2424,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await closeTop('Settings');
         await sleep(400);
         const storesBefore = await stores();
-        await evaluate(`${play}.score = 999, true`);
+        await evaluate(`${play}.score = 999, ${play}.pipesPassed = Math.max(${play}.pipesPassed, 1), true`); // a pipe crossed, so only the test-run latch keeps it unrecorded (plan 48)
         await dieNow();
         ok((await stores()) === storesBefore, 'that run (test mode exited partway) still records nothing');
 
         await home();
         await startRun();
         const normal = await evaluate(`JSON.stringify({ test: ${play}.runIsTest, level: ${play}.level, badge: ${play}.testBadge.visible })`).then(JSON.parse);
-        await evaluate(`${play}.score = 999, true`);
+        await evaluate(`${play}.score = 999, ${play}.pipesPassed = Math.max(${play}.pipesPassed, 1), true`); // a run that counts crossed a pipe (plan 48)
         await dieNow();
         const top = await evaluate(`JSON.parse(localStorage.getItem('flappyPoop.save')).top[0]?.score ?? null`);
         ok(!normal.test && normal.level === 1 && !normal.badge && top === 999 && (await stores()) !== storesBefore, `after exiting, a normal run starts on level 1 with no badge and records again (top score ${top})`);
