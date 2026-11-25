@@ -124,6 +124,17 @@ export function addCounters(a, b) {
 }
 
 /**
+ * Does a finished run count (plan 47, call A)? Only once the player crossed a pipe: facts.pipes is the
+ * pairs passed (fart and skipped pairs included; a Daily Dump's, the pairs flown that day). The score
+ * does not decide: two pipes and a bad bacterium at about 0 points is a real run, and a run that dies
+ * before the first pipe is not, whatever it picked up. A run that does not count changes no lifetime
+ * counter, streak, badge or board (Play.recordCareer, Play.endRun).
+ */
+export function countsAsRun(facts) {
+  return count(facts?.pipes) > 0;
+}
+
+/**
  * One finished run's counters. facts: { mode: 'single' | 'daily', score, level, won, collected,
  * farts, superFarts, pipes, falls, closeCalls, ceilingHits, boxesBought } (run badges also read
  * closeShave, fourOfAKind, winsLast7Days, daysSinceLastRun). A single-player run adds games / wins / sumScore / sumLevel / maxLevel

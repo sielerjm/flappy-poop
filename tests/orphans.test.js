@@ -24,6 +24,7 @@ const ALLOWED_EXPORTS = {
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
   RUN_DATA_KEYS: "test guard: tests/runStats.test.js keeps it equal to run_data_keys() in db/schema.sql",
   // Online race (plan 39, 1.3 and 1.4): src/online.js's pure parts and src/onlineNet.js land before their callers; drop each entry when its caller lands.
+  countsAsRun: 'plan 48, 1.1: lands with its tests before its caller, Play.recordCareer (1.2 drops this entry)',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */
