@@ -8,6 +8,18 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.31.0',
+    date: '25 Nov 2026',
+    notes: {
+      en: [
+        '👥 In a two-player race, side by side or 🌐 online, the first one over a level’s finish line no longer sees the progress bar jump ahead empty: it stays full on the level you just finished, and the other player’s poop keeps moving along it until they cross too. The bar moves on at the next level’s GO. If the other player’s run is over, their poop stays faded where it stopped.',
+      ],
+      'zh-Hans': [
+        '👥 双人比赛中（同屏或🌐在线），先越过终点线的一方，顶部的进度条不再一下子跳到下一关并清空：它会停在刚完成的那一关，保持满格，对方的便便会继续在上面前进，直到对方也过线。下一关喊“出发！”时进度条才切换。如果对方这一局已经结束，他的便便会变淡，停在结束的位置。',
+      ],
+    },
+  },
+  {
     version: '0.30.0',
     date: '25 Nov 2026',
     notes: {
