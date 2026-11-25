@@ -1,10 +1,10 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout, utcDayKey, dailyLevel } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout, utcDayKey, dailyLevel, dailyGlyphNow } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createTabs, nearestTab } from '../ui/tabs.js';
-import { t, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText, eduYouText } from '../i18n.js';
+import { t, fillDaily, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText, eduYouText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
 import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, withOwnRows, boardPage } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
@@ -82,7 +82,8 @@ export class Leaderboard extends Phaser.Scene {
     title.setScale(fitScale(title.width, L.titleMaxW, 0));
     this.title = title;
     // 🏆 · 🌞 · 🏅 (· 📚): a tap picks the nearest glyph; the pad's A (no pointer) moves to the next tab.
-    this.tabs = createTabs(this, L.tab, { glyphs: TABS.map((id) => TAB_GLYPH[id]), index: TABS.indexOf(this.tab), depth: 1 });
+    // The 🌞 tab wears December's 🎅 (plan 17).
+    this.tabs = createTabs(this, L.tab, { glyphs: TABS.map((id) => (id === 'daily' ? dailyGlyphNow(this.registry, T) : TAB_GLYPH[id])), index: TABS.indexOf(this.tab), depth: 1 });
     const tabZone = this.add
       .zone(L.tab.track.x, L.tab.y, L.tab.width, L.tab.height)
       .setInteractive({ useHandCursor: true })
@@ -345,7 +346,7 @@ export class Leaderboard extends Phaser.Scene {
    */
   showDaily(raw, day, state, { nameTaken = false, played = false } = {}) {
     const { locale, L, offset } = this;
-    this.fixed.push(this.add.text(this.cx, L.headerY, `${dailyDayText(locale, day)} · \u{1F31E} ${levelLabel(locale, dailyLevel(day, T))}`, { ...STYLE, fontSize: '22px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
+    this.fixed.push(this.add.text(this.cx, L.headerY, `${dailyDayText(locale, day)} · ${dailyGlyphNow(this.registry, T)} ${levelLabel(locale, dailyLevel(day, T))}`, { ...STYLE, fontSize: '22px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
     const { rows, mine, last } = boardPage(raw, { offset, limit: LEADERBOARD.limit });
     this.pageDone(rows?.length ?? 0, last);
     if (rows === null) {
@@ -355,7 +356,7 @@ export class Leaderboard extends Phaser.Scene {
     if (mine) this.setFooter(dailyYouText(locale, mine));
     else if (nameTaken && state.name) this.setFooter(t(locale, 'leaderboardNameTaken'));
     else if (played) this.setFooter(t(locale, 'dailyRankQueued'));
-    else this.setFooter(t(locale, 'dailyBoardJoin'));
+    else this.setFooter(fillDaily(t(locale, 'dailyBoardJoin'), dailyGlyphNow(this.registry, T)));
     if (rows.length === 0 && offset === 0) {
       this.status.setText(t(locale, 'dailyBoardEmpty'));
       return;

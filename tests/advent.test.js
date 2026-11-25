@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { isDayKey, shiftDayKey, dailyNow, dailyDay, nextPretendDay, utcDayKey, settingsLayout } from '../src/logic.js';
+import { isDayKey, shiftDayKey, dailyNow, dailyDay, nextPretendDay, utcDayKey, settingsLayout, adventSeason, dailyGlyph, dailyGlyphNow, pickSanta, supportedSantas, SUN } from '../src/logic.js';
+import { catalogFor, fillDaily, howToItems } from '../src/i18n.js';
+import { LEADERBOARD } from '../src/config.js';
 
 /** A registry stand-in: the game registry is anything with get(key). */
 const reg = (values = {}) => ({ get: (k) => values[k] });
@@ -59,12 +61,96 @@ test('settingsLayout in test mode: the Pretend date row sits under Start at, its
   assert.ok(L.test.dayDown.x === L.test.levelDown.x && L.test.dayUp.x === L.test.levelUp.x, 'the arrows line up with Start at');
 });
 
-test('Stage 1 keeps the Daily Dump on the real day: only the Settings row reads dailyDay in src/ so far', () => {
+test('Stage 1 keeps the Daily Dump on the real day: only decorations read dailyDay (Settings\' row, Play\'s 🎅 pick)', () => {
   const dir = new URL('../src/', import.meta.url).pathname;
   const files = [...readdirSync(dir).map((f) => join(dir, f)), ...readdirSync(join(dir, 'scenes')).map((f) => join(dir, 'scenes', f)), ...readdirSync(join(dir, 'ui')).map((f) => join(dir, 'ui', f))].filter((f) => f.endsWith('.js'));
   const readers = files.filter((f) => !f.endsWith('/logic.js') && /\bdailyDay\(|\bdailyNow\(/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(dir.length));
-  assert.deepEqual(readers, ['scenes/Settings.js']);
+  assert.deepEqual(readers, ['scenes/Play.js', 'scenes/Settings.js']);
   // The Daily's own call sites still read the real UTC day (2.2 moves them, Stage 2).
   for (const f of ['scenes/Daily.js', 'scenes/Leaderboard.js', 'scenes/Stats.js']) assert.match(readFileSync(join(dir, f), 'utf8'), /utcDayKey\(\)/, f);
   assert.equal(utcDayKey(NOW), '2026-11-25');
+});
+
+// --- 1.7: the season gate, the rotating 🎅, {daily} ---
+
+test('adventSeason: all of December, by the window edges', () => {
+  assert.equal(adventSeason('2026-11-30', T), false, '30 Nov off');
+  assert.equal(adventSeason('2026-12-01', T), true, '1 Dec on');
+  assert.equal(adventSeason('2026-12-25', T), true);
+  assert.equal(adventSeason('2026-12-31', T), true, '31 Dec on');
+  assert.equal(adventSeason('2027-01-01', T), false, '1 Jan off');
+  assert.equal(adventSeason('2027-12-01', T), true, 'every year');
+  assert.equal(adventSeason('not a day', T), false);
+  assert.equal(adventSeason(undefined, T), false);
+});
+
+test('TUNING.advent.santas: the 18 variants, each once, the plain 🎅 first', () => {
+  const s = T.advent.santas;
+  assert.equal(s.length, 18);
+  assert.equal(new Set(s).size, 18);
+  assert.equal(s[0], '\u{1F385}');
+  for (const base of ['\u{1F385}', '\u{1F936}', '\u{1F9D1}']) assert.equal(s.filter((v) => v.startsWith(base)).length, 6, `six of ${base}`);
+  assert.equal(s.filter((v) => v.includes('\u200D\u{1F384}')).length, 6, 'Mx Claus joins 🧑 and 🎄');
+});
+
+test('dailyGlyph: the 🌞 off season, the visit\'s 🎅 in season (the first variant before any pick)', () => {
+  assert.equal(dailyGlyph('2026-11-30', '\u{1F936}', T), SUN);
+  assert.equal(dailyGlyph('2026-12-05', '\u{1F936}', T), '\u{1F936}');
+  assert.equal(dailyGlyph('2026-12-05', null, T), T.advent.santas[0]);
+  assert.equal(dailyGlyph('2027-01-01', '\u{1F936}', T), SUN);
+  assert.equal(dailyGlyphNow(reg({ testMode: true, testPretendDay: '2026-12-05', santa: '\u{1F385}\u{1F3FD}' }), T, NOW), '\u{1F385}\u{1F3FD}');
+  assert.equal(dailyGlyphNow(reg({ santa: '\u{1F385}\u{1F3FD}' }), T, NOW), SUN, 'the real 25 Nov: the 🌞');
+});
+
+test('pickSanta never repeats its last and stays in the list it is given', () => {
+  const list = T.advent.santas;
+  let seed = 7;
+  const rng = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  let last = null;
+  const seen = new Set();
+  for (let i = 0; i < 2000; i += 1) {
+    const s = pickSanta(rng, last, list);
+    assert.ok(list.includes(s));
+    assert.notEqual(s, last, `pick ${i} repeated ${last}`);
+    seen.add(s);
+    last = s;
+  }
+  assert.equal(seen.size, 18, 'every variant comes up');
+  assert.equal(pickSanta(() => 0.999999, list[17], list), list[16], 'the top of the range, without the last');
+  assert.equal(pickSanta(Math.random, 'a', ['a']), 'a', 'one variant: it repeats');
+  const supported = ['\u{1F385}', '\u{1F936}'];
+  for (let i = 0; i < 50; i += 1) assert.ok(supported.includes(pickSanta(Math.random, null, supported)), 'only supported variants');
+});
+
+test('supportedSantas drops what a device draws as two glyphs, keeps the plain 🎅 at worst', () => {
+  const list = T.advent.santas;
+  // A device without skin tones or ZWJ: the plain 🎅 and 🤶 draw 60 wide, everything else wider.
+  const narrow = (s) => (s === '\u{1F385}' || s === '\u{1F936}' ? 60 : 120);
+  assert.deepEqual(supportedSantas(list, narrow), ['\u{1F385}', '\u{1F936}']);
+  assert.deepEqual(supportedSantas(list, () => 64), list, 'all draw as one: all kept');
+  assert.deepEqual(supportedSantas(list, () => 0), list, 'no canvas: all kept');
+  assert.deepEqual(supportedSantas(list, (s) => (s === list[0] ? 60 : 200)), [list[0]]);
+});
+
+test('{daily}: every string that names the Daily Dump\'s glyph takes it in both locales; the splash keeps its 🌞', () => {
+  const keys = ['itemDailyDetail', 'itemLeaderboardDetail', 'dailyTitle', 'dailyBody', 'dailyNeedName', 'dailyBoardJoin', 'statsDaily'];
+  for (const locale of ['en', 'zh-Hans']) {
+    const cat = catalogFor(locale);
+    for (const k of keys) {
+      assert.ok(cat[k].includes('{daily}'), `${locale} ${k} has {daily}`);
+      assert.ok(!cat[k].includes('\u{1F31E}'), `${locale} ${k} has no fixed 🌞`);
+    }
+    for (const k of Object.keys(cat)) if (cat[k].includes('{daily}')) assert.ok(keys.includes(k), `${locale} ${k}: listed here`);
+    // The splash draws before the game's clock exists, so its cards keep the 🌞 (plan 17, m4).
+    assert.ok(cat.splashStreaks.includes('\u{1F31E}') && cat.splashLeaderboard.includes('\u{1F31E}'), `${locale} splash keys keep the 🌞`);
+  }
+  assert.equal(fillDaily('{daily} DAILY DUMP · {daily}', '\u{1F936}'), '\u{1F936} DAILY DUMP · \u{1F936}');
+  const daily = howToItems('en', { daily: '\u{1F936}' }).find((r) => r.key === 'daily');
+  assert.ok(daily.detail.startsWith('Tap the \u{1F936} at the top'), daily.detail);
+  assert.ok(howToItems('en').find((r) => r.key === 'daily').detail.includes('\u{1F31E}'), 'the default is the 🌞');
+});
+
+test('the last 🎅 is kept beside the Daily Dump\'s key', () => {
+  assert.equal(LEADERBOARD.santaKey, 'flappyPoop.santa');
+  assert.ok(LEADERBOARD.dailyKey.startsWith('flappyPoop.'));
 });

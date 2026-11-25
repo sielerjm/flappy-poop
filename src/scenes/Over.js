@@ -1,6 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS, LEVELS } from '../config.js';
-import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overBandLayout, overEduLines, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
+import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overBandLayout, overEduLines, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale, dailyGlyphNow } from '../logic.js';
 import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle, tallyLines } from '../i18n.js';
 import { achievementById, EDU_ACHIEVEMENTS } from '../achievements.js';
 import { EDUCATION_EMOJI } from '../education.js';
@@ -90,7 +90,7 @@ export class Over extends Phaser.Scene {
     const panel = this.add.rectangle(cx, cy + grow / 2, T.over.panelWidth, 720 + grow, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
     const headline = daily ? t(locale, 'dailyOverTitle').replace('{day}', dailyDayText(locale, daily.day)) : t(locale, won ? 'runWon' : 'gameOver');
-    const scoreLine = `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${daily ? '\u{1F31E} ' : ''}${levelLabel(locale, level)}`;
+    const scoreLine = `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${daily ? `${dailyGlyphNow(this.registry, T)} ` : ''}${levelLabel(locale, level)}`;
     this.add.text(cx, cy - 270, headline, { ...style, fontSize: daily ? '48px' : won ? '48px' : '64px', color: won ? '#ffd700' : '#f8a0c8' }).setOrigin(0.5);
     // A Daily Dump's score is pink: it is the link to the 🌞 board (overHit 'score').
     this.add.text(cx, cy + T.over.scoreOffsetY, scoreLine, { ...style, fontSize: '48px', color: linked ? '#f8a0c8' : '#ffffff' }).setOrigin(0.5);

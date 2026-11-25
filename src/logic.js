@@ -2402,6 +2402,45 @@ export function nextPretendDay(reg, step, now = new Date()) {
   return next === utcDayKey(now) ? null : next;
 }
 
+/** The Daily Dump's glyph outside the season. */
+export const SUN = '\u{1F31E}';
+
+/** Christmas (plan 17): does `day` ('YYYY-MM-DD', from dailyDay) fall in the season (all of December by default)? */
+export function adventSeason(day, t) {
+  if (!isDayKey(day)) return false;
+  const month = Number(day.slice(5, 7));
+  const date = Number(day.slice(8, 10));
+  return month === t.advent.seasonMonth && date <= t.advent.seasonLastDay;
+}
+
+/** The Daily Dump's glyph on `day`: this visit's 🎅 in the season (the first variant if none is picked yet), else the 🌞. */
+export function dailyGlyph(day, santa, t) {
+  if (!adventSeason(day, t)) return SUN;
+  return santa || t.advent.santas[0];
+}
+
+/** dailyGlyph for now: the decorations' day and this visit's pick, both from the game registry ('santa'). */
+export function dailyGlyphNow(reg, t, now = new Date()) {
+  return dailyGlyph(dailyDay(reg, now), reg?.get?.('santa'), t);
+}
+
+/** A 🎅 from `santas`, never `last` (unless it is the only one). `rng` returns [0, 1) (Math.random, never the course RNG). */
+export function pickSanta(rng, last, santas) {
+  const pool = santas.length > 1 ? santas.filter((s) => s !== last) : santas;
+  return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))];
+}
+
+/**
+ * The variants this device draws as one glyph: `measure(s)` is the drawn width; a missing skin tone or ZWJ join
+ * draws as two glyphs, wider than the plain first variant. Keeps the first variant when nothing passes.
+ */
+export function supportedSantas(santas, measure) {
+  const base = measure(santas[0]);
+  if (!(base > 0)) return santas.slice();
+  const ok = santas.filter((s) => measure(s) <= base * 1.25);
+  return ok.length ? ok : [santas[0]];
+}
+
 /** Milliseconds from `date` to the next 00:00 UTC (the next Daily Dump). */
 export function msUntilUtcMidnight(date = new Date()) {
   const next = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);

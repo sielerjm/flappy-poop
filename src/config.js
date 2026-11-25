@@ -533,6 +533,19 @@ export const TUNING = {
     pulseMs: 500, // ms per pulse (one way)
     scrollStepPx: 160, // px a d-pad up / down scrolls About and How to play
   },
+  // Christmas (plan 17): all of December (UTC, or test mode's Pretend date) is the season. Decoration only in Stage 1.
+  advent: {
+    seasonMonth: 12, // the season's month (1–12): adventSeason holds from day 1 of it
+    seasonLastDay: 31, // the season's last day of that month (inclusive)
+    // The 🎅 that stands in for the 🌞 all December, a new one each time the home screen shows (pickSanta):
+    // Santa, Mrs. Claus and Mx Claus in the five skin tones and plain. The first is the fallback; variants a
+    // device cannot draw as one glyph are dropped at the first pick (supportedSantas). Drop the plain three here.
+    santas: [
+      '\u{1F385}', '\u{1F385}\u{1F3FB}', '\u{1F385}\u{1F3FC}', '\u{1F385}\u{1F3FD}', '\u{1F385}\u{1F3FE}', '\u{1F385}\u{1F3FF}',
+      '\u{1F936}', '\u{1F936}\u{1F3FB}', '\u{1F936}\u{1F3FC}', '\u{1F936}\u{1F3FD}', '\u{1F936}\u{1F3FE}', '\u{1F936}\u{1F3FF}',
+      '\u{1F9D1}\u200D\u{1F384}', '\u{1F9D1}\u{1F3FB}\u200D\u{1F384}', '\u{1F9D1}\u{1F3FC}\u200D\u{1F384}', '\u{1F9D1}\u{1F3FD}\u200D\u{1F384}', '\u{1F9D1}\u{1F3FE}\u200D\u{1F384}', '\u{1F9D1}\u{1F3FF}\u200D\u{1F384}',
+    ],
+  },
 };
 
 // Gut segments the poop travels through, one per level, in order. `key` is the
@@ -608,6 +621,7 @@ export const LEADERBOARD = {
   tournamentQueueMax: 20, // finished tournaments kept for a later post; the oldest goes first when full
   racePostsKey: 'flappyPoop.racePosts', // localStorage key for split-screen race scores (🏆, plan 39 2.5) the board has not confirmed yet (submit_score)
   racePostQueueMax: 20, // race scores kept for a later post; the oldest goes first when full
+  santaKey: 'flappyPoop.santa', // localStorage key for the last 🎅 the home screen showed (plan 17), so a reload never repeats it
   dailyKey: 'flappyPoop.daily', // localStorage key for this device's Daily Dump (🌞) attempt: claimed at the start, rewritten as the score grows
   dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
   dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full

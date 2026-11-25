@@ -1,10 +1,10 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, utcDayKey, dailyLevel, msUntilUtcMidnight, countdownText } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, utcDayKey, dailyLevel, msUntilUtcMidnight, countdownText, dailyGlyphNow } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createButton } from '../ui/button.js';
-import { t, metaFontSize, levelLabel } from '../i18n.js';
+import { t, metaFontSize, levelLabel, fillDaily } from '../i18n.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
@@ -38,14 +38,15 @@ export class Daily extends Phaser.Scene {
     });
     this.add.rectangle(cx, cy, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96);
 
-    this.add.text(cx, cy - 370, t(locale, 'dailyTitle'), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
+    this.glyph = dailyGlyphNow(this.registry, T); // the 🌞, or this visit's 🎅 in December (plan 17)
+    this.add.text(cx, cy - 370, fillDaily(t(locale, 'dailyTitle'), this.glyph), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
     this.day = utcDayKey();
     this.todayText = this.add
       .text(cx, cy - 290, t(locale, 'dailyToday').replace('{level}', levelLabel(locale, dailyLevel(this.day, T))), { ...STYLE, fontSize: '34px', color: '#ffd700' })
       .setOrigin(0.5);
-    this.add.text(cx, cy - 130, t(locale, 'dailyBody'), { ...MUTED, fontSize: '28px', wordWrap: wrap, lineSpacing: 6 }).setOrigin(0.5);
+    this.add.text(cx, cy - 130, fillDaily(t(locale, 'dailyBody'), this.glyph), { ...MUTED, fontSize: '28px', wordWrap: wrap, lineSpacing: 6 }).setOrigin(0.5);
     // The day in four pictures (no words, so nothing to translate): sun up, poop, sleep, repeat.
-    this.add.text(cx, cy + 30, '\u{1F31E} \u{1F4A9} \u{1F6CC} \u{1F501}', { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
+    this.add.text(cx, cy + 30, `${this.glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`, { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
     // Under the button's row: why a name is needed, or that practice is not saved.
     this.note = this.add.text(cx, cy + 105, '', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5);
     // Or, when there is no note, the Daily Dump streak (plan 34, round 2: Michael), in the 🌞 subscript's orange.
@@ -115,7 +116,7 @@ export class Daily extends Phaser.Scene {
     const mode = this.mode();
     const label = { practice: 'dailyPractice', create: 'dailyCreateUser', result: 'dailySeeResult', checking: 'dailyChecking', play: 'dailyPlay' }[mode];
     this.button.setText(t(this.locale, label));
-    this.note.setText(mode === 'create' ? t(this.locale, 'dailyNeedName') : mode === 'practice' ? t(this.locale, 'dailyPracticeNote') : '');
+    this.note.setText(mode === 'create' ? fillDaily(t(this.locale, 'dailyNeedName'), this.glyph) : mode === 'practice' ? t(this.locale, 'dailyPracticeNote') : '');
     // The streak's line takes the note's slot when there is no note: no username has no streak, and practice counts none.
     const streak = mode === 'create' || mode === 'practice' ? null : (this.scene.get('Play')?.streakNow?.('daily') ?? 0);
     this.streakLine?.setText(streak === null ? '' : t(this.locale, 'streakNowLine').replace('{n}', String(streak))).setVisible(streak !== null);

@@ -25,6 +25,11 @@ import {
   withLevelPipes,
   utcDayKey,
   isDayKey,
+  dailyDay,
+  dailyGlyphNow,
+  adventSeason,
+  pickSanta,
+  supportedSantas,
   dailySeed,
   dailyLevel,
   dailyRunStart,
@@ -208,6 +213,21 @@ function withInput(event, kind, fn) {
   } finally {
     [STAMP.active, STAMP.trusted, STAMP.recent, STAMP.ts] = was;
   }
+}
+
+/**
+ * A width measure for emoji (supportedSantas): one 2D canvas, the ready screen's glyph font. 0 where no canvas
+ * draws (the filter then keeps every variant).
+ */
+function emojiMeasure() {
+  let ctx = null;
+  try {
+    ctx = document.createElement('canvas').getContext('2d');
+    ctx.font = '52px sans-serif';
+  } catch {
+    ctx = null;
+  }
+  return (s) => (ctx ? ctx.measureText(s).width : 0);
 }
 
 export class Play extends Phaser.Scene {
@@ -520,7 +540,8 @@ export class Play extends Phaser.Scene {
     this.howToBtn = createButton(this, this.readyBoxes.howto, '?', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8' }, { depth: 30 });
     this.howToBtn.pulse(this.isHowToPromptDue()); // breathes with its halo until this build's How to play is seen
     // 🌞 at the top centre opens the Daily Dump popup. Until this player has used today's attempt
-    // it breathes (dailyPulseScale) under the same soft white halo as the ?.
+    // it breathes (dailyPulseScale) under the same soft white halo as the ?. In December it is this visit's 🎅 (plan 17).
+    if (!this.match) this.pickVisitSanta();
     {
       const b = this.readyBoxes.daily;
       this.dailyHalo = createGlow(this, b.x, b.y, { radius: T.beans.glowRadiusPx, fadeFrac: T.beans.glowFadeFrac })
@@ -529,7 +550,7 @@ export class Play extends Phaser.Scene {
         .setAlpha(T.readyPromptMinAlpha);
       this.dailyHaloTween = this.tweens.add({ targets: this.dailyHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
       this.dailyBtn = createButton(this, b, '', { ...TEXT_STYLE, fontSize: '52px' });
-      this.dailySun = this.add.text(b.x, b.y, '\u{1F31E}', { fontFamily: 'sans-serif', fontSize: '52px' }).setOrigin(0.5).setDepth(21);
+      this.dailySun = this.add.text(b.x, b.y, this.dailyGlyph(), { fontFamily: 'sans-serif', fontSize: '52px' }).setOrigin(0.5).setDepth(21);
       this.dailySunTween = this.tweens.add({ targets: this.dailySun, scale: T.dailyPulseScale, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs, ease: 'Sine.easeInOut' });
       // The Daily Dump streak, a small number at the circle's bottom right (plan 34: refreshStreakMarks).
       this.dailyStreakText = this.streakMark(b.x + T.streakMarkPx.dx, b.y + T.streakMarkPx.dy);
@@ -1015,7 +1036,7 @@ export class Play extends Phaser.Scene {
     this.applyLevel();
     this.levelBar.setVisible(!daily);
     this.refreshLevelBar();
-    this.dailyHud.setText(daily ? `\u{1F31E} ${levelLabel(this.locale, this.level)}` : '').setVisible(Boolean(daily));
+    this.dailyHud.setText(daily ? `${this.dailyGlyph()} ${levelLabel(this.locale, this.level)}` : '').setVisible(Boolean(daily));
     this.bgFade?.stop();
     this.bgFade = null;
     this.bgColor.setFillStyle(levelColor(this.level, LEVEL_COLORS, T.levels.whiteBlend), 1);
@@ -2913,8 +2934,51 @@ export class Play extends Phaser.Scene {
   setTestSettings({ startLevel, invincible, pretendDay } = {}) {
     if (startLevel !== undefined) this.registry.set('testStartLevel', testRunStart(startLevel, this.tune).level);
     if (invincible !== undefined) this.registry.set('testInvincible', Boolean(invincible));
-    if (pretendDay !== undefined) this.registry.set('testPretendDay', isDayKey(pretendDay) ? pretendDay : null);
+    if (pretendDay !== undefined) {
+      this.registry.set('testPretendDay', isDayKey(pretendDay) ? pretendDay : null);
+      this.refreshSeason();
+    }
     return this.testSettings();
+  }
+
+  /**
+   * December's 🎅 for the 🌞 (plan 17, 1.7): a new pick each time the home screen is built (page load, Home, back
+   * from a run), never the one shown last, which is kept in localStorage (LEADERBOARD.santaKey; the registry when
+   * storage is blocked, so a reload there can repeat it). Variants this device cannot draw are dropped once
+   * (supportedSantas, registry 'santas'). Off season nothing is picked. Math.random, never the course RNG.
+   */
+  pickVisitSanta() {
+    if (!adventSeason(dailyDay(this.registry), T)) return;
+    let santas = this.registry.get('santas');
+    if (!santas) {
+      santas = supportedSantas(T.advent.santas, emojiMeasure());
+      this.registry.set('santas', santas);
+    }
+    const store = browserStorage();
+    let last = this.registry.get('santa') ?? null;
+    try {
+      last = store?.getItem(LEADERBOARD.santaKey) ?? last;
+    } catch {
+      // storage blocked: the registry's pick stands in
+    }
+    const santa = pickSanta(Math.random, last, santas);
+    this.registry.set('santa', santa);
+    try {
+      store?.setItem(LEADERBOARD.santaKey, santa);
+    } catch {
+      // storage blocked: kept for this page only
+    }
+  }
+
+  /** The Daily Dump's glyph now: the 🌞, or this visit's 🎅 in December (the decorations' clock, dailyDay). */
+  dailyGlyph() {
+    return dailyGlyphNow(this.registry, T);
+  }
+
+  /** A Pretend date stepped in Settings (test mode): pick a 🎅 if it entered the season and redraw the button now. */
+  refreshSeason() {
+    if (!this.match) this.pickVisitSanta();
+    if (this.dailySun?.active) this.dailySun.setText(this.dailyGlyph());
   }
 
   /** Collisions (pipes, ceiling, floor) do not end a test run while Invincible is on. */
@@ -2964,7 +3028,7 @@ export class Play extends Phaser.Scene {
     if (this.shopOpen) this.refreshShop();
     this.showEscapedBanner(); // a finished match half keeps its banner in the new language
     this.refreshLevelBar();
-    if (this.runIsDaily) this.dailyHud.setText(`\u{1F31E} ${levelLabel(this.locale, this.level)}`);
+    if (this.runIsDaily) this.dailyHud.setText(`${this.dailyGlyph()} ${levelLabel(this.locale, this.level)}`);
     this.refreshTestBadge();
   }
 
