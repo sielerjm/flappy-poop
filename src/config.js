@@ -64,7 +64,7 @@ export const TUNING = {
   readyPromptMaxAlpha: 1, // 0–1 halo pulse ceiling
   dailyPulseScale: 1.14, // the 🌞's breathing size (×) while today's Daily Dump is unplayed, in step with its halo
   streakMarkPx: { dx: 30, dy: 30, eduDy: 24, fontPx: 24, color: '#ffb347' }, // the streak subscripts on the 🌞 and 📚 (plan 34): offset from the glyph's centre (the 📚's mirrors its gold due count at −24), size and colour
-  saveClearConfirmMs: 4000, // ms a first tap on the save panel's Clear stays armed: a second tap inside it signs this device out
+  saveClearConfirmMs: 4000, // ms a first tap on a two-tap button stays armed (the tournament's Abandon, the level break's Quit); the save panel's Clear had it until plan 44's Sign out confirm
   launchSlideMs: 700, // ms the poop slides from its ready spot to poopX() on the start tap
   againSlideMs: 350, // ms the same slide takes on Over's Play again (plan 35, 4.1: Michael's pick from preview E, 24 Nov); a start from home keeps launchSlideMs
   readyTitlePx: 72, // px font size of the FLAPPY POOP title on the ready screen

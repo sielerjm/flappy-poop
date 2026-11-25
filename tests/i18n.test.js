@@ -46,6 +46,7 @@ const SCENE_DENYLIST = [
   'HIGH SCORES',
   'LEADERBOARD',
   'Load user',
+  'Sign in',
   'Share',
   'Play:',
 ];
@@ -169,10 +170,10 @@ test('rankText fills score (with 🚽 on toilet runs), rank and total in both lo
   assert.ok(!zh.includes('{'), 'no placeholder left over');
 });
 
-test('profileButtonText reads Load user until a username is set, then name · best, in both locales', () => {
-  assert.equal(profileButtonText('en', { name: '', top: [] }), 'Load user');
-  assert.equal(profileButtonText('zh-Hans', { name: '', top: [] }), '载入用户');
-  assert.equal(profileButtonText('en', null), 'Load user');
+test('profileButtonText reads Sign in until a username is set, then name · best, in both locales (plan 44)', () => {
+  assert.equal(profileButtonText('en', { name: '', top: [] }), 'Sign in');
+  assert.equal(profileButtonText('zh-Hans', { name: '', top: [] }), '登录');
+  assert.equal(profileButtonText('en', null), 'Sign in');
   assert.equal(profileButtonText('en', { name: 'Alice', top: [] }), 'Alice');
   assert.equal(profileButtonText('zh-Hans', { name: 'Alice', top: [{ score: 41, toilet: true }] }), 'Alice · 🚽 41');
 });

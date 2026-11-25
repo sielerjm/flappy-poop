@@ -20,6 +20,29 @@ export class El {
     this.href = '';
     this.download = '';
   }
+  /**
+   * className as a set of words, as the real classList is (plan 44's panel toggles 'open', 'kept', 'wide').
+   * A getter on the prototype, so the panels' tests that define their own (panelDom.js, matchHost,
+   * eduIntroPanel) still replace it.
+   */
+  get classList() {
+    const el = this;
+    const words = () => el.className.split(/\s+/).filter(Boolean);
+    const list = {
+      contains: (c) => words().includes(c),
+      add: (...cs) => cs.forEach((c) => list.toggle(c, true)),
+      remove: (...cs) => cs.forEach((c) => list.toggle(c, false)),
+      toggle(c, force) {
+        const on = force ?? !words().includes(c);
+        el.className = (on ? [...words().filter((w) => w !== c), c] : words().filter((w) => w !== c)).join(' ');
+        return on;
+      },
+    };
+    return list;
+  }
+  get firstElementChild() {
+    return this.children.find((c) => c instanceof El) ?? null;
+  }
   setAttribute(k, v) {
     this.attrs[k] = v;
     if (k === 'hidden') this.hidden = true;
@@ -28,11 +51,29 @@ export class El {
   getAttribute(k) {
     return this.attrs[k] ?? null;
   }
+  /** Moves each child here (out of any parent it had), as the real append does. */
   append(...cs) {
     for (const c of cs) {
-      if (c instanceof El) c.parent = this;
+      if (c instanceof El) {
+        c.remove();
+        c.parent = this;
+      }
       this.children.push(c);
     }
+  }
+  replaceChildren(...cs) {
+    for (const c of this.children) if (c instanceof El) c.parent = null;
+    this.children = [];
+    this.append(...cs);
+  }
+  /** Insert `cs` right after this element in its parent (moving them, as the real after does). */
+  after(...cs) {
+    const parent = this.parent;
+    if (!parent) return;
+    for (const c of cs) if (c instanceof El) c.remove();
+    const at = parent.children.indexOf(this) + 1;
+    for (const c of cs) if (c instanceof El) c.parent = parent;
+    parent.children.splice(at, 0, ...cs);
   }
   /** As append, returning the child (src/share.js's download link). */
   appendChild(c) {

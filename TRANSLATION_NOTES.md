@@ -62,8 +62,8 @@ formal medical language.
 - Untranslated tokens (must appear across About strings): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, `Pixabay`, `fart sound effect (reed)`, `Tori Schummer`, `Niklas Werner`, version numbers.
 - **Silent mode** = iPhone **hardware** ringer/silent switch → **静音模式** (not the in-game mute toggle).
 - **Toilet mode** (如厕模式) = the ready-screen switch; scores from such runs carry a 🚽 (not translated).
-- **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen user button reads **Load user** (载入用户) until a username is set, then the name and best; it opens the panel titled **SAVE / LOAD USER**, whose labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
-- **One player across devices** (2026-11-08): every browser has its own secret id; the leaderboard treats ids merged through a user code as one player (aliases). A **username belongs to the player holding it on the board**: typing a held name on a new browser is refused (`saveNameTaken`), and the way in is to paste the user code (`saveIntro` step 3, `saveMerged`). **The **board's name wins** (2026-11-09): a rename typed on one device reaches the others on their own (`saveIntro` step 4, 自动更新); only a name typed on a device overrides the board. **Clear** (清除) signs this device out after a second tap (`saveClearConfirm`, `saveCleared`): the name, id and scores are forgotten on the device only. "Sign out" is the plain sense (退出), not an account system. `{name}` stays verbatim.
+- **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen user button reads **Sign in** (登录) until a username is set, then the name and best; it opens the panel titled **YOUR PLAYER** (你的玩家). Signed out the panel shows two buttons, **Sign in** (登录, paste a user code) and **Create user** (创建用户, pick a username), each on its own screen with **‹ Back** (‹ 返回); signed in it is the player's dashboard: **Username**, **Your user code** (你的用户码) with **Copy**, **Sign out** (退出登录) and **Merge players…** (合并玩家…), and a **(?)** card, **What's on this page** (这一页有什么) (plan 44, 2026-11-24). `{name}`, `{scores}`, `{n}`, `{score}`, `{level}`, `{date}` and `{other}` are placeholders filled at runtime; keep them verbatim.
+- **One player across devices** (2026-11-08; plan 44, 2026-11-24): every browser has its own secret id; the leaderboard treats ids merged through a user code as one player (aliases). A **username belongs to the player holding it on the board**: typing a held name on a new browser is refused (`saveNameTaken`), and the way in is **Sign in** with the user code (`saveMerged`; a guest's scores on that device join the player: `saveGuestJoin`). **The board's name wins** (2026-11-09): a rename typed on one device reaches the others on their own; only a name typed on a device overrides the board. **Sign out** (退出登录, Clear before plan 44) opens a confirm with the code, then forgets the name, id and scores on this device only (`saveSignOutWarning`, `saveCleared`). **Merge players…** (合并玩家…) is the only way two players become one: both are shown side by side (这台设备 / 用户码), the player taps the one whose name stays (✓ 保留), then **Merge for good** (永久合并). "Sign in" and "Sign out" are the plain sense (登录 / 退出登录): there is no password, the user code is the player. `{name}` and `{other}` stay verbatim.
 - **Leaderboard** (排行榜) = the shared online Top 25 behind the 🏆 tray button. Only players with a username are on it; `{score}` may carry a 🚽, `{rank}` / `{total}` are numbers. Keep the placeholders verbatim. The 🏆 · 🌞 · 🏅 tabs under the title switch it to today's **DAILY DUMP** board (每日一拉) or the **MEDAL BOARD** (奖牌榜): players ranked by 🥇, then 🥈, 🥉 and their **BEST RACE** (单场最佳: their best score in one tournament race, on the shorter tournament levels, so not comparable with the 🏆 score); `{events}` is how many tournaments they finished.
 - **Tournament** (锦标赛, 🏅) = every two-player (👥) session: 2–8 players on one device, raced two at a time in a knockout bracket (赛程, **Bracket**): quarter-finals, semi-finals, a bronze match (铜牌赛) and the Final, then a podium (领奖台); two players race the Final alone (no bronze). Each row of the lobby is a pasted user code, a **Guest** (访客, a made-up English name such as JollyPlunger042, kept as is in Chinese), or **Use my player** (the host's own username). Before the first race the host can change who meets whom (drag, ↑ ↓, 🎲 **Shuffle** 重新抽签; a **bye** 轮空 goes straight through). **Abandon** ends it, saves nothing and goes back to the lobby. When the Final of 3 or more players is decided, players who joined with a user code (and the host's own player) get their medals (奖牌) on the **🏅 board** (🏅 榜, a tab of the leaderboard); the podium says whether that worked. Guests and two-player tournaments are never saved.
 - **Username rules** (2026-11-10): a new username has 4–16 characters (at least 2 when it has Chinese, Japanese or Korean characters), no spaces, no emoji, and none of a short list of English rude words; the save panel says which rule a name broke (saveNameShort / Space / Emoji / Blocked / Long). Names chosen before the rules keep working. saveNameBlocked stays vague on purpose ("pick a different username").
@@ -241,21 +241,13 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | bugReport | Bug | 问题反馈 |
 | featureRequest | Feature request | 功能建议 |
 | feedbackLink | Bug or feature request? | 问题或功能建议？ |
-| saveTitle | SAVE / LOAD USER | 存档 / 载入用户 |
-| saveIntro | 1. Pick a username and press Save.
-2. Copy your user code and keep it somewhere safe (a note, a message to yourself).
-3. On another phone or browser, paste it under Load user code: your name and scores follow you, and the leaderboard joins both into one player.
-4. To change your username, type a new one and press Save. Devices and browsers that use your user code update to the new name automatically. | 1. 输入用户名并按“保存”。
-2. 复制你的用户码，保存在安全的地方（备忘录、发给自己的消息）。
-3. 在其他手机或浏览器上，把它粘贴到“载入用户码”：你的名字和分数会跟着你，排行榜也会把两边合并为同一位玩家。
-4. 要更改用户名，输入新名字并按“保存”。使用你用户码的其他设备和浏览器会自动更新为新名字。 |
+| saveTitle | YOUR PLAYER | 你的玩家 |
+| saveIntro | Save your scores and play as you on any device. | 保存分数，在任何设备上都能用你的玩家来玩。 |
 | saveNameLabel | Username | 用户名 |
 | saveNamePlaceholder | 4–16 characters | 4–16 个字符 |
-| saveYourCode | Save user code | 保存用户码 |
+| saveYourCode | Your user code | 你的用户码 |
 | saveCopy | Copy | 复制 |
 | saveCopied | Copied | 已复制 |
-| saveLoadLabel | Load user code | 载入用户码 |
-| saveLoad | Load | 载入 |
 | saveLoadPlaceholder | Paste a code | 粘贴存档码 |
 | saveSave | Save | 保存 |
 | saveNameSaved | Username saved | 用户名已保存 |
@@ -403,7 +395,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduShareNeedName | Save a username first: tap the user button on the home screen. | 请先保存用户名：点首页的用户按钮。 |
 | eduShareNeedAdult | Sharing is for adults: tick the box if you are 18 or older. | 仅限成年人分享：如果你已年满 18 岁，请勾选上面的选项。 |
 | eduShareClosed | Sharing is not open yet. It opens soon. | 分享功能尚未开放，敬请期待。 |
-| eduShareNameTaken | Another player holds this username. Pick another one, or load your user code. | 这个用户名已被其他玩家使用。请换一个，或载入你的用户码。 |
+| eduShareNameTaken | Another player holds this username. Pick another one, or sign in with your user code. | 这个用户名已被其他玩家使用。请换一个，或用你的用户码登录。 |
 | eduShareOffline | Couldn't reach the board. Try again in a moment. | 无法连接排行榜，请稍后再试。 |
 | eduShareStarted | Your grades are going to the 📚 board. | 你的成绩正在上传到 📚 排行榜。 |
 | eduShareStopped | Sharing stopped: your grades are off the board. | 已停止分享：你的成绩已从榜上删除。 |
@@ -448,12 +440,44 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | saveErrorDamaged | Save code is damaged or was edited | 存档码已损坏或被修改 |
 | saveErrorUnrecognised | Unrecognised save code | 无法识别的存档码 |
 | saveNameChecking | Checking the leaderboard… | 正在查询排行榜… |
-| saveNameTaken | That username is taken. If it's yours, copy your user code on the device where you set it and paste it here under Load user code. Otherwise pick another name. | 这个用户名已被使用。如果是你的，请在设置它的那台设备上复制用户码，然后粘贴到这里的“载入用户码”。否则请换一个名字。 |
+| saveNameTaken | That username is taken. If it's yours, use Sign in with the code from the device where you set it. Otherwise pick another name. | 这个用户名已被使用。如果是你的，请点“登录”，粘贴设置它的那台设备上的用户码。否则请换一个名字。 |
 | saveNameOffline | Username saved on this device (couldn't check the leaderboard) | 用户名已保存在此设备（无法连接排行榜核对） |
-| saveClear | Clear | 清除 |
-| saveClearConfirm | Copy your user code first: without it this username and its scores can't come back. Tap Clear again to sign out. | 请先复制你的用户码：没有它，这个用户名和分数就找不回来了。再点一次“清除”即可退出。 |
 | saveCleared | Signed out: this device has no username now | 已退出：此设备现在没有用户名 |
 | saveMerged | Welcome back, {name} — this device is now part of your player | 欢迎回来，{name}——这台设备现已并入你的玩家账号 |
+| saveCreateUser | Create user | 创建用户 |
+| saveSignIn | Sign in | 登录 |
+| saveSignOut | Sign out | 退出登录 |
+| saveBack | ‹ Back | ‹ 返回 |
+| saveCodeNote | Keep it somewhere safe. It signs you in on other devices. | 把它存好。在其他设备上用它登录。 |
+| saveSignOutWarning | Copy your code first. Without it, you can't sign back in. | 请先复制你的用户码。没有它，就无法再次登录。 |
+| saveExplainTitle | Your user code | 你的用户码 |
+| saveExplainBody | This code is your player. Keep it somewhere safe (a note, a message to yourself).<br>• New phone or computer? Tap Sign in there and paste it.<br>• Your scores and badges follow you.<br>• If you sign out, you need it to sign back in. | 这个码就是你的玩家。请把它存在安全的地方（备忘录、发给自己的消息）。<br>• 换了新手机或电脑？在那里点“登录”，粘贴它。<br>• 你的分数和徽章会跟着你。<br>• 退出登录后，需要它才能再次登录。 |
+| saveCopyCode | Copy code | 复制用户码 |
+| saveGotIt | Got it | 知道了 |
+| saveHelpTitle | What's on this page | 这一页有什么 |
+| saveHelpProfile | Your stats and badges. | 你的统计数据和徽章。 |
+| saveHelpEdu | Your 📚 quiz cards: back them up, or share your grades on the 📚 board. | 你的 📚 答题卡片：备份它们，或在 📚 榜上分享你的成绩。 |
+| saveHelpCode | This code is your player. Copy it and keep it safe; on another device, tap Sign in and paste it. | 这个码就是你的玩家。复制并存好；在其他设备上点“登录”，粘贴它。 |
+| saveHelpName | Change your name here. It shows on the leaderboard. | 在这里改名字。它会显示在排行榜上。 |
+| saveHelpSignOut | Takes your player off this device and unpairs it from online play. You need your code to sign back in. | 让你的玩家离开这台设备，并解除它的联机配对。需要用户码才能再次登录。 |
+| saveHelpMerge | Made two players by mistake? Join them into one, for good. | 不小心建了两个玩家？把它们永久合成一个。 |
+| saveCancel | Cancel | 取消 |
+| saveMergeOpen | Merge players… | 合并玩家… |
+| saveMergeConfirm | Merge for good | 永久合并 |
+| saveMergePick | Tap the one whose name stays. Scores, medals and badges join together for good. | 点选要保留名字的那一个。分数、奖牌和徽章会永久合在一起。 |
+| saveMergeCheck | Is this you on another device? If it's someone else, cancel and sign out instead. | 这是你在另一台设备上的玩家吗？如果是别人，请取消，然后退出登录。 |
+| saveMergeOnline | 🌐 Online play may ask this device to pair again. | 🌐 联机游戏可能会要求这台设备重新配对。 |
+| saveCardDevice | This device | 这台设备 |
+| saveCardCode | Code | 用户码 |
+| saveCardStays | ✓ stays | ✓ 保留 |
+| saveCardBest | best {score} (level {level}) | 最高 {score}（第 {level} 关） |
+| saveCardSaved | saved {date} | 保存于 {date} |
+| saveCardNoScores | no scores yet | 还没有分数 |
+| saveGuestJoin | This device's {n} scores join {name}. | 这台设备的 {n} 个分数会加入 {name}。 |
+| saveGuestJoinOne | This device's score joins {name}. | 这台设备的分数会加入 {name}。 |
+| saveGuestJoinOther | What this device holds joins {name}. | 这台设备上的内容会加入 {name}。 |
+| saveSamePlayer | That's already you. | 这就是你。 |
+| saveMergedInto | {other} is now part of {name}. | {other} 已并入 {name}。 |
 | shareButton | Share | 分享 |
 | shareCardPlay | Play: {url} | 来玩：{url} |
 | testRunNotSaved | Test run — score not saved | 测试局——分数未保存 |
@@ -463,7 +487,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | leaderboardTitle | LEADERBOARD | 排行榜 |
 | leaderboardLoading | Loading… | 加载中… |
 | leaderboardOffline | Can't reach the leaderboard | 无法连接排行榜 |
-| leaderboardJoin | Tap Load user on the home screen to set a username and join | 在首页点“载入用户”设置用户名即可上榜 |
+| leaderboardJoin | Tap Sign in on the home screen to set a username and join | 在首页点“登录”设置用户名即可上榜 |
 | leaderboardRank | Your best {score} is #{rank} of {total} | 你的最高分 {score} 排在第 {rank} 名（共 {total} 人） |
 | leaderboardNotYet | Your best is not on the board yet | 你的最高分尚未上榜 |
 | leaderboardNameTaken | Your username belongs to another player: tap your name on the home screen to fix it | 你的用户名属于另一位玩家：请在首页点你的名字处理 |
@@ -474,7 +498,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | medalBoardJoin | Join a tournament with your user code to get on this board | 用你的用户码参加锦标赛，就能上这个榜 |
 | medalBoardYou | You: #{rank} · {events} tournaments | 你：第 {rank} 名 · 参赛 {events} 届 |
 | saveLeaderboardNote | Your username, scores, stats and achievements are public | 你的用户名、成绩、统计数据和成就都是公开的 |
-| loadUserButton | Load user | 载入用户 |
+| loadUserButton | Sign in | 登录 |
 | versusTitle | 2 PLAYERS | 双人模式 |
 | versusPlayer | P{n} | 玩家{n} |
 | versusJoinPrompt | press your flap button | 按下你的起飞键 |
@@ -500,7 +524,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | tournamentAdd | Add | 添加 |
 | tournamentStart | Start | 开始 |
 | tournamentDuplicate | That player already has a spot | 这位玩家已经在名单里了 |
-| tournamentNeedName | Set a username first (Load user on the home screen) | 请先设置用户名（首页的“载入用户”） |
+| tournamentNeedName | Set a username first (Sign in on the home screen) | 请先设置用户名（首页的“登录”） |
 | tournamentGuestTag | (guest) | （访客） |
 | tournamentHostTag | (you) | （我） |
 | tournamentVs | vs | 对 |
@@ -578,7 +602,7 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | onlineNeedName | Online races need a username. Pick one: it's the name your friend sees. (plan 39, 1.5b: the online sign-in side. A device links to the player's username; the first device is "paired" (trusted), later ones wait until a 6-digit pairing code from a paired device is typed on them. {n} is a number, {when} is today / {n} days ago, {time} a m:ss countdown) | 在线比赛需要用户名。选一个吧：朋友会看到这个名字。 |
 | onlineNameNote | The same rules as the leaderboard: 4 to 16 characters, no spaces. It becomes your username everywhere. | 规则和排行榜一样：4到16个字符，不能有空格。它会成为你在所有地方的用户名。 |
 | onlineNameSave | Save | 保存 |
-| onlineNameTaken | That username belongs to another player. Pick another, or if it's yours, load your user code in the save panel first. | 这个用户名属于另一位玩家。请换一个；如果是你的，请先在存档面板里载入你的用户码。 |
+| onlineNameTaken | That username belongs to another player. Pick another, or if it's yours, sign in with your user code first (Sign in on the home screen). | 这个用户名属于另一位玩家。请换一个；如果是你的，请先用你的用户码登录（首页的“登录”）。 |
 | onlineConnecting | Connecting | 正在连接 |
 | onlineSignInLimited | Too many new online players on this network right now (schools and phone networks share one). Try again in an hour. | 这个网络上的新在线玩家太多了（学校和手机网络常常共用一个）。请一小时后再试。 |
 | onlineLinkLimited | This device has switched players too many times this hour. Try again in an hour. (plan 39, 5.2b: the server paces one device linking new players, 10 an hour) | 这台设备这一小时里换玩家的次数太多了。请一小时后再试。 |
@@ -675,7 +699,7 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | onlinePairedOk | Paired ✓ | 已配对 ✓ |
 | onlinePairNoCode | No pairing code is waiting. Make a new one on your paired device. | 没有等待中的配对码。请在已配对的设备上重新生成。 |
 | onlineErrGeneric | Something went wrong online. Try again in a moment. (plan 39, 1.6a: any online error without its own message) | 在线功能出了点问题，请稍后再试。 |
-| saveClearNoteOnline | It also signs this device out of online races. | 这也会让这台设备退出在线比赛。 |
+| saveClearNoteOnline | This device also leaves online play. If you sign back in, you may need to pair it again from another of your devices. | 这台设备也会退出联机游戏。重新登录后，可能需要用你的另一台设备再次配对。 |
 | saveLoadedNoteOnline | This device left online races: turn 🌐 on again to race as this player. | 这台设备已退出在线比赛：再打开🌐即可用这个玩家比赛。 |
 | onlineTitle | 🌐 ONLINE RACE (plan 39: the 🌐 online lobby in the tournament window: a two-player race between two devices joined by a 6-digit room code; {name} is the other player's username, {time} a m:ss countdown) | 🌐 在线比赛 |
 | onlineSwitch | 🌐 Online | 🌐 在线 |

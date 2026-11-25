@@ -51,7 +51,7 @@ const NEEDS_RUN = new Set(['Quiz']);
  * ready screen with the same checks as in the full run (set only once that is shown).
  */
 export const SECTIONS = [
-  { name: 'home', about: 'home screen (no score, the ? pulsing); onboarding: the username prompt, the save panel, the name saved; the username claim, the merge on Load, the board\'s name winning over a stale one, Clear' },
+  { name: 'home', about: 'home screen (no score, the ? pulsing); onboarding: the Sign in prompt, the save panel\'s Sign in | Create user, the name saved; the username claim, Merge players… (each pick, a cancelled one, this player\'s own code), the board\'s name winning over a stale one, Sign out through its confirm, Sign in' },
   { name: 'overlays', needs: [], about: 'every overlay opens from the ready screen, keeps the loop alive and closes' },
   { name: 'level1', needs: [], about: "level 1's scripted pairs and still pickups; the finish-line texture" },
   { name: 'howto-seen', needs: ['overlays'], about: 'opening How to play stops the ? pulse and stamps this build' },
@@ -490,37 +490,39 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(spread(0) > 0.01 && spread(1) > 0.01, `on a fresh profile the ? and the user button's label pulse (scale spread over 600 ms: ${spread(0).toFixed(3)}, ${spread(1).toFixed(3)})`);
       }
 
-      // Onboarding: a fresh profile has no username, so the user button reads "Load user" under a
-      // pulsing halo; tapping it opens the save panel on the name field; Save stores the name and the
-      // panel stays open on the user code. Named, the button reads the name and still opens the panel.
+      // Onboarding: a fresh profile has no username, so the user button reads "Sign in" under a
+      // pulsing halo; tapping it opens the save panel on its two buttons, Sign in and Create user (plan 44);
+      // Create user stores the name and the panel stays open on the popup about the user code. Named, the
+      // button reads the name and still opens the panel, on the player's dashboard.
       {
         const play = `__flappy.scene.getScene('Play')`;
         const texts = () => evaluate(`${play}.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text)`);
         const a1 = await evaluate(`${play}.profileHalo.alpha`);
         await sleep(300);
         const a2 = await evaluate(`${play}.profileHalo.alpha`);
-        const promptShown = (await texts()).includes('Load user');
+        const promptShown = (await texts()).includes('Sign in');
         const haloOn = await evaluate(`${play}.profileHalo.visible`);
         const who = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name ?? null, stored: localStorage.getItem('flappyPoop.save'), launching: ${play}.launching, state: ${play}.state })`).then(JSON.parse);
-        ok(promptShown && haloOn && a1 !== a2, `fresh profile shows "Load user" with a pulsing halo (alpha ${a1.toFixed(2)} → ${a2.toFixed(2)})${promptShown ? '' : ` — name ${JSON.stringify(who.name)}, stored ${who.stored ? 'yes' : 'no'}, launching ${who.launching}, state ${who.state}`}`);
+        ok(promptShown && haloOn && a1 !== a2, `fresh profile shows "Sign in" with a pulsing halo (alpha ${a1.toFixed(2)} → ${a2.toFixed(2)})${promptShown ? '' : ` — name ${JSON.stringify(who.name)}, stored ${who.stored ? 'yes' : 'no'}, launching ${who.launching}, state ${who.state}`}`);
         await evaluate(`${play}.flap({ x: ${play}.readyBoxes.profile.x, y: ${play}.readyBoxes.profile.y }), true`);
         await sleep(200);
-        const opened = await evaluate(`!document.getElementById('save-panel').hidden && document.activeElement && document.activeElement.id === 'save-name'`);
-        ok(opened === true && (await playState()) === 'ready', 'tapping "Load user" opens the save panel on the name field without starting a run');
+        const shownIn = (id) => `((e) => Boolean(e) && e.offsetParent !== null)(document.getElementById('${id}'))`;
+        const opened = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, signIn: ${shownIn('save-have-btn')}, create: ${shownIn('save-new-btn')}, name: ${shownIn('save-name')}, focus: document.activeElement?.id ?? null })`).then(JSON.parse);
+        ok(opened.open && opened.signIn && opened.create && !opened.name && opened.focus !== 'save-name' && (await playState()) === 'ready', `tapping "Sign in" opens the save panel on Sign in | Create user (no field, no keyboard) without starting a run (${JSON.stringify(opened)})`);
         // The board's username check and its name for this player are stubbed for the whole section
         // (deterministic, and never the live board).
         await evaluate(`(globalThis.__nameFree = true, globalThis.__nameChecks = [], ${play}.checkNameAvailable = (name, id) => (globalThis.__nameChecks.push([name, id]), Promise.resolve(globalThis.__nameFree)), true)`);
         await evaluate(`(globalThis.__boardName = null, globalThis.__nameFetches = [], ${play}.fetchPlayerName = (id) => (globalThis.__nameFetches.push(id), Promise.resolve(globalThis.__boardName)), true)`);
         // The player's board rows (pullBoardBests) answer "none" for the whole run, except in the check that sets them.
         await evaluate(`(globalThis.__boardRows = [null, null], ${play}.fetchBoardBests = () => Promise.resolve(globalThis.__boardRows), true)`);
-        await evaluate(`document.getElementById('save-name').value = 'Smoke', document.getElementById('save-save-btn').click(), true`);
+        await evaluate(`document.getElementById('save-new-btn').click(), document.getElementById('save-name').value = 'Smoke', document.getElementById('save-save-btn').click(), true`);
         await sleep(1200);
-        const after = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, code: document.getElementById('save-code').value })`).then(JSON.parse);
+        const after = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, code: document.getElementById('save-explain-code')?.value ?? '' })`).then(JSON.parse);
         const named = await evaluate(`${play}.getSaveState().name`);
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         const line = (await texts()).find((x) => x.startsWith('Smoke'));
         const haloOff = !(await evaluate(`${play}.profileHalo.visible`));
-        ok(after.open && after.code.startsWith('fp1.') && named === 'Smoke' && Boolean(line) && haloOff, `Save stores the name and the panel stays open on the user code (${after.code.slice(0, 8)}…); closed, the button reads "${line}" without the halo`);
+        ok(after.open && after.code.startsWith('fp1.') && named === 'Smoke' && Boolean(line) && haloOff, `Create user stores the name and the panel stays open on the popup about the user code (${after.code.slice(0, 8)}…); closed, the button reads "${line}" without the halo`);
         const still1 = await evaluate(`${play}.profileBtn.labelScale()`);
         await sleep(300);
         const still2 = await evaluate(`${play}.profileBtn.labelScale()`);
@@ -528,13 +530,38 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // Named, the same button opens the save panel (the High scores page is gone).
         await evaluate(`${play}.flap({ x: ${play}.readyBoxes.profile.x, y: ${play}.readyBoxes.profile.y }), true`);
         await sleep(200);
-        const reopened = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, field: document.getElementById('save-name').value, focused: document.activeElement?.id === 'save-name' })`).then(JSON.parse);
+        const reopened = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, field: document.getElementById('save-name').value, focused: document.activeElement?.id === 'save-name', dashboard: ${shownIn('save-code')} && ${shownIn('save-clear-btn')} && ${shownIn('save-merge-btn')} })`).then(JSON.parse);
+        // The (?) is a layer over the card (Michael's playtest, 24 Nov): it does not move when the help opens, so a
+        // second click where it was closes the help and the panel stays, over the dashboard and over Sign out's confirm.
+        for (const over of ['dashboard', 'sign out']) {
+          if (over === 'sign out') await evaluate(`document.getElementById('save-clear-btn').click(), true`);
+          const at = await evaluate(`JSON.stringify(document.getElementById('save-help-btn').getBoundingClientRect())`).then(JSON.parse);
+          const press = async () => {
+            for (const type of ['mousePressed', 'mouseReleased']) await cdp.send('Input.dispatchMouseEvent', { type, x: at.x + at.width / 2, y: at.y + at.height / 2, button: 'left', clickCount: 1 });
+            await sleep(200);
+          };
+          const seen = () => evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, help: Boolean(document.getElementById('save-help')?.isConnected), y: document.getElementById('save-help-btn').getBoundingClientRect().y, logout: Boolean(document.getElementById('save-logout')?.isConnected) })`).then(JSON.parse);
+          await press();
+          const opened = await seen();
+          await press();
+          const closed = await seen();
+          ok(opened.open && opened.help && opened.y === at.y && closed.open && !closed.help && closed.logout === (over === 'sign out'), `over the ${over}, the (?) stays put (y ${at.y} → ${opened.y}); a second click on the same spot closes the help and the panel stays${over === 'sign out' ? ', still on the confirm' : ''}`);
+          // ✕ over the help steps back too (Michael's playtest): to the dashboard, or to the confirm.
+          await press();
+          const xAt = await evaluate(`JSON.stringify(document.getElementById('save-close').getBoundingClientRect())`).then(JSON.parse);
+          for (const type of ['mousePressed', 'mouseReleased']) await cdp.send('Input.dispatchMouseEvent', { type, x: xAt.x + xAt.width / 2, y: xAt.y + xAt.height / 2, button: 'left', clickCount: 1 });
+          await sleep(200);
+          const backed = await seen();
+          ok(backed.open && !backed.help && backed.logout === (over === 'sign out'), `over the ${over}, ✕ on the help goes back to the ${over === 'sign out' ? 'confirm' : 'dashboard'}, the panel stays`);
+          if (over === 'sign out') await evaluate(`document.getElementById('save-logout-cancel').click(), true`);
+        }
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
-        ok(reopened.open && reopened.field === 'Smoke' && !reopened.focused && (await playState()) === 'ready', `tapping "${line}" opens the save panel on the stored name (no keyboard raised) without starting a run`);
+        ok(reopened.open && reopened.field === 'Smoke' && !reopened.focused && reopened.dashboard && (await playState()) === 'ready', `tapping "${line}" opens the save panel on the player's dashboard (no keyboard raised) without starting a run`);
       }
 
-      // The username claim, the merge on Load, and Clear. The board check stays stubbed; the Data API
-      // is muzzled around the Load so the queued merge never reaches the live board.
+      // The username claim, Merge players… (each pick, and a cancelled one), and Sign out through its
+      // confirm (plan 44; the merge on Load and the two-tap Clear before it). The board check stays
+      // stubbed; the Data API is muzzled around each merge so a queued merge never reaches the live board.
       {
         const play = `__flappy.scene.getScene('Play')`;
         const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
@@ -575,27 +602,46 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const refused = await status();
         await evaluate(`${play}.boardNameTaken = false, true`);
         ok(refused.text === (await tx('saveNameTaken')) && refused.cls.includes('error'), 'with the last sync refused for the name, the panel opens on the taken-name steps');
-        // Load a code from another id: the device adopts it, the pair is queued for the board, and the status says merged.
+        // Merge players… with another id's code: a paste shows both cards and changes nothing; Cancel leaves the
+        // save, the merge queue and the online session as they were; the hidden blocks really are display: none
+        // (the card's [hidden] rule beats .row's flex). Then the code's card picked: the device adopts it (what a
+        // Load did), the pair is queued for the board, and the status names both players.
         const oldId = await evaluate(`${play}.getSaveState().id`);
         const other = 'BBBBBBBBBBBBBBBBBBBBBB';
         const code = await evaluate(`import('./src/save.js').then((m) => m.exportCode({ id: '${other}', name: 'Other', top: [{ score: 5, toilet: false, level: 1 }], exportedAt: null }))`);
         await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
-        await evaluate(`${el('save-load')}.value = ${JSON.stringify(code)}, ${el('save-load-btn')}.click(), true`);
+        const snapshot = () => evaluate(`import('./src/config.js').then((m) => JSON.stringify({ save: localStorage.getItem('flappyPoop.save'), merges: localStorage.getItem(m.LEADERBOARD.mergesKey), session: localStorage.getItem(m.LEADERBOARD.onlineSessionKey), rename: localStorage.getItem(m.LEADERBOARD.renameKey) }))`);
+        const pasteMerge = async (text) => {
+          await evaluate(`${el('save-merge-btn')}.click(), ${el('save-merge-input')}.value = ${JSON.stringify(text)}, ${el('save-merge-input')}.dispatchEvent(new Event('input')), true`);
+          for (let i = 0; i < 40 && !(await evaluate(`${el('save-card-device')}.offsetParent !== null`)); i += 1) await sleep(50);
+        };
+        const unmerged = await snapshot();
+        await pasteMerge(code);
+        const cards = await evaluate(`JSON.stringify({ device: ${el('save-card-device')}.className, code: ${el('save-card-code')}.className, codeName: ${el('save-card-code')}.children[1].textContent, go: !${el('save-merge-confirm')}.disabled, rowHidden: ${el('save-profile-btn')}.parentElement.hidden, rowDisplay: getComputedStyle(${el('save-profile-btn')}.parentElement).display })`).then(JSON.parse);
+        const pasted = await snapshot();
+        await evaluate(`${el('save-merge-cancel')}.click(), true`);
+        await sleep(100);
+        const cancelled = await snapshot();
+        ok(cards.device.includes('kept') && !cards.code.includes('kept') && cards.codeName === 'Other' && cards.go && pasted === unmerged && cancelled === unmerged && !(await evaluate(`${el('save-merge')}?.offsetParent ?? null`)), `Merge players… shows both cards, this device marked to stay; the paste and Cancel leave the save, the merge queue, the rename and the online session as they were`);
+        ok(cards.rowHidden && cards.rowDisplay === 'none', `a hidden block reads display: none in the browser though .row is flex (the Profile row while Merge is open: ${cards.rowDisplay})`);
+        const beforeName = await evaluate(`${play}.getSaveState().name`);
+        await pasteMerge(code);
+        await evaluate(`${el('save-card-code')}.click(), ${el('save-merge-confirm')}.click(), true`);
         await sleep(400);
         const loaded = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, id: ${play}.getSaveState().id, queue: ${play}.mergeStore.load(), field: ${el('save-name')}.value })`).then(JSON.parse);
         const loadedStatus = await status();
         await evaluate(`import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; })`);
-        ok(loaded.name === 'Other' && loaded.id === other && loaded.field === 'Other' && JSON.stringify(loaded.queue) === JSON.stringify([{ keep: other, merge: oldId }]) && loadedStatus.text === (await tx('saveMerged')).replace('{name}', 'Other') && loadedStatus.cls.includes('ok'), `Load user code from another id adopts it, queues the merge (keep ${other.slice(0, 4)}…, merge the old id) and reads "${loadedStatus.text}"`);
+        ok(loaded.name === 'Other' && loaded.id === other && loaded.field === 'Other' && JSON.stringify(loaded.queue) === JSON.stringify([{ keep: other, merge: oldId }]) && loadedStatus.text === (await tx('saveMergedInto')).replace('{other}', beforeName).replace('{name}', 'Other') && loadedStatus.cls.includes('ok'), `Merge with the code's card picked adopts its id, queues the merge (keep ${other.slice(0, 4)}…, merge the old id) and reads "${loadedStatus.text}"`);
         // The board's name wins unless the player renamed here. Data API muzzled throughout.
         await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
         const fetched = await evaluate(`JSON.stringify({ fetches: globalThis.__nameFetches, pending: ${play}.renameStore.load() })`).then(JSON.parse);
-        ok(fetched.fetches.length === 1 && fetched.fetches[0] === other && fetched.pending === null, `names typed here (Smoke, Offline) never asked the board for its name; the Load cleared the pending rename and its sync asked once (${fetched.fetches.length})`);
+        ok(fetched.fetches.length === 1 && fetched.fetches[0] === other && fetched.pending === null, `names typed here (Smoke, Offline) never asked the board for its name; the merge cleared the pending rename and its sync asked once (${fetched.fetches.length})`);
         // The loaded code carried an older name than the board's (renamed on another device): the open panel shows the newer one.
         await evaluate(`globalThis.__boardName = 'OtherNew', ${play}.syncLeaderboard().then(() => true)`);
         const adopted = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, stored: JSON.parse(localStorage.getItem('flappyPoop.save')).name, field: ${el('save-name')}.value, profile: ${play}.profileBtn.getText(), code: ${el('save-code')}.value })`).then(JSON.parse);
         const adoptedStatus = await status();
         const otherCode = await evaluate(`import('./src/save.js').then((m) => m.importCode(${el('save-code')}.value, { storage: { getItem: () => null, setItem() {} } })).then((r) => r.ok ? r.state.name : '')`);
-        ok(adopted.name === 'OtherNew' && adopted.stored === 'OtherNew' && adopted.field === 'OtherNew' && adopted.profile.startsWith('OtherNew') && adoptedStatus.text === (await tx('saveMerged')).replace('{name}', 'OtherNew') && otherCode === 'OtherNew', `the board's newer name replaces the loaded code's: stored, in the field, the welcome line, the profile and the code ("${adopted.profile}")`);
+        ok(adopted.name === 'OtherNew' && adopted.stored === 'OtherNew' && adopted.field === 'OtherNew' && adopted.profile.startsWith('OtherNew') && adoptedStatus.text === (await tx('saveMergedInto')).replace('{other}', beforeName).replace('{name}', 'OtherNew') && otherCode === 'OtherNew', `the board's newer name replaces the loaded code's: stored, in the field, the welcome line, the profile and the code ("${adopted.profile}")`);
         // A rename typed here goes to the board: the next sync keeps it and does not ask.
         await typeAndSave('Renamed');
         const fetches0 = await evaluate(`globalThis.__nameFetches.length`);
@@ -603,30 +649,57 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const kept = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, pending: ${play}.renameStore.load(), fetches: globalThis.__nameFetches.length })`).then(JSON.parse);
         ok(kept.name === 'Renamed' && kept.pending?.name === 'Renamed' && kept.pending?.id === other && kept.fetches === fetches0, `a rename typed here is kept (pending until a post carries it) and the board's "${'OtherNew'}" does not overwrite it`);
         await evaluate(`globalThis.__boardName = null, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; })`); // the stub answers "no name" from here on
-        // Clear: a first tap warns, a second inside the window signs the device out.
-        const keys = await evaluate(`import('./src/config.js').then((m) => JSON.stringify({ best: m.TUNING.bestKey, settings: m.TUNING.settingsKey, submits: m.LEADERBOARD.storageKey, merges: m.LEADERBOARD.mergesKey, rename: m.LEADERBOARD.renameKey, confirmMs: m.TUNING.saveClearConfirmMs }))`).then(JSON.parse);
+        // Sign out (plan 44): the button opens a confirm with the code and the warning; its own Sign out signs the device out.
+        const keys = await evaluate(`import('./src/config.js').then((m) => JSON.stringify({ best: m.TUNING.bestKey, settings: m.TUNING.settingsKey, submits: m.LEADERBOARD.storageKey, merges: m.LEADERBOARD.mergesKey, rename: m.LEADERBOARD.renameKey, }))`).then(JSON.parse);
         await evaluate(`localStorage.setItem('${keys.best}', '7'), ${play}.submitStore.save({ playerId: '${other}', name: 'Other', score: 5, toilet: false, level: 1 }), true`);
         await evaluate(`${el('save-clear-btn')}.click(), true`);
-        const armed = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, status: ${el('save-status')}.textContent, cls: ${el('save-status')}.className, disabled: ${el('save-clear-btn')}.disabled, outline: getComputedStyle(${el('save-clear-btn')}).backgroundColor, border: getComputedStyle(${el('save-clear-btn')}).borderTopColor, left: ${el('save-clear-btn')}.getBoundingClientRect().left < ${el('save-save-btn')}.getBoundingClientRect().left })`).then(JSON.parse);
-        ok(armed.name === 'Renamed' && armed.status === (await tx('saveClearConfirm')) && armed.cls.includes('error') && !armed.disabled && armed.outline === 'rgba(0, 0, 0, 0)' && armed.border === 'rgb(232, 94, 150)' && armed.left && keys.confirmMs >= 2000, `a first tap on Clear (pink outline, left of Save) only warns: "${armed.status.slice(0, 40)}…"; the player is still "${armed.name}"`);
-        await evaluate(`${el('save-clear-btn')}.click(), true`);
         await sleep(100);
-        const gone = await evaluate(`JSON.stringify({ state: ${play}.getSaveState(), save: localStorage.getItem('flappyPoop.save'), best: localStorage.getItem('${keys.best}'), submits: localStorage.getItem('${keys.submits}'), merges: localStorage.getItem('${keys.merges}'), rename: localStorage.getItem('${keys.rename}'), settings: localStorage.getItem('${keys.settings}') !== null, status: ${el('save-status')}.textContent, field: ${el('save-name')}.value, code: ${el('save-code')}.value, disabled: ${el('save-clear-btn')}.disabled, prompt: ${play}.profileBtn.getText() })`).then(JSON.parse);
-        ok(gone.state.name === '' && gone.state.id === null && gone.state.top.length === 0 && gone.best === null && gone.submits === null && gone.merges === null && gone.rename === null && gone.settings && gone.status === (await tx('saveCleared')) && gone.field === '' && gone.code === (await tx('saveNameRequired')) && gone.disabled && gone.prompt === (await tx('loadUserButton')), `a second tap signs the device out: no name, id or scores, the submits, merges, pending rename and legacy best gone, settings kept; Clear greys and the code field reads "${gone.code}"`);
-        // Back to the smoke's own name for the rest of the run.
+        const armed = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, warn: ${el('save-logout')}?.textContent ?? '', code: ${el('save-logout-code')}?.value ?? '', focus: document.activeElement?.id ?? null, outline: getComputedStyle(${el('save-clear-btn')}).backgroundColor, border: getComputedStyle(${el('save-clear-btn')}).borderTopColor, left: ${el('save-clear-btn')}.getBoundingClientRect().left < ${el('save-merge-btn')}.getBoundingClientRect().left })`).then(JSON.parse);
+        ok(armed.name === 'Renamed' && armed.warn.includes(await tx('saveSignOutWarning')) && armed.code.startsWith('fp1.') && armed.focus === 'save-logout-cancel' && armed.outline === 'rgba(0, 0, 0, 0)' && armed.border === 'rgb(232, 94, 150)' && armed.left, `Sign out (pink outline, left of Merge) opens its confirm with the code (${armed.code.slice(0, 8)}…) and the focus on Cancel; the player is still "${armed.name}"`);
+        await evaluate(`${el('save-logout-confirm')}.click(), true`);
+        await sleep(100);
+        const gone = await evaluate(`JSON.stringify({ state: ${play}.getSaveState(), save: localStorage.getItem('flappyPoop.save'), best: localStorage.getItem('${keys.best}'), submits: localStorage.getItem('${keys.submits}'), merges: localStorage.getItem('${keys.merges}'), rename: localStorage.getItem('${keys.rename}'), settings: localStorage.getItem('${keys.settings}') !== null, status: ${el('save-status')}.textContent, field: ${el('save-name')}?.value ?? '', doors: ${el('save-have-btn')}?.offsetParent != null && ${el('save-new-btn')}?.offsetParent != null, dashboard: ${el('save-clear-btn')}.offsetParent !== null, prompt: ${play}.profileBtn.getText() })`).then(JSON.parse);
+        ok(gone.state.name === '' && gone.state.id === null && gone.state.top.length === 0 && gone.best === null && gone.submits === null && gone.merges === null && gone.rename === null && gone.settings && gone.status === (await tx('saveCleared')) && gone.field === '' && gone.doors && !gone.dashboard && gone.prompt === (await tx('loadUserButton')), `the confirm's Sign out signs the device out: no name, id or scores, the submits, merges, pending rename and legacy best gone, settings kept; the panel shows Sign in | Create user again`);
+        // Back to the smoke's own name for the rest of the run: Create user.
+        await evaluate(`${el('save-new-btn')}.click(), true`);
         await typeAndSave('Smoke');
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         const back = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, id: ${play}.getSaveState().id, halo: ${play}.profileHalo.visible })`).then(JSON.parse);
-        ok(back.name === 'Smoke' && /^[A-Za-z0-9_-]{22}$/.test(back.id) && !back.halo, `a new username after Clear starts a new player (fresh id), the halo off again`);
+        ok(back.name === 'Smoke' && /^[A-Za-z0-9_-]{22}$/.test(back.id) && !back.halo, `a new username after Sign out starts a new player (fresh id), the halo off again`);
+        // Merge with this device kept (the default pick): its id and name stay, the code's scores join, the pair
+        // folds the code's id into this one, and the name goes to the board as a rename. Data API muzzled; the
+        // queued pair is dropped after, so it never reaches the live board.
+        {
+          const third = 'CCCCCCCCCCCCCCCCCCCCCC';
+          const thirdCode = await evaluate(`import('./src/save.js').then((m) => m.exportCode({ id: '${third}', name: 'Third', top: [{ score: 9, toilet: false, level: 2 }], exportedAt: null }))`);
+          await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
+          await evaluate(`${play}.openSavePanel(), true`);
+          await sleep(200);
+          await pasteMerge(thirdCode);
+          await evaluate(`${el('save-merge-confirm')}.click(), true`);
+          await sleep(400);
+          const kept = await evaluate(`JSON.stringify({ id: ${play}.getSaveState().id, name: ${play}.getSaveState().name, top: ${play}.getSaveState().top.map((e) => e.score), queue: ${play}.mergeStore.load(), rename: ${play}.renameStore.load(), status: ${el('save-status')}.textContent })`).then(JSON.parse);
+          await evaluate(`${play}.mergeStore.clear(), ${play}.setSaveState({ ...${play}.getSaveState(), top: [] }), import('./src/save.js').then((s) => (s.saveLocal(${play}.getSaveState()), import('./src/ui/savePanel.js'))).then((m) => (m.closeSavePanel(), import('./src/config.js'))).then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; })`);
+          ok(kept.id === back.id && kept.name === 'Smoke' && kept.top.join() === '9' && JSON.stringify(kept.queue) === JSON.stringify([{ keep: back.id, merge: third }]) && kept.rename?.id === back.id && kept.rename?.name === 'Smoke' && kept.status === (await tx('saveMergedInto')).replace('{other}', 'Third').replace('{name}', 'Smoke'), `Merge with this device kept keeps its id and name, takes the code's scores (${kept.top.join()}), queues the code's id into it and notes the name as a rename ("${kept.status}")`);
+        }
         // Scores flow down: a code carrying only this device's 160 loads; the board's best off (229, LV 6) and
         // on the toilet (261, LV 6), played on another device, join the list, the profile, the welcome line and
         // the code, and are filed as confirmed (no post back). Offline the code's list stands. Data API muzzled.
         {
           await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
           const mine = await evaluate(`import('./src/save.js').then((m) => m.exportCode({ id: '${back.id}', name: 'Smoke', top: [{ score: 160, toilet: false, level: 4 }, { score: 143, toilet: false, level: 3 }], exportedAt: null }))`);
+          // This player's own code in Merge is "That's already you." (plan 44), so it comes in the way a device signs
+          // back in: Sign out through its confirm, then Sign in with the code.
           await evaluate(`${play}.submitStore.clear(), ${play}.openSavePanel(), true`);
           await sleep(200);
-          await evaluate(`${el('save-load')}.value = ${JSON.stringify(mine)}, ${el('save-load-btn')}.click(), true`);
+          await pasteMerge(mine);
+          const same = await evaluate(`JSON.stringify({ status: ${el('save-status')}.textContent, cards: ${el('save-card-device')}.offsetParent !== null, go: !${el('save-merge-confirm')}.disabled })`).then(JSON.parse);
+          ok(same.status === (await tx('saveSamePlayer')) && !same.cards && !same.go, `this player's own code in Merge says "${same.status}" and offers no merge`);
+          await evaluate(`${el('save-merge-cancel')}.click(), ${el('save-clear-btn')}.click(), ${el('save-logout-confirm')}.click(), true`);
+          await sleep(100);
+          await evaluate(`${el('save-have-btn')}.click(), ${el('save-load')}.value = ${JSON.stringify(mine)}, ${el('save-load')}.dispatchEvent(new Event('input')), true`);
+          for (let i = 0; i < 40 && (await evaluate(`${el('save-load-btn')}.disabled`)); i += 1) await sleep(50);
+          await evaluate(`${el('save-load-btn')}.click(), true`);
           await sleep(500);
           const offline = await evaluate(`JSON.stringify({ top: ${play}.getSaveState().top.map((e) => e.score), pulled: ${play}.boardBestsFor })`).then(JSON.parse);
           ok(offline.top.join() === '160,143' && offline.pulled === null, `offline the board's scores cannot come down: the loaded code's list stands (${offline.top.join(' · ')}) and the next sync asks again`);
@@ -2215,7 +2288,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await evaluate(`${play}.openSavePanel(), true`);
           await sleep(200);
           // Blur first, as a phone does when Save is tapped: that path must not store the word either.
-          await evaluate(`document.getElementById('save-name').value = ' ${typed} ', document.getElementById('save-name').dispatchEvent(new Event('blur')), document.getElementById('save-save-btn').click(), true`);
+          await evaluate(`(document.getElementById('save-name') ?? (document.getElementById('save-new-btn').click(), null)), document.getElementById('save-name').value = ' ${typed} ', document.getElementById('save-name').dispatchEvent(new Event('blur')), document.getElementById('save-save-btn').click(), true`); // signed out, the field is on Create user's screen (plan 44)
           await sleep(200);
           const seen = await evaluate(`JSON.stringify({ test: ${play}.isTestMode(), name: ${play}.getSaveState().name, stored: JSON.parse(localStorage.getItem('flappyPoop.save')).name, submit: localStorage.getItem('flappyPoop.leaderboard'), field: document.getElementById('save-name').value, status: document.getElementById('save-status').textContent, badge: ${play}.testBadge.visible ? ${play}.testBadge.text : null })`).then(JSON.parse);
           const wantStatus = await tx(wantOn ? 'testModeOn' : 'testModeOff');
@@ -2546,7 +2619,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await evaluate(`${play}.setHand('left'), true`);
           const leftCode = await codeOf();
           await evaluate(`${play}.setHand('right'), true`);
-          await evaluate(`document.getElementById('save-load').value = ${JSON.stringify(leftCode)}, document.getElementById('save-load-btn').click(), true`);
+          // This player's own code (plan 44): Merge would say "That's already you.", so it comes in as a device
+          // signing back in does: Sign out through its confirm, then Sign in with the code.
+          const $ = (id) => `document.getElementById('${id}')`;
+          await evaluate(`${$('save-clear-btn')}.click(), ${$('save-logout-confirm')}.click(), true`);
+          await sleep(100);
+          await evaluate(`${$('save-have-btn')}.click(), ${$('save-load')}.value = ${JSON.stringify(leftCode)}, ${$('save-load')}.dispatchEvent(new Event('input')), true`);
+          for (let i = 0; i < 40 && (await evaluate(`${$('save-load-btn')}.disabled`)); i += 1) await sleep(50);
+          await evaluate(`${$('save-load-btn')}.click(), true`);
           let loaded = null;
           for (let i = 0; i < 40; i += 1) { await sleep(50); loaded = await evaluate(`JSON.stringify({ hand: ${play}.settings.load().hand, btn: ${play}.beanButton.x, name: ${play}.getSaveState().name, status: document.getElementById('save-status').textContent })`).then(JSON.parse); if (loaded.hand === 'left') break; }
           await evaluate(`${play}.setHand('right'), true`);
@@ -2554,7 +2634,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           const rightPayload = decode(rightCode);
           const leftPayload = decode(leftCode);
           ok(rightPayload.h === undefined && leftPayload.h === 'l' && leftPayload.n === rightPayload.n, `the save code carries the side only for left (right: no h, left: h ${JSON.stringify(leftPayload.h)})`);
-          ok(loaded.hand === 'left' && loaded.btn === inset && loaded.name === rightPayload.n, `loading a left-handed code on a right-handed device moves the button to x ${loaded.btn} (hand ${loaded.hand}, name ${loaded.name}, status "${loaded.status}")`);
+          ok(loaded.hand === 'left' && loaded.btn === inset && loaded.name === rightPayload.n, `signing in with a left-handed code on a right-handed device moves the button to x ${loaded.btn} (hand ${loaded.hand}, name ${loaded.name}, status "${loaded.status}")`);
         }
         await phone(390, 844);
         ok((await settle(720)) === 720, 'rotating back re-fits to the phone field');
@@ -3920,8 +4000,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(gateTexts.includes(await t('statsGateTitle')) && gateTexts.includes(await t('statsGateBody')) && (await evaluate(`__career.profiles.length`)) === asked0, 'the gate invites them to create a user and asks the server nothing');
         await evaluate(`${ST}.createUser(), true`);
         await sleep(300);
-        const panel = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, focus: document.activeElement?.id ?? null, profile: document.getElementById('save-profile-btn').disabled })`).then(JSON.parse);
-        ok(panel.open && panel.focus === 'save-name' && panel.profile, `Create user opens the save panel on the name field (focus ${panel.focus}); its Profile button is greyed out without a name`);
+        const panel = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, focus: document.activeElement?.id ?? null, profile: document.getElementById('save-profile-btn').offsetParent === null, back: document.getElementById('save-back')?.offsetParent != null })`).then(JSON.parse);
+        ok(panel.open && panel.focus === 'save-name' && panel.profile && panel.back, `Create user opens the save panel on its Create user screen, the caret in the name field (focus ${panel.focus}); no Profile button without a name`);
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         ok((await active('Stats')) && (await evaluate(`${ST}.view?.state`)) === 'gate', 'closing the panel without a name leaves the gate up');
         await named();
@@ -3944,7 +4024,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await shut();
         await evaluate(`(${P}.openSavePanel(), true)`);
         await sleep(200);
-        ok(!(await evaluate(`document.getElementById('save-profile-btn').disabled`)), 'with a username the Profile button is enabled');
+        ok(await evaluate(`((b) => b.offsetParent !== null && !b.disabled)(document.getElementById('save-profile-btn'))`), 'with a username the dashboard shows the Profile button');
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         await evaluate(`globalThis.__profile = null, true`);
       }
@@ -3955,6 +4035,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await evaluate(`document.getElementById('save-profile-btn').click(), true`);
       ok((await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view && ${ST}.view.own`)) && (await evaluate(`document.getElementById('save-panel').hidden`)), "the save panel's Profile button closes the panel and opens the own profile");
       await shut();
+      // Closing a profile opened from the dashboard opens the dashboard again (plan 44); a profile opened any other way does not.
+      ok(await waitFor(`!document.getElementById('save-panel').hidden && document.getElementById('save-code').offsetParent !== null`), 'closing that profile opens the save panel on the dashboard again');
+      await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+      await evaluate(`(${P}.openStats(), true)`);
+      await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view && ${ST}.view.own`);
+      await shut();
+      await sleep(200);
+      ok(await evaluate(`document.getElementById('save-panel').hidden`), 'a profile opened another way closes to the home screen, no panel');
     });
 
     await section('education-unlock', async () => {
@@ -3997,7 +4085,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await evaluate(`${play}.openSavePanel(), true`);
           await sleep(200);
           // Blur first, as a phone does when Save is tapped: that path must not store the word either.
-          await evaluate(`document.getElementById('save-name').value = ' ${typed} ', document.getElementById('save-name').dispatchEvent(new Event('blur')), document.getElementById('save-save-btn').click(), true`);
+          await evaluate(`(document.getElementById('save-name') ?? (document.getElementById('save-new-btn').click(), null)), document.getElementById('save-name').value = ' ${typed} ', document.getElementById('save-name').dispatchEvent(new Event('blur')), document.getElementById('save-save-btn').click(), true`); // signed out, the field is on Create user's screen (plan 44)
           await sleep(200);
           const seen = await evaluate(`JSON.stringify({ save: localStorage.getItem('flappyPoop.save'), field: document.getElementById('save-name').value, name: ${play}.getSaveState().name ?? '', status: document.getElementById('save-status').textContent })`).then(JSON.parse);
           await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
@@ -6006,6 +6094,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const [offText, onText, shareBtn, stopBtn] = await Promise.all(['eduShareOff', 'eduShareOn', 'eduShareTitle', 'eduShareStop'].map(tx));
         ok(btnNow.unlocked && btnNow.hidden === false && btnNow.text === (await tx('saveEduData')) && d0.open && !savePanelOpen, `the user panel shows "${btnNow.text}" on every device; it closes that panel and opens the data panel`);
         ok(d0.state === offText && d0.btn === shareBtn && d0.disabled === true && d0.adult === false && !d0.keys, `the panel opens with sharing off, the 18+ box unticked and "${d0.btn}" waiting for it; the game's keyboard is off under it`);
+        // Opened from the dashboard, the data panel closes back to it (plan 44); the checks below work on one opened from Play.
+        await closeData();
+        const backToSave = await evaluate(`!document.getElementById('save-panel').hidden && document.getElementById('save-edu-btn').offsetParent !== null`);
+        await closeSave();
+        ok(backToSave === true, 'closing the data panel opened from the dashboard opens the dashboard again');
+        await evaluate(`${play}.openEduData(), true`);
+        await sleep(150);
         ok(d0.inviteNote === true && d0.shareHidden === true && d0.code === '' && !d0.invited, 'a player not yet invited sees the invitation note and the code field, and neither section (plan 28, 2.4)');
         const SMOKE_CODE = 'the-smoke-invite-2026';
         await evaluate(`(${el('edu-invite-code')}.value = '${SMOKE_CODE}', ${el('edu-invite-code')}.dispatchEvent(new Event('input', { bubbles: true })), true)`);
@@ -6252,24 +6347,25 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await closeData();
         ok(!ended.joined && ended.queued === 0 && endedPanel.status === pw.eduPilotEnded && endedAgain.status !== pw.eduPilotEnded, `told "not enrolled", the device stops recording and empties its queue; the panel says so once ("${endedPanel.status}")`);
 
-        // Clear warns a player who shares, or who sent answers as a tester, that those stay where they are; Clear then forgets both on this device.
+        // Sign out's confirm warns a player who shares, or who sent answers as a tester, that those stay where they are; Sign out then forgets both on this device.
         const clearWarning = async () => {
           await evaluate(`${play}.openSavePanel(), true`);
           await sleep(200);
-          await evaluate(`${el('save-clear-btn')}.click(), true`);
-          const text = await evaluate(`${el('save-status')}.textContent`);
+          await evaluate(`${el('save-clear-btn')}.click(), true`); // Sign out's confirm carries Clear's notes (plan 44)
+          const text = await evaluate(`${el('save-logout-notes')}.textContent`);
           await closeSave();
           return text;
         };
-        const [warnBase0, noteShared, notePilot, noteCards] = await Promise.all(['saveClearConfirm', 'saveClearNoteShared', 'saveClearNotePilot', 'saveClearNoteCards'].map(tx));
+        const [noteShared, notePilot, noteCards] = await Promise.all(['saveClearNoteShared', 'saveClearNotePilot', 'saveClearNoteCards'].map(tx));
         // A device with 📚 cards hears that they go too (plan 28, 3.1b; checked on its own in education-backup).
-        const warnBase = (await evaluate(`${play}.eduHasCards()`)) ? `${warnBase0} ${noteCards}` : warnBase0;
+        const warnBase = (await evaluate(`${play}.eduHasCards()`)) ? noteCards : '';
+        const joined = (...xs) => xs.filter(Boolean).join(' ');
         const warnPlain = await clearWarning();
         await evaluate(`${play}.eduShare.turnOn('2026-11-13T10:00:00.000+00:00', 'ShareSmoke'), true`);
         const warnShared = await clearWarning();
         await evaluate(`${play}.consentStore.join({ version: '${consentVersion}', phase: 'pilot', at: Date.now() }), true`);
         const warnBoth = await clearWarning();
-        ok(warnPlain === warnBase && warnShared === `${warnBase} ${noteShared}` && warnBoth === `${warnBase} ${noteShared} ${notePilot}`, 'Clear warns a player who shares that the grades stay on the 📚 board, and a tester that the answers stay on the server; a player who does neither gets the plain warning');
+        ok(warnPlain === warnBase && warnShared === joined(warnBase, noteShared) && warnBoth === joined(warnBase, noteShared, notePilot), 'Sign out\'s confirm warns a player who shares that the grades stay on the 📚 board, and a tester that the answers stay on the server; a player who does neither gets the plain warning');
         const forgot = await evaluate(`(() => { const p = ${play}; p.researchQueue.add(${JSON.stringify(e1)}); p.signOut(); return JSON.stringify({ joined: p.researchJoined(), queued: p.researchQueue.size(), sharing: p.eduShareOn(), consent: localStorage.getItem('flappyPoop.eduConsent') }); })()`).then(JSON.parse);
         ok(!forgot.joined && forgot.queued === 0 && !forgot.sharing && forgot.consent === null, 'Clear forgets the consent, the queue and the sharing on this device');
 
@@ -6347,8 +6443,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const clearWarning = async () => {
           await evaluate(`${play}.openSavePanel(), true`);
           await sleep(200);
-          await evaluate(`${el('save-clear-btn')}.click(), true`);
-          const text = await evaluate(`${el('save-status')}.textContent`);
+          await evaluate(`${el('save-clear-btn')}.click(), true`); // Sign out's confirm carries Clear's notes (plan 44)
+          const text = await evaluate(`${el('save-logout-notes')}.textContent`);
           await closeSave();
           return text;
         };
@@ -6356,7 +6452,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const withCards = await clearWarning();
         await evaluate(`localStorage.removeItem('${KEY}'), true`);
         const without = await clearWarning();
-        ok(withCards.includes(noteCards) && !without.includes(noteCards), `Clear's warning names the 📚 cards only when there are some ("${withCards}")`);
+        ok(withCards.includes(noteCards) && !without.includes(noteCards), `Sign out's confirm names the 📚 cards only when there are some ("${withCards}")`);
         // Over a paused run, restore is disabled with a line to go home; Back up stays.
         await evaluate(`localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(rec))}), true`);
         await home();

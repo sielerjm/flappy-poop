@@ -9,37 +9,21 @@ import { LOCALES } from './i18n.js';
 export const CHANGELOG = [
   {
     version: '0.29.0',
-    date: '24 Nov 2026',
+    date: '25 Nov 2026',
     notes: {
       en: [
-        '📶 Plays without a connection: once you have played on this device, the game opens and plays in airplane mode too. Your scores reach the leaderboards when you are back online.',
-        '⚡ Quicker to open: the game keeps its files on your device, so it no longer checks each one with the server every time.',
-        '🔄 Updates arrive at your next launch, and Settings › Reload game still fetches everything fresh.',
+        '📶 Plays without a connection: once you have played on this device, the game opens and plays in airplane mode too. Your scores reach the leaderboards when you are back online. 🔄 Updates arrive at your next launch, and Settings › Reload game still fetches everything fresh.',
+        '⚡ Quicker to open: the game’s drawings download at less than half the size and look the same; once it is on your device, the loading ring fills in about a third of a second and the game no longer checks each file with the server; the quiz, revive, challenge bubble and two-player sounds load once the game is open.',
         '⏭️ Less waiting: Play again gets you flying in about half the time, and Settings has a new switch, Skip to home when loaded, that goes straight to the home screen once the game has loaded, with no Continue tap.',
+        'Your player screen is new: Create user to pick a username, or Sign in with your user code from another device. After Create user, a short note says what your user code is and how to use it. Signed in, the screen is your player: your code with Copy, your profile and 📚, and ? to explain each part. Sign out asks first and shows your code, so you can copy it before you go. Made two players by mistake? Merge players… shows both side by side: tap the one whose name stays, then Merge for good. Two players with usernames now join only this way, never by signing in.',
         '🛠️ Fixes: a leaderboard of exactly 25 or 50 players no longer offers an empty next page; in a two-player race the second one out no longer reads "Waiting for P1…"; and Quit at a level break waits a moment before its second tap, so a double tap cannot end your run by accident.',
       ],
       'zh-Hans': [
-        '📶 没有网络也能玩：在这台设备上玩过之后，开着飞行模式也能打开游戏并照常游玩。重新联网后，你的分数会上传到排行榜。',
-        '⚡ 打开更快：游戏把文件存在你的设备上，不用每次都逐个向服务器确认。',
-        '🔄 更新会在下次打开游戏时生效；“设置”里的“刷新游戏”仍会重新下载全部内容。',
+        '📶 没有网络也能玩：在这台设备上玩过之后，开着飞行模式也能打开游戏并照常游玩。重新联网后，你的分数会上传到排行榜。🔄 更新会在下次打开游戏时生效；“设置”里的“刷新游戏”仍会重新下载全部内容。',
+        '⚡ 打开更快：游戏里的图画下载大小不到原来的一半，看起来和以前一样；游戏已经存在你的设备上时，加载圆环大约三分之一秒就转满，也不用再逐个向服务器确认文件；答题、复活、挑战泡泡和双人模式的音效会在游戏打开后再加载。',
         '⏭️ 等待更短：点“再玩一次”后，起飞只需原来大约一半的时间；“设置”新增“加载后直接进入主页”：打开后，游戏加载完成就直接进入主页，不用再点“继续”。',
+        '“你的玩家”界面焕然一新：点“创建用户”选一个用户名，或者用另一台设备上的用户码“登录”。创建用户后，会有一段简短说明，告诉你用户码是什么、怎么用。登录后，这个界面就是你的玩家：你的用户码（可复制）、你的个人资料和 📚，点 ? 可以看每一部分的说明。“退出登录”会先询问并显示你的用户码，方便你离开前复制。不小心建了两个玩家？“合并玩家…”会把两个并排显示：点选要保留名字的那一个，再点“永久合并”。现在两个有用户名的玩家只能这样合并，登录不会再合并。',
         '🛠️ 修复：正好 25 或 50 名玩家的排行榜不再多出一页空白；双人比赛中第二个出来的玩家不再显示“等待P1…”；关卡休息时的“结束”在第二次点击前会稍等片刻，连点也不会误结束本局。',
-      ],
-    },
-  },
-  {
-    version: '0.28.1',
-    date: '24 Nov 2026',
-    notes: {
-      en: [
-        '⚡ Faster loading: the game’s drawings now download at less than half the size, and look the same.',
-        '⚡ Opening the game again is quicker: when it is already on your device, the loading ring fills in about a third of a second.',
-        '⚡ Less to wait for before you play: the quiz, revive, challenge bubble and two-player sounds now load once the game is open, and some sounds are smaller files.',
-      ],
-      'zh-Hans': [
-        '⚡ 加载更快：游戏里的图画下载大小不到原来的一半，看起来和以前一样。',
-        '⚡ 再次打开更快：游戏已经存在你的设备上时，加载圆环大约三分之一秒就转满了。',
-        '⚡ 开始前要等的更少：答题、复活、挑战泡泡和双人模式的音效会在游戏打开后再加载，有些音效文件也变小了。',
       ],
     },
   },

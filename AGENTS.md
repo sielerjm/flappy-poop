@@ -105,23 +105,42 @@ ready screen's user button); spec in `docs/save-code-spec.md`. The code's
 random `id` is also the leaderboard identity. **One player across devices** (2026-11-08):
 a username belongs to the player holding it on the board (`submit_score` raises
 'name taken'; the panel asks `name_available` first through `Play.checkNameAvailable`
-and refuses the name with the user-code steps; the board cannot say → saved locally,
+and refuses the name with the Sign in steps; the board cannot say → saved locally,
 `saveNameOffline`; a refused sync sets `Play.boardNameTaken`, shown by the panel and
-the 🏆 footer). Loading a code on a device that had its own player queues
-`merge_players(pasted, old)` (`createMergeStore`, drained first by `syncLeaderboard`):
-the board folds the rows and keeps the old id as an alias (`player_aliases`), so every
-id resolves to one player. **The board's name wins** (2026-11-09): `syncLeaderboard` asks
+the 🏆 footer). **Sign in, Sign out, Merge players…** (plan 44, 0.29.0; the save panel's words, replacing Load and Clear).
+Signed out, the panel shows only **Sign in** and **Create user**, each with its own screen and ‹ Back. Sign in
+pastes a code: a preview card from the code alone (no server call), a line for a guest's progress, then one
+tap. A guest's progress joins the code's player: the code's state wins, `queueMerge(code id, guest id)`
+(`createMergeStore`, drained first by `syncLeaderboard`). The board folds the rows and keeps the guest id as
+an alias (`player_aliases`), so every id resolves to one player. Create user saves the username and shows the
+code popup (`save-explain`) before the dashboard. Signed in, **Sign out** opens an inline confirm (the code
+with its own Copy, then Clear's notes: cards, 📚 sharing, pilot, 🌐) and then `Play.signOut`, which forgets
+what Clear forgot and leaves online play as Clear did (`unlink_online_player`, only on a device that holds
+a session). **Merge players…** pastes a second code and shows both cards; a tap picks the one whose name
+stays, this device's by default. This device kept: `merge_players(device id, code id)`, the id and name of
+the device with the scores unioned, `noteRename(device name)` so the next post carries the name even when the
+kept id has no board row yet, and `Play.forgetBoardCache` so the folded player's bests, totals and days are
+pulled on this page. The code kept: exactly the old Load (`merge(before, pasted)`, `forgetRename`,
+`queueMerge(code id, device id)`). This player's own code in Merge says "That's already you." and writes
+nothing. **Online play follows seniority, not the pick:** `fold_player` gives the online name and trust to
+the player whose trusted device went online first. With this device kept, the id does not change, so the
+session stays (no `onlineLeave`) and the next 🌐 open reads the trust, which the fold may have set to
+pending (pair again). When the code's player is senior, the kept player's devices become pending and the
+friends swap to the senior side. The client sees only this device's session, so the Merge confirm's
+🌐 line (`saveMergeOnline`) shows only while this device holds an online session. The schema comments in
+`db/schema.sql` (about 107 and 1379-1381) still say the pasted code is kept; they stay as they are, since an
+edit means a restamp. **The board's name wins** (2026-11-09): `syncLeaderboard` asks
 `player_name` (`Play.fetchPlayerName`) and adopts it (`nameAction`, `Play.adoptBoardName`,
 `showAdoptedName` in an open panel) unless the name is a rename typed on this device
 (`createRenameStore`, flappyPoop.rename, set by the panel's store, cleared once a post
-carries it, by Load and by Clear); the first `Play.create` of a page load syncs. **Scores flow down
+carries it, by Sign in and by Sign out); the first `Play.create` of a page load syncs. **Scores flow down
 too** (2026-11-11): after the name step `syncLeaderboard` runs `Play.pullBoardBests`, which reads the
 player's two board rows (`Play.fetchBoardBests` → `fetchRank` off / on the toilet, aliases resolved) once
-per page and id (Load and Clear ask again) and folds them into `save.top` (`mergeBoardBests`), so a
+per page and id (Sign in, Sign out and a Merge keeping this device ask again: `Play.forgetBoardCache`) and folds them into `save.top` (`mergeBoardBests`), so a
 code or device that never played them catches up (the home button, the code and, via `showBoardScores`,
-the Load's welcome line follow); a pulled row that is now the device's best of its kind is filed in
-`submitStore`, so it is not posted back. The panel's **Clear** (`Play.signOut`, two taps inside
-`saveClearConfirmMs`) forgets the player on the device only.
+the Sign in's welcome line follow); a pulled row that is now the device's best of its kind is filed in
+`submitStore`, so it is not posted back. **Sign out** forgets the player on the device only (the confirm
+replaced Clear's two taps; `saveClearConfirmMs` now serves only the tournament's Abandon and the level break's Quit).
 **Test mode** is a session-only sandbox: typing either of `TEST_MODE.words` (`pooptest` or `testpoop`, any
 case) as the username and pressing Save toggles it (a trigger word is never stored as a name, so it can
 never relabel the player's leaderboard row). Settings then grows a test section:
@@ -355,7 +374,7 @@ every player has a **public** profile (`scenes/Stats.js`, chromeIntent `'stats'`
 panel's 👤 Profile (own; disabled until a username is stored) or a name on any board
 (`Leaderboard.linkName` → `Play.openStats({ name })`). A player with no username gets a **gate**
 instead (`buildGate`: Create user opens the save panel; `Stats.refresh`, from `Play.setSaveState`,
-turns it into the profile once a name is saved, and back on Clear).
+turns it into the profile once a name is saved, and back on Sign out).
 **Counting:** `Play.endRun`'s single-player and Daily branches call `recordCareer`: `runDeltas`
 (`src/achievements.js`) turns the run into counters (games / wins / sumScore / sumLevel / maxLevel
 for single player, dailyGames for a Daily Dump, deaths / pipes / falls / closeCalls / farts / superFarts / the pickups
@@ -370,7 +389,7 @@ totals. **Sync:** `drainCareer`, in `syncLeaderboard`'s named path after `drainD
 (`submit_counters`: the batch id is the receipt, so a lost reply resends the same batch; the answer is
 the player's totals across every device, kept as `base` for that id), then the claims
 (`claim_achievements`). `postCounters` / `claimBadges` / `fetchProfile` are Play methods so the smoke
-stubs them. Clear empties the store; a Load forgets only `base`. **Server:** `player_counters` (one
+stubs them. Sign out empties the store; a Sign in forgets only `base`. **Server:** `player_counters` (one
 jsonb of counters, `merge_counters`: sum, or the larger value for `max*` keys), `achievement_defs`
 (windows of time-boxed quests only), `player_achievements`; `player_stats(id or board name)` is the
 profile (no ids): single-player numbers (bestScore = the best score-board row), daily podiums ranked as `daily_board` ranks, medals, the
@@ -785,14 +804,14 @@ gaps come from the date keys (`localDayKey`), never from milliseconds. Since pla
 `src/streak.js` (`nextDayStreak`, `dayStreakNow`, `cleanDayStreak`; `nextStudyStreak` / `studyStreakNow` are
 education's names for them), shared with the day streaks below.
 **Day streaks** (plan 34, Michael): `createStreakStore` (`flappyPoop.streaks`, src/leaderboard.js) keeps a
-Singleplayer and a Daily Dump streak on the device: never sent, not in the backup, cleared by Clear and by a Load
-(`forgetRename`, finish plan F2: the device may now be another player; the sync the Load starts refills them for
+Singleplayer and a Daily Dump streak on the device: never sent, not in the backup, cleared by Sign out and by a Sign in
+(`forgetRename`, finish plan F2: the device may now be another player; the sync the Sign in starts refills them for
 the loaded code). They count the days played on any device with the save code (34.13, Michael:
 "Daily and Singleplayer", "any device"): once per page load, a named device's sync (`pullPlayDays`, after
 `drainDaily`; the registry's `playDaysFor`) asks the server's `play_days` with this device's IANA time zone and folds
 the days in (`streakStore.merge`, `mergeDayStreak`: the run of days in a row ending on the latest day, the best
 never lowered, a day more than one ahead of today left out; the server's `singleBest` is the floor of the
-Singleplayer best, so a Load or a new device shows the Longest everyone sees). The server counts by its own clock
+Singleplayer best, so a Sign in or a new device shows the Longest everyone sees). The server counts by its own clock
 (`streak_days`, 34.14 and Checkpoint 34c): Daily Dump course days from `daily_scores` alone (since 10 Nov 2026,
 kept; it takes a day only on that day or the next), and a Singleplayer day as the local day of the run's
 `ended_at + clock_offset_ms`, for a row that arrived within 48 hours of it (a row that came later, one with no end
@@ -922,7 +941,7 @@ nowhere), after which `quizAnswer` records each answer as an event (`src/researc
 only under the current notice; `Play.drainResearch` sends them early in the sync, username or not
 (`submit_research_events`, under a random research id, never the player id). The consent keeps the
 player id it joined with (`Play.researchConsent()`, `researchPlayerId()`), so its answers and a
-Withdraw still find the participant after a Load merges that id away, and the participation's start
+Withdraw still find the participant after a Sign in merges that id away, and the participation's start
 (`since`: the server's `joined_at`, set once when the participant is made): a device whose `since`
 is not the participant's (a withdrawal and a new join elsewhere) is told `'not enrolled'` and stops.
 A join empties the queue, so nothing recorded under an older notice goes out; a re-join keeps the
@@ -1467,7 +1486,7 @@ src/
                             0.3 spike. close() keeps the session, signOut() is local. close() counts
                             calls: a first load or sign-in still out at a close starts no ticker,
                             socket or clock (AUD-145). signIn({ create: false }) reuses a
-                            stored session only (Clear and Load; AUD-146).
+                            stored session only (Sign out and Sign in; AUD-146).
                             ?netsim delays and drops received messages. Per-frame calls
                             are synchronous. Knobs in TUNING.online.net. Callers: the
                             sign-in side, src/onlineAccount.js, and the lobby,
@@ -1908,7 +1927,7 @@ src/
                             glowStops) as an Image behind the poop; tinted for
                             the rainbow, alpha / scale tweened by Play.
                             createRectGlow(): rounded-rect halo (canvas shadow
-                            with the box cut out) for the "Load user" button.
+                            with the box cut out) for the home user button's "Sign in" prompt.
     tray.js                 Phaser wrapper around trayLayout: leaderboard (🏆) /
                             mute / settings bottom-right, pause directly above the
                             cog, plus bottom-left info, language (🌐), feedback (💬).
@@ -2103,38 +2122,47 @@ src/
                             long name never clips the time; ✉️ n beside the 🤝 Friends button.
                             Plain DOM over onlineFriends and onlineInvites.
                             tests/onlineFriendsPanel.test.js, tests/onlineInvitesPanel.test.js.
-    savePanel.js            Plain DOM panel over the canvas (a three-step intro,
-                            Username field, read-only user code + Copy, Load
-                            field, an outlined Clear beside the Save button that
-                            stores the username and confirms "Username saved",
-                            status line). claimName asks the board once per name
-                            (blur and Save share the promise; Save is never
-                            disabled, a disabled button would swallow the phone
-                            tap that blurred the field): taken → refused with the
-                            steps, unknown → saved with the offline note. Load
-                            from another id → Play.queueMerge, "saveMerged". Clear
-                            → warn, then Play.signOut on a second tap inside
-                            saveClearConfirmMs; the warning adds a note for a player
-                            who shares on the 📚 board and one for a device holding a
-                            pilot consent, an older notice's too (what was sent stays
-                            until Stop sharing / Withdraw). Load queues the merge
-                            also when the device holds a pilot consent.
-                            A 📚 Education data button beside Profile, shown only
-                            while education mode is available (refreshClear:
-                            Play.educationAvailable()), closes this
-                            panel and opens ui/eduDataPanel.js.
-                            Opened by the ready screen's user button, with
-                            { focusName: true } while there is no username (caret
-                            in the field at once). It stays open after Save so the
-                            player sees their user code.
-                            Disables game.input.keyboard while open so typing does
-                            not flap. The test-mode word in Username: Save toggles
-                            Play.setTestMode instead of renaming; blur never stores it. Copy calls clipboard.writeText inside the tap
-                            handler (iOS); falls back to selecting the field.
-                            👤 Profile (an outline button on its own row, disabled
-                            with Clear until a username is stored): closes the panel,
-                            then Play.openStats() (the own profile; over the 🌞
-                            popup when it was under).
+    savePanel.js            Plain DOM panel over the canvas (plan 44: one 420 px card).
+                            Signed out: the title, an intro line, Sign in (save-have-btn)
+                            and Create user (save-new-btn), each opening its own screen
+                            with ‹ Back (save-back). Sign in: the paste field, a preview
+                            card parsed from the code alone, the guest line, Sign in
+                            (save-load-btn); a guest's progress joins the code's player
+                            via Play.queueMerge. Create user: the username field and
+                            button, then the code popup (save-explain, Copy code, Got it).
+                            Signed in: the name and best, 👤 Profile and 📚, the code with
+                            Copy, the username (a rename, saved on blur), Sign out
+                            (save-clear-btn) and Merge players…, and a (?) button
+                            (save-help-btn) for "What's on this page". Sign out: an inline
+                            confirm with the code, Clear's notes (cards, 📚 sharing, pilot
+                            consent, an older notice's, 🌐) and Cancel, then Play.signOut.
+                            Merge players…: both cards, a tap picks the one that stays (this
+                            device by default); this device kept → merge_players(device,
+                            code) + noteRename + Play.forgetBoardCache; the code kept → the
+                            old Load; this player's own code → "That's already you."
+                            Sign out and Merge steps hide the rest of the dashboard.
+                            claimName asks the board once per name (blur and Create user
+                            share the promise; the button is never disabled, a disabled
+                            button would swallow the phone tap that blurred the field):
+                            taken → refused with the Sign in steps, unknown → saved with
+                            the offline note. The fields are type="search" with
+                            autocomplete="off" and the password-manager opt-outs
+                            (NO_AUTOFILL). A 📚 Education data button beside Profile,
+                            shown only while education mode is available (refreshClear:
+                            Play.educationAvailable()), closes this panel and opens
+                            ui/eduDataPanel.js; closing 👤 Profile (Play.openStats(target,
+                            { onClose })) or 📚 Education data (openEduData({ onClose }))
+                            from here opens the dashboard again. Opened by the ready
+                            screen's user button without focusName; the Daily Dump's and
+                            the profile's Create user buttons pass { focusName: true } and
+                            land on the Create user screen with the caret in the field.
+                            Disables game.input.keyboard while open so typing does not
+                            flap. The test-mode word in the username field toggles
+                            Play.setTestMode instead of renaming; blur never stores it.
+                            Copy calls clipboard.writeText inside the tap handler (iOS);
+                            falls back to selecting the field.
+                            tests/savePanelStates.test.js (the states, Sign in, Sign out),
+                            tests/savePanelMerge.test.js (Merge players…).
     eduIntroPanel.js        The 📚 popup (plan 26): plain DOM, built like
                             eduDataPanel.js; opened at every start from the ready
                             screen with 📚 on (plan 26 A2: Play.launch). The beta
@@ -2267,7 +2295,7 @@ src/
                             build is acknowledged by opening How to play or dying),
                             title, poop spot wearing poop-speech.png's "TAP TO
                             FLAP!" bubble, toilet toggle, and the user button
-                            (profileButtonText(): "Load user" under a pulsing
+                            (profileButtonText(): "Sign in" under a pulsing
                             createRectGlow halo until a name is set, then "name ·
                             best"; either way it opens the save panel, on the name
                             field while unnamed); any other tap starts); launch() swaps to the
@@ -3312,7 +3340,7 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             countDailyStreak counting days, signOut clearing it,
                             the profile rows, refreshStreakMarks, the subscripts'
                             spots inside the 🌞 and 📚 hit boxes; another player's
-                            profile carrying their streaks; a Load clearing them
+                            profile carrying their streaks; a Sign in clearing them
   playDays.test.js          The day streaks from the server (plan 34, 34.13, 34.14,
                             Checkpoint 34c): play_days and player_stats' streaks in
                             PGlite (the sources, the server's clock and its 48 hours,
@@ -3658,9 +3686,15 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             beside a live race
   onlineDevProject.test.js  onlineProjectConfig and ?onlinetest: dev hosts only, own keys,
                             off, blocked storage
-  onlineSignOut.test.js     Clear and a Load of another player leave online play only on
+  onlineSignOut.test.js     Sign out and a Sign in as another player leave online play only on
                             a device holding a session (Play.onlineSessionHeld /
                             onlineLeave); otherwise no client load
+  savePanelStates.test.js   plan 44, the save panel in a fake DOM: signed out (Sign in | Create user,
+                            ‹ Back), the Sign in preview and guest line, Create user and its code
+                            popup, the dashboard, the (?) card, the Sign out confirm and its notes
+  savePanelMerge.test.js    plan 44, Merge players…: both cards, the pick, this device kept
+                            (merge_players(device, code), noteRename, forgetBoardCache), the code
+                            kept (the old Load), "That's already you.", the 🌐 line only with a session
   schemaCheck.test.js       tools/schema_check.mjs: the stamp (blanked, idempotent),
                             the one read-only live call (an injected fetch), each
                             state it reports (current, fixture, other, none,
@@ -3802,7 +3836,7 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
                             real stores and leaderboard.js calls and the real save and
                             education data panels, against db/schema.sql through
-                            tests/support/postgrest.js: Load then Withdraw (merge
+                            tests/support/postgrest.js: Sign in then Withdraw (merge
                             before or after), two devices, a new participation, the
                             queue emptied on join, the kept phase, an older notice
                             (Withdraw offered, nothing recorded or sent), an offline
@@ -4459,13 +4493,13 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   older clients are told to update) and never reuses a server event name.
   A new online function goes in `ONLINE_RPCS` as well as the schema header
   (`tests/onlineNet.test.js` keeps them equal). Friends (3.1) name another player only by
-  a peer handle (`peer` in `online_history()` and `friend_list()`), never an id or a name. The client (3.3) lives in `src/onlineFriends.js` and `src/ui/onlineFriendsViews.js` (`TUNING.online.status`: `beatMs` 20 s, tied below half of the schema's `c_fresh` by a test; `pollMs` 10 s; `badgeMs` 30 s; `opponents` 5). The status beat (`Play.onlineStatusBeat()`, once per page; pagehide sends `online_beat(false)` through `onlineNet.beacon`, pageshow beats again) starts on link in the 🌐 window and after pairing, and stops with `online_beat(false)` on 🌐 off, ✕ and Leave after a race; it is quiet on stepping aside and on Clear / Load and is kept through the race hand-off. It never runs outside online mode: `tests/onlineFriends.test.js` checks that `tournamentPanel.js` is the only caller. The results panel offers Add as a friend only once the report is agreed. The 39 friend strings (`friendsButton` to `friendResultPair`) carry rows in `TRANSLATION_NOTES.md`. The server's event names on
+  a peer handle (`peer` in `online_history()` and `friend_list()`), never an id or a name. The client (3.3) lives in `src/onlineFriends.js` and `src/ui/onlineFriendsViews.js` (`TUNING.online.status`: `beatMs` 20 s, tied below half of the schema's `c_fresh` by a test; `pollMs` 10 s; `badgeMs` 30 s; `opponents` 5). The status beat (`Play.onlineStatusBeat()`, once per page; pagehide sends `online_beat(false)` through `onlineNet.beacon`, pageshow beats again) starts on link in the 🌐 window and after pairing, and stops with `online_beat(false)` on 🌐 off, ✕ and Leave after a race; it is quiet on stepping aside and on Sign out / Sign in and is kept through the race hand-off. It never runs outside online mode: `tests/onlineFriends.test.js` checks that `tournamentPanel.js` is the only caller. The results panel offers Add as a friend only once the report is agreed. The 39 friend strings (`friendsButton` to `friendResultPair`) carry rows in `TRANSLATION_NOTES.md`. The server's event names on
   `room:<code>` are hints: the transport confirms them with `room_state`, since a
   seated peer can broadcast those names too.
   The sign-in side (enter, claim, devices, pairing, leave) lives in
   `src/onlineAccount.js` (`tests/onlineAccount.test.js`); `Play.onlineAccount`
   builds it once, and `Play.onlineSessionHeld` / `Play.onlineLeave` ask and end it.
-  Clear and a Load of another player leave online play only on a device that holds
+  Sign out and a Sign in as another player leave online play only on a device that holds
   a session (no client load otherwise: `tests/onlineSignOut.test.js`). A newly
   claimed online name is stored the save panel's way only after the link succeeds.
   Invites (4.2, `src/onlineInvites.js`) show only in online mode, as the beat does. Every time comes
