@@ -19,6 +19,10 @@ const OTHER = 'O'.repeat(22);
 const GUEST = 'G'.repeat(22);
 const SAVED_3_NOV = Math.floor(Date.UTC(2026, 10, 3, 12) / 1000); // noon UTC: 3 Nov in every time zone the tests run in
 const tick = () => new Promise((r) => setTimeout(r, 5));
+// The dashboard's code is signed asynchronously: under a loaded full run one tick is not always enough.
+const codeReady = async () => {
+  for (let i = 0; i < 200 && !/^fp1\./.test(el('save-code').value); i++) await tick();
+};
 const empty = () => ({ id: null, name: '', top: [], exportedAt: null });
 
 /** localStorage that remembers which keys were written. */
@@ -109,6 +113,7 @@ test("signed in: the player's dashboard (name and best, the code with Copy, Prof
   const play = fakePlay({ save: { id: ME, name: 'Mike', top: [{ score: 41, toilet: false, level: 5 }], exportedAt: null } });
   open(play);
   await tick();
+  await codeReady();
   assert.equal(el('save-who').textContent, 'Mike');
   assert.ok(el('save-who-best').textContent.includes('best 41 (level 5)'), el('save-who-best').textContent);
   assert.match(el('save-code').value, /^fp1\./);
@@ -246,6 +251,7 @@ test("Sign out opens a confirm with the code, its own Copy and Clear's notes; Ca
   const before = play.save;
   open(play);
   await tick();
+  await codeReady();
   const dashboardCode = el('save-code').value;
   await el('save-clear-btn').click();
   await tick();
