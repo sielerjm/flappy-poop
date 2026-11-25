@@ -173,6 +173,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | aboutLink | About | 关于 |
 | testTitle | 🧪 TEST MODE | 🧪 测试模式 |
 | testStartLevel | Start at | 开始于 |
+| testPretendDate | Date | 日期 |
 | invincible | Invincible | 无敌 |
 | testExit | Exit test mode | 退出测试模式 |
 | aboutTitle | ABOUT | 关于 |

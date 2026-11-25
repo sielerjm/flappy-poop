@@ -24,6 +24,7 @@ import {
   levelProgress,
   withLevelPipes,
   utcDayKey,
+  isDayKey,
   dailySeed,
   dailyLevel,
   dailyRunStart,
@@ -400,7 +401,7 @@ export class Play extends Phaser.Scene {
     this.versusOn = Boolean(this.registry.get('versus'));
     // 📚 is remembered on the device and 👥 only in this tab, so another tab can leave both on here.
     this.reconcileSwitches();
-    // Test mode is session-only too (registry 'testMode', 'testStartLevel', 'testInvincible').
+    // Test mode is session-only too (registry 'testMode', 'testStartLevel', 'testInvincible', 'testPretendDay').
     // runIsTest latches per run: set in start() or when test mode turns on mid-run, and only
     // cleared by the next start(), so a run that ever had test tools can never be recorded.
     this.runIsTest = false;
@@ -2895,18 +2896,24 @@ export class Play extends Phaser.Scene {
     if (this.levelBreak) this.refreshLevelBanner();
   }
 
-  /** Test-mode knobs for Settings: the next run's start level (1..lastLevel) and Invincible. */
+  /**
+   * Test-mode knobs for Settings: the next run's start level (1..lastLevel), Invincible and the Pretend date
+   * (plan 17, 1.6: 'YYYY-MM-DD' or null for the real date; dailyDay reads it from the registry while test mode is on).
+   */
   testSettings() {
     const invincible = this.registry.get('testInvincible');
+    const pretendDay = this.registry.get('testPretendDay');
     return {
       startLevel: testRunStart(this.registry.get('testStartLevel') ?? 1, this.tune).level,
       invincible: typeof invincible === 'boolean' ? invincible : TEST_MODE.defaultInvincible,
+      pretendDay: isDayKey(pretendDay) ? pretendDay : null,
     };
   }
 
-  setTestSettings({ startLevel, invincible } = {}) {
+  setTestSettings({ startLevel, invincible, pretendDay } = {}) {
     if (startLevel !== undefined) this.registry.set('testStartLevel', testRunStart(startLevel, this.tune).level);
     if (invincible !== undefined) this.registry.set('testInvincible', Boolean(invincible));
+    if (pretendDay !== undefined) this.registry.set('testPretendDay', isDayKey(pretendDay) ? pretendDay : null);
     return this.testSettings();
   }
 

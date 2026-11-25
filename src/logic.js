@@ -2365,6 +2365,43 @@ export function utcDayKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
+/** True for a 'YYYY-MM-DD' string that names a real calendar day. */
+export function isDayKey(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && utcDayKey(d) === s;
+}
+
+/** `day` ('YYYY-MM-DD') moved by `step` whole days. */
+export function shiftDayKey(day, step) {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + step);
+  return utcDayKey(d);
+}
+
+/**
+ * The decorations' clock (plan 17, 1.6): the real time, or in test mode the Pretend date at the real
+ * time of day. `reg` is the game registry (anything with get), shared by every scene, so every scene
+ * reads the same day; 'testPretendDay' lives there for the session and counts only while 'testMode' is on.
+ * Only decorations read it in Stage 1: the Daily Dump's day, course, level and posts keep utcDayKey().
+ */
+export function dailyNow(reg, now = new Date()) {
+  const pretend = reg?.get?.('testMode') ? reg.get('testPretendDay') : null;
+  if (!isDayKey(pretend)) return now;
+  return new Date(now.getTime() + Date.parse(`${pretend}T00:00:00Z`) - Date.parse(`${utcDayKey(now)}T00:00:00Z`));
+}
+
+/** The day of dailyNow as 'YYYY-MM-DD'. */
+export function dailyDay(reg, now = new Date()) {
+  return utcDayKey(dailyNow(reg, now));
+}
+
+/** The Pretend date after a ◀ / ▶ step from the day shown: null (the real date again) when it lands on today. */
+export function nextPretendDay(reg, step, now = new Date()) {
+  const next = shiftDayKey(dailyDay(reg, now), step);
+  return next === utcDayKey(now) ? null : next;
+}
+
 /** Milliseconds from `date` to the next 00:00 UTC (the next Daily Dump). */
 export function msUntilUtcMidnight(date = new Date()) {
   const next = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
@@ -2544,28 +2581,37 @@ export function settingsLayout(width, height, t, { test = false } = {}) {
     const rows = { title: top + 70, sound: top + 210, haptics: top + 330, hint: top + 386, hand: top + 470, handHint: top + 526, splash: top + 620, splashHint: top + 676, reload: top + 770, about: top + 860, version: bottom - 60 };
     return { panel, close, rows, hand: handRow(rows.hand), test: null };
   }
+  // Plan 17, 1.6 added the Pretend date row under Start at; the rows above it close up so the panel stays 1240 px.
+  // Tappable rows keep 80 px; Start at and Pretend date are 90 apart so their ◀ / ▶ boxes do not touch.
   const rows = {
     title: top + 70,
-    sound: top + 155,
-    haptics: top + 240,
-    hint: top + 292,
-    hand: top + 360,
-    handHint: top + 412,
-    splash: top + 475,
-    splashHint: top + 525,
-    reload: top + 592,
-    about: top + 672,
-    testTitle: top + 762,
-    startLevel: top + 847,
-    invincible: top + 930,
-    powers: top + 1012,
-    exit: top + 1095,
-    version: bottom - 60,
+    sound: top + 150,
+    haptics: top + 230,
+    hint: top + 282,
+    hand: top + 340,
+    handHint: top + 388,
+    splash: top + 440,
+    splashHint: top + 486,
+    reload: top + 540,
+    about: top + 620,
+    testTitle: top + 702,
+    startLevel: top + 782,
+    pretendDate: top + 872,
+    invincible: top + 952,
+    powers: top + 1032,
+    exit: top + 1112,
+    version: bottom - 48,
   };
   const hit = Math.max(88, t.trayHitMin);
-  const arrow = (dx) => ({ x: cx + dx, y: rows.startLevel, width: hit, height: hit });
+  const arrow = (dx, y = rows.startLevel) => ({ x: cx + dx, y, width: hit, height: hit });
   const powers = TEST_POWERS.map((draw, i) => ({ id: draw, x: cx + (i - (TEST_POWERS.length - 1) / 2) * 96, y: rows.powers, width: hit, height: hit, icon: 72 }));
-  return { panel, close, rows, hand: handRow(rows.hand), test: { divider: top + 718, levelDown: arrow(-230), levelUp: arrow(230), powers } };
+  return {
+    panel,
+    close,
+    rows,
+    hand: handRow(rows.hand),
+    test: { divider: top + 662, levelDown: arrow(-230), levelUp: arrow(230), dayDown: arrow(-230, rows.pretendDate), dayUp: arrow(230, rows.pretendDate), powers },
+  };
 }
 
 // --- The debug / automation handle (globalThis.__flappy; src/main.js) ---
