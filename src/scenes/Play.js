@@ -547,6 +547,7 @@ export class Play extends Phaser.Scene {
       this.countdownText = this.add.text(b.x, b.y, '', { ...TEXT_STYLE, fontSize: `${T.advent.countdownPx}px`, strokeThickness: 8 }).setOrigin(0.5).setDepth(20);
     }
     this.snowfall = null;
+    this.countdownImage = null; // the Bowelidays image (26–31 Dec), made once its file has landed
     this.readyUiShown = true; // setReadyUiVisible's last word: the switches rebuilt by refreshReadySwitches follow it
     this.toiletToggle = this.versusToggle = this.educationToggle = this.eduDueText = this.eduStreakText = null; // a restart destroyed the last ones
     this.buildReadySwitches();
@@ -4151,6 +4152,7 @@ export class Play extends Phaser.Scene {
   reapplySkin() {
     if (this.poop?.active && this.poopStockKey) this.setPoopTexture(this.poopStockKey);
     for (const item of this.items?.getChildren() ?? []) this.skinItem(item);
+    this.refreshSeasonHome(); // the Bowelidays image, once its file is in
     for (const pipe of this.pipes?.getChildren() ?? []) {
       if (pipe.originY !== 0) continue; // a bottom pipe stands up from its gap (origin at its top)
       if (this.skin.snowCap) this.addSnowCap(pipe);
@@ -4165,7 +4167,13 @@ export class Play extends Phaser.Scene {
   refreshSeasonHome() {
     const season = !this.match && adventSeason(dailyDay(this.registry), T);
     const line = season ? countdownLine(dailyDay(this.registry), this.locale, T) : null;
-    this.countdownText?.setText(line?.text ?? '').setVisible(Boolean(line) && this.readyUiShown);
+    this.countdownText?.setText(line?.text ?? '').setVisible(Boolean(line?.text) && this.readyUiShown);
+    const img = line?.image && this.textures.exists(line.image) ? line.image : null; // until the flight lands, nothing
+    if (img && !this.countdownImage?.active) {
+      const b = this.readyBoxes.bowelidays;
+      this.countdownImage = this.add.image(b.x, b.y, img).setDisplaySize(b.width, b.height).setDepth(20);
+    }
+    this.countdownImage?.setVisible(Boolean(img) && this.readyUiShown);
     if (season && !this.snowfall) this.snowfall = createSnowfall(this, { x: 0, y: 0, width: this.fieldW, height: GAME_HEIGHT }, T.advent.snow);
     if (!season && this.snowfall) {
       this.snowfall.destroy();

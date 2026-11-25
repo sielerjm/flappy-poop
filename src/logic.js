@@ -1873,7 +1873,10 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   // December's countdown line (plan 17, 1.12): in the gap between the title's ink (to y 414) and the bubble's top
   // at its highest (481.5), as Gate A's sheet 7 placed it. Drawn only, never hit.
   const countdown = { id: 'countdown', x: cx, y: 448, width: 460, height: 56 };
-  return { title, poop, toilet, howto, daily, profile, countdown, ...switches };
+  // The Bowelidays image (plan 17, 1.14; D16 (b)): above the title, under the top row's halos. Drawn only.
+  const bw = width * t.advent.bowelidays.widthFrac;
+  const bowelidays = { id: 'bowelidays', x: cx, y: t.advent.bowelidays.y, width: bw, height: bw * t.advent.bowelidays.aspect };
+  return { title, poop, toilet, howto, daily, profile, countdown, bowelidays, ...switches };
 }
 
 function inBox(x, y, box) {
@@ -2437,12 +2440,13 @@ export function twinKey(stock, skin, fartFrame = 0, has = () => true) {
 
 /**
  * December's line under the title (plan 17, 1.12): "N sleeps till Christmas" on 1–24 Dec, "Merry Christmas!"
- * on the 25th, then nothing (1.14 brings the Bowelidays image for 26–31 Dec). { text } or null.
+ * on the 25th, and on 26–31 Dec the Happy Bowelidays! image above the title (1.14; English for every player, since
+ * the pun has no Chinese). { text }, { image } (a texture key) or null.
  */
 export function countdownLine(day, locale, tune) {
   if (!adventSeason(day, tune)) return null;
   const date = Number(day.slice(8, 10));
-  if (date > 25) return null;
+  if (date > 25) return { image: 'bowelidays' };
   const sleeps = 25 - date;
   if (sleeps === 0) return { text: t(locale, 'countdownChristmas') };
   return { text: sleeps === 1 ? t(locale, 'countdownSleep') : t(locale, 'countdownSleeps').replace('{n}', String(sleeps)) };

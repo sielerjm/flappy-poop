@@ -260,3 +260,18 @@ test("December's countdown box (plan 17, 1.12) sits in the gap: under the title'
   assert.ok(T.advent.countdownPx <= c.height, 'the line\'s font fits its box');
   assert.equal(readyHit(c.x, c.y, layout), null, 'drawn only: a tap there is the plain screen');
 });
+
+test('the Bowelidays image box (plan 17, 1.14; D16 (b)) sits above the title and under the top row and its halos', async () => {
+  const { readFileSync } = await import('node:fs');
+  const b = layout.bowelidays;
+  const png = readFileSync(new URL('../assets/advent/bowelidays.png', import.meta.url));
+  const [w, h] = [png.readUInt32BE(16), png.readUInt32BE(20)];
+  assert.ok(Math.abs(T.advent.bowelidays.aspect - h / w) < 1e-9, `the aspect is the PNG's (${w} x ${h})`);
+  const haloR = layout.daily.width / 2 + T.readyPromptGlowPx;
+  const rowBottom = Math.max(layout.daily.y, layout.howto.y) + haloR;
+  const titleInkTop = layout.title.y - 35; // Gate A sheet 7: the title's ink from y 345
+  assert.ok(b.y - b.height / 2 > rowBottom, `top ${b.y - b.height / 2} clears the 🎅 / ? halos (${rowBottom})`);
+  assert.ok(b.y + b.height / 2 < titleInkTop, `bottom ${b.y + b.height / 2} clears the title's ink (${titleInkTop})`);
+  assert.ok(Math.abs(b.width - GAME_WIDTH * 0.6) < 1e-9 && b.x === GAME_WIDTH / 2, '60 % of the width, centred');
+  assert.equal(readyHit(b.x, b.y, layout), null, 'drawn only');
+});

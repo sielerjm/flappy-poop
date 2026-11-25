@@ -44,5 +44,6 @@ export const ADVENT_ART = {
     gingerbread: 'assets/advent/gingerbread.png',
     'bacteria-santa': 'assets/advent/bacteria-santa.png',
     'pipe-snow': 'assets/advent/pipe-snow.png',
+    bowelidays: 'assets/advent/bowelidays.png', // 26–31 Dec over the title (countdownLine's image case)
   },
 };

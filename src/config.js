@@ -537,6 +537,9 @@ export const TUNING = {
   advent: {
     seasonMonth: 12, // the season's month (1–12): adventSeason holds from day 1 of it
     seasonLastDay: 31, // the season's last day of that month (inclusive)
+    // "Happy Bowelidays!" (26–31 Dec, English for everyone; D16 (b)): its width as a share of the field, its centre's y
+    // (between the ceiling villi's tips, y 234, and the title's ink, y 345), and the PNG's height / width (947 x 170).
+    bowelidays: { widthFrac: 0.6, y: 290, aspect: 170 / 947 },
     countdownPx: 30, // px font of the countdown line under the title (1–25 Dec; readyLayout's countdown box)
     // Home snowfall (src/ui/snowfall.js): white dots drifting down the ready screen; none under reduced motion (D6).
     snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9 },
