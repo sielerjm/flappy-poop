@@ -765,9 +765,10 @@ export class Play extends Phaser.Scene {
     });
     // Over's Play again: a one-shot registry flag (not restart data, which Phaser would keep for
     // every later restart), cleared here before the run starts.
-    if (this.registry.get('playAgain')) {
+    const again = this.registry.get('playAgain');
+    if (again) {
       this.registry.set('playAgain', false);
-      if (!this.match) this.launch({ solo: true });
+      this.startAgain(again);
     }
     this.openPendingInvite(); // an invite link (plan 28, 2.4)
     this.openPendingJoin(); // a race's share link (plan 39, 4.3)
@@ -865,6 +866,19 @@ export class Play extends Phaser.Scene {
     this.dailyNext = { day: d, level: dailyLevel(d, T) };
     this.launch({ daily: true });
     return this.launching;
+  }
+
+  /**
+   * Over's Play again, read in create() (the registry's one-shot `playAgain`): a new one-player run; or,
+   * for a Daily Dump that crossed no pipe ('daily', plan 47, call H), today's Daily Dump again while the
+   * popup would offer it (a username, today not used: dailyPlayedToday), else the ready screen stays.
+   * After midnight UTC that is the new day's course. Never in a match. Returns whether a run starts.
+   */
+  startAgain(kind) {
+    if (this.match) return false;
+    if (kind === 'daily') return Boolean(this.save?.name && !this.dailyPlayedToday() && this.startDaily());
+    this.launch({ solo: true });
+    return true;
   }
 
   /**
@@ -5746,7 +5760,8 @@ export class Play extends Phaser.Scene {
       const badges = this.runIsTest ? [] : [...(this.runBadges ?? [])];
       const education = this.runIsEducation ? { ...this.runQuiz } : null; // the 📚 tally (plan 21)
       // Kept: the bonus quiz draws the panel again with the run's new numbers (refreshOverEducation).
-      this.overData = { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0, education };
+      // notCounted: the run crossed no pipe (endRun, plan 47); Over says so (a Daily Dump: the day is still open).
+      this.overData = { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0, education, notCounted: Boolean(this.runNotCounted) };
       this.scene.launch('Over', this.overData);
     });
   }

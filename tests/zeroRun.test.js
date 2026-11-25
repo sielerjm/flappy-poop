@@ -197,3 +197,23 @@ test('finishAbandonedDaily (call G): a record cut off at 0 pipes is released, no
   assert.equal(cut.dailyQueue.load().length, 1, 'posted');
   assert.equal(cut.runQueue.load().filter((e) => e.row?.stub).length, 1, 'with a stub row (plan 30)');
 });
+
+test('Play.startAgain (call H): Over\'s Play again after a Daily Dump that crossed no pipe starts today\'s Daily Dump while the day is open; a plain Play again starts a run; never in a match', () => {
+  const launched = [];
+  const scene = (fields = {}) => overScene({ state: 'ready', save: { id: P, name: 'Tester', top: [] }, launch: (o) => launched.push(o), startDaily: () => (launched.push('daily'), true), ...fields }).scene;
+  assert.equal(scene().startAgain('daily'), true, 'the day is open: today\'s Daily Dump');
+  assert.deepEqual(launched.splice(0), ['daily']);
+  const spent = scene();
+  spent.dailyStore.save({ day: utcDayKey(), playerId: P, level: 1, score: 3, pipes: 2, collected: {}, final: true });
+  assert.equal(spent.startAgain('daily'), false, 'used today (another device, another tab): the ready screen stays');
+  const free = scene();
+  free.dailyStore.save({ day: utcDayKey(), playerId: P, level: 1, score: 0, pipes: 0, collected: {}, final: false });
+  assert.equal(free.startAgain('daily'), true, 'a record cut off at 0 pipes is no spent day');
+  assert.equal(scene({ save: { id: P, top: [] } }).startAgain('daily'), false, 'no username: the popup would ask for one first');
+  assert.deepEqual(launched.splice(0), ['daily'], 'only the open days started');
+  assert.equal(scene().startAgain(true), true);
+  assert.deepEqual(launched.splice(0), [{ solo: true }], 'a plain Play again: a one-player run, as before');
+  assert.equal(scene({ match: {} }).startAgain('daily'), false);
+  assert.equal(scene({ match: {} }).startAgain(true), false);
+  assert.deepEqual(launched, [], 'never in a match');
+});

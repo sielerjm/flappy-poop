@@ -60,6 +60,13 @@ export class Over extends Phaser.Scene {
     this.daily = data?.daily?.day ? data.daily : null;
     const daily = this.daily;
     const linked = Boolean(daily && !daily.practice);
+    // A run that crossed no pipe is not counted (Play.endRun, plan 47): a quiet note says so. A Daily
+    // Dump's day is then still open (calls D and H, Michael's pick at Preview A): Play again starts
+    // today's Daily Dump again, the rank cell stays blank (nothing was posted) and the note takes the
+    // countdown's place.
+    const notCounted = Boolean(data?.notCounted) && !testRun && !education;
+    const freeDaily = Boolean(daily && notCounted);
+    this.freeDaily = freeDaily;
     // The game loop's time, not this.time.now: a relaunched scene's clock still holds the time it
     // last ran (Phaser syncs it on boot only), which made the retry lockout a no-op.
     this.openedAt = this.game.loop.time;
@@ -73,7 +80,7 @@ export class Over extends Phaser.Scene {
     const cx = W / 2;
     // A normal or test run offers Play again under Share | Home: the panel sits over.againLiftPx higher
     // and grows downward, so its bottom stays clear of the ⏸ button above the cog.
-    const again = !this.daily;
+    const again = !this.daily || freeDaily;
     const cy = GAME_HEIGHT / 2 - (again ? T.over.againLiftPx : 0);
     // The top of the input stack: Phaser's top-only input stops at the first scene with an interactive
     // object under the pointer, and this panel's taps are scene-level events. Without this zone every
@@ -181,7 +188,8 @@ export class Over extends Phaser.Scene {
     if (daily) {
       // No coins in a Daily Dump: the cell holds the day's rank (loadDailyRank fills it in), and the
       // cell is a link to the 🌞 board like the score (hitAt 'rank', over.rankBox).
-      this.rankText = inBand(this.add.text(cx + T.over.rankBox.dx, cy + T.over.rankBox.dy, '', { ...style, fontSize: '30px', color: '#ffd700' }).setOrigin(0.5));
+      // A Daily Dump that crossed no pipe posted nothing: its cell stays blank.
+      this.rankText = freeDaily ? null : inBand(this.add.text(cx + T.over.rankBox.dx, cy + T.over.rankBox.dy, '', { ...style, fontSize: '30px', color: '#ffd700' }).setOrigin(0.5));
       if (linked) this.setRank(t(locale, 'dailyRankLoading'));
     }
     if (data?.personalBest && !testRun && !daily) {
@@ -209,6 +217,12 @@ export class Over extends Phaser.Scene {
       this.eduNote = line(this.add.text(cx, cy + eduLines.note, t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5));
     } else if (testRun) {
       line(this.add.text(cx, cy + 150, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5));
+    } else if (notCounted) {
+      // A run that crossed no pipe (plan 47, call C): a quiet line in the personal best's place; a Daily
+      // Dump's takes the countdown's, since the day is still open.
+      // Hung from its top just under the pipes | coins row (rankBox.dy), so a second line grows toward
+      // the buttons, never over the cells: two lines fit above them.
+      line(this.add.text(cx, cy + 130, t(locale, freeDaily ? 'dailyNotCounted' : 'runNotCounted'), { ...style, fontSize: '26px', color: '#c9b8dc', fontStyle: 'normal', align: 'center', wordWrap: { width: 500, useAdvancedWrap: true } }).setOrigin(0.5, 0));
     } else if (daily) {
       // The countdown to the next course, on the wall clock (this scene's clock is stale after a relaunch).
       this.countdown = line(this.add.text(cx, cy + 150, '', { ...style, fontSize: '28px', color: '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5));
@@ -226,7 +240,7 @@ export class Over extends Phaser.Scene {
     this.sharePressed = null; // the id of the pointer that pressed Share, until it is released
     this.cardData = { headline, won, scoreLine, collected, pipes, locale };
     if (this.shareButton) this.makeShareCard(this.cardData);
-    if (linked) this.loadDailyRank(play);
+    if (linked && !freeDaily) this.loadDailyRank(play);
 
     // The lines a short band leaves below its bottom (a won education run's badge line and note): one
     // ring stop over them, so a controller scrolls them into view too, as the wheel and a drag do (the
@@ -479,7 +493,8 @@ export class Over extends Phaser.Scene {
     const play = this.scene.get('Play');
     if (chromeIntent(play.chromeArgs('tap')).do !== 'retry') return;
     if (!canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
-    this.registry.set('playAgain', true);
+    // A Daily Dump that crossed no pipe goes again as today's Daily Dump (Play.startAgain), not a plain run.
+    this.registry.set('playAgain', this.freeDaily ? 'daily' : true);
     this.scene.stop('Over');
     play.scene.restart();
   }

@@ -481,6 +481,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | shareButton | Share | 分享 |
 | shareCardPlay | Play: {url} | 来玩：{url} |
 | testRunNotSaved | Test run — score not saved | 测试局——分数未保存 |
+| runNotCounted | No pipe crossed: this run does not count | 一根管道都没穿过：本局不计入 |
 | playAgain | Play again | 再玩一次 |
 | newPersonalBest | 🎉 New personal best! | 🎉 新的个人最佳！ |
 | scoresEmpty | No scores yet | 暂无分数 |
@@ -580,6 +581,7 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | dailyRankNameTaken | Name taken | 名字已被占用 |
 | dailyRankRejected | Not saved | 未保存 |
 | dailyRankUnavailable | Rank unavailable | 暂无排名 |
+| dailyNotCounted | No pipe crossed: not counted. / You can start it again today. (two lines; on Over after a Daily Dump that crossed no pipe, in the countdown's place: the day is still open, plan 48) | 一根管道都没穿过：本局不计入 / 今天还可以重新开始 |
 | dailyBoardTitle | DAILY DUMP | 每日一拉 |
 | dailyBoardEmpty | No one has played today's Daily Dump yet | 今天还没有人玩每日一拉 |
 | dailyBoardJoin | Play today's Daily Dump from the 🌞 on the home screen | 在首页点🌞玩今天的每日一拉 |
