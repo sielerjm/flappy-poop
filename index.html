@@ -5,15 +5,15 @@
   <!-- sw_stamp: the import map, written by npm run push (tools/sw_stamp.mjs); every module at its content hash, so a cached copy is never another build's -->
   <script type="importmap">
   {"imports": {
-    "./src/achievements.js": "./src/achievements.js?h=281b9a0411",
-    "./src/changelog.js": "./src/changelog.js?h=6f731dd9bf",
+    "./src/achievements.js": "./src/achievements.js?h=a598390119",
+    "./src/changelog.js": "./src/changelog.js?h=6aa822ca68",
     "./src/config.js": "./src/config.js?h=9fda709850",
     "./src/education.js": "./src/education.js?h=ef29b1fb5e",
     "./src/fsrs.js": "./src/fsrs.js?h=d8492a1fbe",
-    "./src/i18n.js": "./src/i18n.js?h=8faefaf6d4",
+    "./src/i18n.js": "./src/i18n.js?h=b3904f8a9b",
     "./src/input/pad.js": "./src/input/pad.js?h=e5def632b0",
-    "./src/leaderboard.js": "./src/leaderboard.js?h=7a985b47fd",
-    "./src/logic.js": "./src/logic.js?h=919531998b",
+    "./src/leaderboard.js": "./src/leaderboard.js?h=f4d895fd4e",
+    "./src/logic.js": "./src/logic.js?h=8cb721c97e",
     "./src/main.js": "./src/main.js?h=08aad77068",
     "./src/online.js": "./src/online.js?h=1acfbb4bdf",
     "./src/onlineAccount.js": "./src/onlineAccount.js?h=08f891661f",
@@ -24,7 +24,7 @@
     "./src/onlineRace.js": "./src/onlineRace.js?h=c78f078810",
     "./src/phaserReady.js": "./src/phaserReady.js?h=d559e89fb3",
     "./src/questionAudits.js": "./src/questionAudits.js?h=a69641a809",
-    "./src/questions.js": "./src/questions.js?h=477a23419e",
+    "./src/questions.js": "./src/questions.js?h=ff0c236e3a",
     "./src/research.js": "./src/research.js?h=e497843352",
     "./src/richText.js": "./src/richText.js?h=efde72973e",
     "./src/runStats.js": "./src/runStats.js?h=ef858080aa",
@@ -38,8 +38,8 @@
     "./src/scenes/Language.js": "./src/scenes/Language.js?h=631494ff46",
     "./src/scenes/Leaderboard.js": "./src/scenes/Leaderboard.js?h=0eea7b6cdf",
     "./src/scenes/OnlineRace.js": "./src/scenes/OnlineRace.js?h=8c4111e4a2",
-    "./src/scenes/Over.js": "./src/scenes/Over.js?h=bdc9d8ddd5",
-    "./src/scenes/Play.js": "./src/scenes/Play.js?h=a8b358fb7d",
+    "./src/scenes/Over.js": "./src/scenes/Over.js?h=f53574b017",
+    "./src/scenes/Play.js": "./src/scenes/Play.js?h=0fb1c4b3ac",
     "./src/scenes/Quiz.js": "./src/scenes/Quiz.js?h=7fdea351f0",
     "./src/scenes/Settings.js": "./src/scenes/Settings.js?h=2c33787d60",
     "./src/scenes/Stats.js": "./src/scenes/Stats.js?h=e1f0ad05a2",
@@ -94,10 +94,10 @@
   <!-- The module graph is four levels deep, and a browser only learns a level once the one above has arrived: these start the big first-run modules at once (plan 35, 2.4). The hrefs are exactly the URLs the imports use, or the preload is wasted: bare in the tree, and `npm run push` writes the import map's ?h= into them and into the main tag (tools/sw_stamp.mjs, plan 35, 3.1). -->
   <link rel="modulepreload" href="src/main.js?h=08aad77068">
   <link rel="modulepreload" href="src/config.js?h=9fda709850">
-  <link rel="modulepreload" href="src/logic.js?h=919531998b">
-  <link rel="modulepreload" href="src/i18n.js?h=8faefaf6d4">
+  <link rel="modulepreload" href="src/logic.js?h=8cb721c97e">
+  <link rel="modulepreload" href="src/i18n.js?h=b3904f8a9b">
   <link rel="modulepreload" href="src/scenes/Boot.js?h=7b5151e34c">
-  <link rel="modulepreload" href="src/scenes/Play.js?h=a8b358fb7d">
+  <link rel="modulepreload" href="src/scenes/Play.js?h=0fb1c4b3ac">
   <!-- ?v= on the icons: browsers cache favicons and manifest icons by URL for a long time; bump it when the icon art changes. -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=2">
