@@ -3765,7 +3765,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         await tapAt(closeAt.x, closeAt.y);
         await waitFor(`!__flappy.scene.isActive('Daily')`, 20);
         const u2 = await popup();
-        ok(u0.halo && u1.open && u1.label === (await tx('dailyCreateUser')) && u1.note === (await tx('dailyNeedName')) && !u2.open && u2.state === 'ready', `unplayed, the 🌞 glows; a real click opens the popup ("${u1.label}" with no username) and ✕ goes back to the home screen (${u2.state})`);
+        ok(u0.halo && u1.open && u1.label === (await tx('dailyCreateUser')) && u1.note === (await evaluate(`import('./src/i18n.js').then((m) => m.fillDaily(m.t('en', 'dailyNeedName'), ${D}.glyph))`)) && !u2.open && u2.state === 'ready', `unplayed, the 🌞 glows; a real click opens the popup ("${u1.label}" with no username) and ✕ goes back to the home screen (${u2.state})`);
         // Create user: the save panel opens over the popup; a saved name turns the button into Play.
         await clickSun();
         await clickButton();
