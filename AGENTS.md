@@ -491,7 +491,9 @@ goes to the network. About 4.7 MB per build in Cache Storage. Its page side is `
   their next launch even if the old fetch handler is broken. It never claims a page, so there is no reload
   loop. Players can add `?nosw` themselves.
 - **Known behaviors.** Between pushes the committed `sw.js` and `index.html` are unstamped or carry the
-  last push's stamp; harmless, since `tools/serve.py` ignores queries and no worker runs on a local host.
+  last push's stamp; harmless locally, since `tools/serve.py` ignores queries and no worker runs on a local
+  host, but not on a deploy (new module bytes behind old `?h=` URLs), so `tools/git-hooks/pre-push`
+  refuses a plain push of main with a stale stamp (see "Before a push").
   Chrome holds an update check started offline for about a minute, and jobs behind it wait; harmless, since
   an online launch runs the newest build from the network. Art changed under the same name still needs a
   `VERSION` bump (art URLs carry `?v=`, not a hash). A browser without import maps (Safari before 16.4)
@@ -3722,7 +3724,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   swStamp.test.js           tools/sw_stamp.mjs on a temp copy of the tree: byte-identical
                             output for the same tree, one changed module gives a new BUILD and
                             only its own ?h=, a VERSION bump new ?v= URLs, every module in the
-                            map and FILES, every asset the code names listed with its query
+                            map and FILES, every asset the code names listed with its query,
+                            an untracked stamped file refused, --check-if-stamped (AUD-155, 156)
   swClient.test.js          src/swClient.js and logic.js's worker parts: localHost, swMode (?sw,
                             ?nosw), workerScope, removeWorker (only this scope's worker, only
                             flappy-poop-* caches), registerWorker (once per page, one update()),
@@ -4009,9 +4012,18 @@ tools/
                             before every script) and the ?h= on the main tag and the modulepreload
                             hrefs; sw.js's BUILD (<VERSION>-<10 hex>) and FILES (URL as the page
                             asks for it, SHA-256). checkStamp refuses a BUILD for another VERSION,
-                            a module or asset the code names but FILES lacks, and a stale hash.
+                            a module or asset the code names but FILES lacks, a stale hash, and a
+                            stamped file git does not track (untrackedPaths: push commits tracked
+                            files only, so it would 404 at install; judged only for a root that is
+                            the top of a git work tree; AUD-155). isStamped tells a stamped tree.
                             An sw.js holding FLAPPY_SW_OFF is left alone. node tools/sw_stamp.mjs
-                            [--check] [--root=DIR]. tests/swStamp.test.js.
+                            [--check] [--check-if-stamped] [--root=DIR] (the second passes an unstamped
+                            tree, and holds a stamped one to --check). tests/swStamp.test.js.
+  git-hooks/pre-push        Tracked, installed by hand: cp tools/git-hooks/pre-push
+                            .git/hooks/pre-push (like the local pre-commit). Refuses a plain
+                            git push of main when the stamp is stale (--check-if-stamped); npm run
+                            push restamps first, so it passes; an unstamped tree passes;
+                            --no-verify bypasses (AUD-156).
   sw-off.js                 The kill switch: copy it over sw.js and push (see "Service worker").
                             Deletes flappy-poop-* caches, unregisters itself, reloads its pages.
   sw_check.mjs              node tools/sw_check.mjs: the worker in a real browser, 50 checks. It
@@ -4429,7 +4441,9 @@ Before a push (the 2026-11-15-c audit's open item; `npm run push` does the stamp
   IndexedDB or Cache Storage name)? Then write down what a client on the old build does with the new
   data, and what the new build does with the old, before you push. Players keep both for months.
 - The service worker is stamped by the push itself (`tools/sw_stamp.mjs`); never edit `BUILD`,
-  `FILES` or the import map by hand. A push that refuses says which file is missing or stale.
+  `FILES` or the import map by hand. A push that refuses says which file is missing, stale or untracked.
+- A plain `git push` of main with a stale stamp is refused by `tools/git-hooks/pre-push` once you have
+  copied it to `.git/hooks/pre-push`; use `npm run push`, which restamps first. `--no-verify` bypasses it.
 - To pull the worker from every player: copy `tools/sw-off.js` over `sw.js` and push. To bring it
   back, restore `sw.js` from git and push.
 - Art or a sound changed under an existing name needs a `VERSION` bump (their URLs carry `?v=`, not
