@@ -31,6 +31,7 @@ import {
   adventSeason,
   seasonalSkin,
   twinKey,
+  countdownLine,
   pickSanta,
   supportedSantas,
   dailySeed,
@@ -140,6 +141,7 @@ import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
 import { activeOverlays, OVERLAY_SCENES } from '../ui/overlayStack.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
+import { createSnowfall } from '../ui/snowfall.js';
 import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
@@ -539,9 +541,16 @@ export class Play extends Phaser.Scene {
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: `${T.readyTitlePx}px` })
       .setOrigin(0.5)
       .setDepth(20);
+    // December (plan 17, 1.12): the countdown line under the title and the home snowfall, with the ready UI.
+    {
+      const b = this.readyBoxes.countdown;
+      this.countdownText = this.add.text(b.x, b.y, '', { ...TEXT_STYLE, fontSize: `${T.advent.countdownPx}px`, strokeThickness: 8 }).setOrigin(0.5).setDepth(20);
+    }
+    this.snowfall = null;
     this.readyUiShown = true; // setReadyUiVisible's last word: the switches rebuilt by refreshReadySwitches follow it
     this.toiletToggle = this.versusToggle = this.educationToggle = this.eduDueText = this.eduStreakText = null; // a restart destroyed the last ones
     this.buildReadySwitches();
+    this.refreshSeasonHome();
     // "?" in the top-right corner opens How to play. It pulses under a soft white
     // halo until the player acknowledges this build (opens it, or finishes a run).
     {
@@ -942,6 +951,7 @@ export class Play extends Phaser.Scene {
   setReadyUiVisible(visible) {
     this.readyUiShown = visible;
     this.readyTitle.setVisible(visible);
+    this.refreshSeasonHome();
     this.toiletToggle.setVisible(visible);
     this.versusToggle?.setVisible(visible);
     this.educationToggle?.setVisible(visible);
@@ -2998,6 +3008,7 @@ export class Play extends Phaser.Scene {
     this.ensureFartClock();
     this.loadLazyAudio(); // the twins, if the season just began; nothing to do otherwise
     this.reapplySkin();
+    this.refreshSeasonHome();
     if (!this.match) this.pickVisitSanta();
     if (this.dailySun?.active) this.dailySun.setText(this.dailyGlyph());
   }
@@ -3040,6 +3051,7 @@ export class Play extends Phaser.Scene {
     if (!isLocale(next)) return;
     this.locale = next;
     this.readyTitle?.setText(t(next, 'readyTitle'));
+    this.refreshSeasonHome();
     this.refreshProfile(); // loadUserButton is localised too
     const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
     this.pauseText?.setText(pauseTitle);
@@ -4144,6 +4156,22 @@ export class Play extends Phaser.Scene {
       if (this.skin.snowCap) this.addSnowCap(pipe);
       else pipe.getData('snow')?.destroy();
     }
+  }
+
+  /**
+   * December's home (plan 17, 1.12): the countdown line (countdownLine) and the snowfall, shown with the ready UI
+   * and only in season; a match's halves show neither (the Versus scene draws their join screen).
+   */
+  refreshSeasonHome() {
+    const season = !this.match && adventSeason(dailyDay(this.registry), T);
+    const line = season ? countdownLine(dailyDay(this.registry), this.locale, T) : null;
+    this.countdownText?.setText(line?.text ?? '').setVisible(Boolean(line) && this.readyUiShown);
+    if (season && !this.snowfall) this.snowfall = createSnowfall(this, { x: 0, y: 0, width: this.fieldW, height: GAME_HEIGHT }, T.advent.snow);
+    if (!season && this.snowfall) {
+      this.snowfall.destroy();
+      this.snowfall = null;
+    }
+    this.snowfall?.setVisible(this.readyUiShown);
   }
 
   /** A world pickup's texture (plan 17, 1.11; D2): its December twin once loaded, else the stock one. The kind stays the item's data. */

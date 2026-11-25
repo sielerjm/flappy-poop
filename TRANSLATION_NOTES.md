@@ -133,6 +133,9 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | Key | English | Simplified Chinese |
 |---|---|---|
 | readyTitle | FLAPPY POOP | FLAPPY POOP |
+| countdownSleeps | {n} sleeps till Christmas | 离圣诞节还有{n}晚 |
+| countdownSleep | 1 sleep till Christmas | 离圣诞节还有1晚 |
+| countdownChristmas | Merry Christmas! | 圣诞快乐！ |
 | howToPlay | How to play | 玩法说明 |
 | pauseTitle | PAUSED | 已暂停 |
 | pauseHint | tap anywhere to resume game | 点击任意处继续游戏 |

@@ -537,6 +537,9 @@ export const TUNING = {
   advent: {
     seasonMonth: 12, // the season's month (1–12): adventSeason holds from day 1 of it
     seasonLastDay: 31, // the season's last day of that month (inclusive)
+    countdownPx: 30, // px font of the countdown line under the title (1–25 Dec; readyLayout's countdown box)
+    // Home snowfall (src/ui/snowfall.js): white dots drifting down the ready screen; none under reduced motion (D6).
+    snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9 },
     snowCap: { ox: -6.5, oy: -14.5 }, // px from a bottom pipe's cap top-left to the snow layer's top-left (process_art's --anchor report)
     // The 🎅 that stands in for the 🌞 all December, a new one each time the home screen shows (pickSanta):
     // Santa, Mrs. Claus and Mx Claus in the five skin tones and plain. The first is the fallback; variants a

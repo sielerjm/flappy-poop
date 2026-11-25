@@ -1870,7 +1870,10 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   // The user button, its bottom at 1111: above the ground strip (1152) and the tray band (1168).
   // It does not move when the block above shifts.
   const profile = { id: 'profile', x: cx, y: 1111 - boxH / 2, width: 360, height: boxH };
-  return { title, poop, toilet, howto, daily, profile, ...switches };
+  // December's countdown line (plan 17, 1.12): in the gap between the title's ink (to y 414) and the bubble's top
+  // at its highest (481.5), as Gate A's sheet 7 placed it. Drawn only, never hit.
+  const countdown = { id: 'countdown', x: cx, y: 448, width: 460, height: 56 };
+  return { title, poop, toilet, howto, daily, profile, countdown, ...switches };
 }
 
 function inBox(x, y, box) {
@@ -2430,6 +2433,19 @@ export function twinKey(stock, skin, fartFrame = 0, has = () => true) {
   const frames = skin.fartFrames;
   const twin = stock === 'poop-fart' && frames.length ? frames[fartFrame % frames.length] : skin.twins[stock];
   return twin && has(twin) ? twin : stock;
+}
+
+/**
+ * December's line under the title (plan 17, 1.12): "N sleeps till Christmas" on 1–24 Dec, "Merry Christmas!"
+ * on the 25th, then nothing (1.14 brings the Bowelidays image for 26–31 Dec). { text } or null.
+ */
+export function countdownLine(day, locale, tune) {
+  if (!adventSeason(day, tune)) return null;
+  const date = Number(day.slice(8, 10));
+  if (date > 25) return null;
+  const sleeps = 25 - date;
+  if (sleeps === 0) return { text: t(locale, 'countdownChristmas') };
+  return { text: sleeps === 1 ? t(locale, 'countdownSleep') : t(locale, 'countdownSleeps').replace('{n}', String(sleeps)) };
 }
 
 /** The Daily Dump's glyph on `day`: this visit's 🎅 in the season (the first variant if none is picked yet), else the 🌞. */

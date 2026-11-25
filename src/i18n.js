@@ -9,6 +9,9 @@ export const LOCALES = ['en', 'zh-Hans'];
 const STRINGS = {
   en: {
     readyTitle: 'FLAPPY POOP',
+    countdownSleeps: '{n} sleeps till Christmas',
+    countdownSleep: '1 sleep till Christmas',
+    countdownChristmas: 'Merry Christmas!',
     howToPlay: 'How to play',
     pauseTitle: 'PAUSED',
     pauseHint: 'tap anywhere to resume game',
@@ -826,6 +829,9 @@ Inspired by Flappy Bird`,
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
+    countdownSleeps: '离圣诞节还有{n}晚',
+    countdownSleep: '离圣诞节还有1晚',
+    countdownChristmas: '圣诞快乐！',
     howToPlay: '玩法说明',
     pauseTitle: '已暂停',
     pauseHint: '点击任意处继续游戏',

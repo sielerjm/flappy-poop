@@ -249,3 +249,14 @@ test("December's 🎅 stands in the 🌞's box (plan 17, 1.9): the layout reads 
   for (const g of glyphs) assert.equal([...seg.segment(g)].length, 1, `${g} is one grapheme, as the 🌞 is, so it fits the same 52 px round button`);
   assert.deepEqual(glyphs.slice(1), T.advent.santas, 'in season the glyph is the visit\'s variant, unchanged');
 });
+
+test("December's countdown box (plan 17, 1.12) sits in the gap: under the title's ink, over the bubble at its highest", () => {
+  const c = layout.countdown;
+  const titleInkBottom = layout.title.y + 34; // the 72 px title's ink is 69 px tall around its centre (Gate A sheet 7: y 345 to 414)
+  const bubbleTop = layout.poop.y + layout.poop.bubble.top; // 481.5; the poop only bobs downward from here
+  assert.ok(c.y - c.height / 2 >= titleInkBottom, `top ${c.y - c.height / 2} clears the title's ink (${titleInkBottom})`);
+  assert.ok(c.y + c.height / 2 <= bubbleTop, `bottom ${c.y + c.height / 2} clears the bubble (${bubbleTop})`);
+  assert.equal(c.x, GAME_WIDTH / 2);
+  assert.ok(T.advent.countdownPx <= c.height, 'the line\'s font fits its box');
+  assert.equal(readyHit(c.x, c.y, layout), null, 'drawn only: a tap there is the plain screen');
+});
