@@ -13,21 +13,23 @@ const OFF = seasonalSkin('2026-11-15', T, ADVENT_ART);
 
 // --- countdownLine ---
 
-test('countdownLine: N sleeps on 1–23 Dec, one sleep on the 24th, Merry Christmas on the 25th, the Bowelidays image on 26–31 Dec', () => {
-  assert.deepEqual(countdownLine('2026-12-01', 'en', T), { text: '24 sleeps till Christmas' });
-  assert.deepEqual(countdownLine('2026-12-05', 'en', T), { text: '20 sleeps till Christmas' });
-  assert.deepEqual(countdownLine('2026-12-23', 'en', T), { text: '2 sleeps till Christmas' });
-  assert.deepEqual(countdownLine('2026-12-24', 'en', T), { text: '1 sleep till Christmas' }, 'one sleep, singular');
-  assert.deepEqual(countdownLine('2026-12-25', 'en', T), { text: 'Merry Christmas!' });
-  for (const d of ['2026-12-26', '2026-12-29', '2026-12-31']) assert.deepEqual(countdownLine(d, 'en', T), { image: 'bowelidays' }, d);
+test('countdownLine (Michael, 26 Nov): the Bowelidays image all December; under the title N sleeps on 1–23 Dec, one sleep on the 24th, Merry Christmas on the 25th, nothing after', () => {
+  const B = 'bowelidays';
+  assert.deepEqual(countdownLine('2026-12-01', 'en', T), { text: '24 sleeps till Christmas', image: B });
+  assert.deepEqual(countdownLine('2026-12-05', 'en', T), { text: '20 sleeps till Christmas', image: B });
+  assert.deepEqual(countdownLine('2026-12-23', 'en', T), { text: '2 sleeps till Christmas', image: B });
+  assert.deepEqual(countdownLine('2026-12-24', 'en', T), { text: '1 sleep till Christmas', image: B }, 'one sleep, singular');
+  assert.deepEqual(countdownLine('2026-12-25', 'en', T), { text: 'Merry Christmas!', image: B });
+  for (const d of ['2026-12-26', '2026-12-29', '2026-12-31']) assert.deepEqual(countdownLine(d, 'en', T), { text: null, image: B }, d);
   for (const d of ['2026-11-30', '2027-01-01', '2026-11-15', 'nonsense', undefined]) assert.equal(countdownLine(d, 'en', T), null, String(d));
 });
 
 test('countdownLine: zh-Hans takes its own strings; the Bowelidays image is the same for every locale (English only)', () => {
-  assert.deepEqual(countdownLine('2026-12-05', 'zh-Hans', T), { text: t('zh-Hans', 'countdownSleeps').replace('{n}', '20') });
-  assert.deepEqual(countdownLine('2026-12-24', 'zh-Hans', T), { text: t('zh-Hans', 'countdownSleep') });
-  assert.deepEqual(countdownLine('2026-12-25', 'zh-Hans', T), { text: t('zh-Hans', 'countdownChristmas') });
-  assert.deepEqual(countdownLine('2026-12-27', 'zh-Hans', T), { image: 'bowelidays' });
+  const B = 'bowelidays';
+  assert.deepEqual(countdownLine('2026-12-05', 'zh-Hans', T), { text: t('zh-Hans', 'countdownSleeps').replace('{n}', '20'), image: B });
+  assert.deepEqual(countdownLine('2026-12-24', 'zh-Hans', T), { text: t('zh-Hans', 'countdownSleep'), image: B });
+  assert.deepEqual(countdownLine('2026-12-25', 'zh-Hans', T), { text: t('zh-Hans', 'countdownChristmas'), image: B });
+  assert.deepEqual(countdownLine('2026-12-27', 'zh-Hans', T), { text: null, image: B });
   assert.ok(ADVENT_ART.files.bowelidays, 'the image key is a December file, so it loads in the one flight');
   for (const locale of ['en', 'zh-Hans']) assert.match(t(locale, 'countdownSleeps'), /\{n\}/, `${locale}: {n} in the plural line`);
 });
@@ -255,4 +257,55 @@ test('reapplySkin, on the flight\'s landing: the poop\'s current stock key shows
   s.reapplySkin();
   assert.equal(snows.length, 1, 'a second landing adds no second layer');
   assert.ok(s.homeRefreshed >= 2, 'the home (Bowelidays image) is refreshed too');
+});
+
+// Michael, 26 Nov: the December snow falls in every mode (runs, the Daily, both halves of a match, the online race,
+// 📚 runs), not only on the home screen; the countdown line and Happy Bowelidays! stay on the home screen alone.
+function seasonHome({ day = '2026-12-05', match = null, readyUiShown = true } = {}) {
+  const dots = [];
+  const text = { text: '', visible: false, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; } };
+  const s = playScene({
+    match,
+    readyUiShown,
+    locale: 'en',
+    fieldW: 720,
+    registry: registry({ testMode: true, testPretendDay: day }),
+    countdownText: text,
+    countdownImage: null,
+    snowfall: null,
+    readyBoxes: { bowelidays: { x: 360, y: 290, width: 432, height: 77.6 } },
+    textures: { exists: () => true },
+    events: { on() {}, once() {}, off() {} },
+    add: {
+      image: (x, y, key) => {
+        const d = { key, active: true, visible: true, setDisplaySize: () => d, setAlpha: () => d, setDepth: () => d, setPosition: () => d, setVisible: (v) => ((d.visible = v), d), destroy() {} };
+        dots.push(d);
+        return d;
+      },
+    },
+  });
+  s.refreshSeasonHome();
+  const flakes = () => dots.filter((d) => d.key === 'snowflake' && d.visible).length;
+  const image = () => dots.some((d) => d.key === 'bowelidays' && d.visible);
+  return { s, text, flakes, image };
+}
+
+test('the December snow falls on the home screen and keeps falling in a run; the countdown line and the image show on the home screen only', () => {
+  const home = seasonHome();
+  assert.equal(home.flakes(), T.advent.snow.count);
+  assert.ok(home.text.visible && home.image(), 'home: the line and Happy Bowelidays!');
+  home.s.readyUiShown = false; // a run: setReadyUiVisible(false) calls refreshSeasonHome
+  home.s.refreshSeasonHome();
+  assert.equal(home.flakes(), T.advent.snow.count, 'in a run the snow keeps falling');
+  assert.ok(!home.text.visible && !home.image(), 'in a run: no line, no image');
+});
+
+test('a match half (versus, the online race) has the snow too, never the line or the image; off season nothing', () => {
+  const half = seasonHome({ match: { side: 0 } });
+  assert.equal(half.flakes(), T.advent.snow.count, 'a match half snows');
+  assert.ok(!half.text.visible && !half.image(), 'the Versus scene draws a match\'s join screen: no line, no image');
+  const off = seasonHome({ day: '2026-11-20' });
+  assert.equal(off.flakes(), 0);
+  assert.ok(!off.text.visible && !off.image());
+  assert.equal(off.s.snowfall, null);
 });

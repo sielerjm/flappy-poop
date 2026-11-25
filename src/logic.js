@@ -2439,17 +2439,19 @@ export function twinKey(stock, skin, fartFrame = 0, has = () => true) {
 }
 
 /**
- * December's line under the title (plan 17, 1.12): "N sleeps till Christmas" on 1–24 Dec, "Merry Christmas!"
- * on the 25th, and on 26–31 Dec the Happy Bowelidays! image above the title (1.14; English for every player, since
- * the pun has no Chinese). { text }, { image } (a texture key) or null.
+ * December's home lines (plan 17, 1.12 and 1.14): the Happy Bowelidays! image above the title every December day
+ * (Michael, 26 Nov; English for every player, since the pun has no Chinese), and under the title "N sleeps till
+ * Christmas" on 1–24 Dec and "Merry Christmas!" on the 25th, no line after. { text (or null), image (a texture
+ * key) } in season, null off season.
  */
 export function countdownLine(day, locale, tune) {
   if (!adventSeason(day, tune)) return null;
+  const image = 'bowelidays';
   const date = Number(day.slice(8, 10));
-  if (date > 25) return { image: 'bowelidays' };
+  if (date > 25) return { text: null, image };
   const sleeps = 25 - date;
-  if (sleeps === 0) return { text: t(locale, 'countdownChristmas') };
-  return { text: sleeps === 1 ? t(locale, 'countdownSleep') : t(locale, 'countdownSleeps').replace('{n}', String(sleeps)) };
+  if (sleeps === 0) return { text: t(locale, 'countdownChristmas'), image };
+  return { text: sleeps === 1 ? t(locale, 'countdownSleep') : t(locale, 'countdownSleeps').replace('{n}', String(sleeps)), image };
 }
 
 /** The Daily Dump's glyph on `day`: this visit's 🎅 in the season (the first variant if none is picked yet), else the 🌞. */

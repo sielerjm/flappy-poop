@@ -528,7 +528,7 @@ for _name, _src, _stock, _pre in ADVENT_TWINS:
     ENTRIES[_name] = {"kind": "twin", "src": _src, "stock": _stock, **({"pre": _pre} if _pre else {})}
 # The hatted bacterium is Michael's aligned file (meta/advent-previews/art-out/), copied into assets/src/ at 1.11 (D14).
 ENTRIES["bacteria-santa"] = {"kind": "item", "src": "Bad_Bacteria-santa-aligned.png", "body_like": "bacteria.png"}
-ENTRIES["gingerbread"] = {"kind": "item", "src": "gingerbread.png", "fit_height": "probiotic.png"}
+ENTRIES["gingerbread"] = {"kind": "item", "src": "gingerbread.png", "fit_height": 185}  # the probiotic's ink height (176) + 5 % (Michael, 26 Nov, Preview B3)
 ENTRIES["candy-cane"] = {"kind": "item", "src": "candy-cane.png"}
 # Layers: no knockout, cropped to the ink (fairy-lights' ink is already the strip, y 374 to 677 of 1536 x 1024).
 # Scale 0.5 (4x art to 2x) is the layer default; the Bowelidays and fairy-light scales are not settled (see 1.2's report).

@@ -547,7 +547,7 @@ export class Play extends Phaser.Scene {
       this.countdownText = this.add.text(b.x, b.y, '', { ...TEXT_STYLE, fontSize: `${T.advent.countdownPx}px`, strokeThickness: 8 }).setOrigin(0.5).setDepth(20);
     }
     this.snowfall = null;
-    this.countdownImage = null; // the Bowelidays image (26–31 Dec), made once its file has landed
+    this.countdownImage = null; // the Bowelidays image (all December), made once its file has landed
     this.readyUiShown = true; // setReadyUiVisible's last word: the switches rebuilt by refreshReadySwitches follow it
     this.toiletToggle = this.versusToggle = this.educationToggle = this.eduDueText = this.eduStreakText = null; // a restart destroyed the last ones
     this.buildReadySwitches();
@@ -4161,12 +4161,15 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * December's home (plan 17, 1.12): the countdown line (countdownLine) and the snowfall, shown with the ready UI
-   * and only in season; a match's halves show neither (the Versus scene draws their join screen).
+   * December (plan 17, 1.12 and 1.14): the snowfall in every mode, on the home screen and in runs, a match's halves
+   * included (Michael, 26 Nov); the countdown line and Happy Bowelidays! on the home screen only (with the ready UI,
+   * never in a match's halves: the Versus scene draws their join screen). Nothing off season.
    */
   refreshSeasonHome() {
-    const season = !this.match && adventSeason(dailyDay(this.registry), T);
-    const line = season ? countdownLine(dailyDay(this.registry), this.locale, T) : null;
+    const day = dailyDay(this.registry);
+    const season = adventSeason(day, T);
+    const home = season && !this.match;
+    const line = home ? countdownLine(day, this.locale, T) : null;
     this.countdownText?.setText(line?.text ?? '').setVisible(Boolean(line?.text) && this.readyUiShown);
     const img = line?.image && this.textures.exists(line.image) ? line.image : null; // until the flight lands, nothing
     if (img && !this.countdownImage?.active) {
@@ -4179,7 +4182,7 @@ export class Play extends Phaser.Scene {
       this.snowfall.destroy();
       this.snowfall = null;
     }
-    this.snowfall?.setVisible(this.readyUiShown);
+    this.snowfall?.setVisible(true);
   }
 
   /** A world pickup's texture (plan 17, 1.11; D2): its December twin once loaded, else the stock one. The kind stays the item's data. */
