@@ -8,6 +8,20 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.30.0',
+    date: '25 Nov 2026',
+    notes: {
+      en: [
+        '🚫 A run that ends before the first pipe no longer counts: it adds nothing to your stats, streaks or badges, and the game-over panel says so. So a day when you only tap once and crash no longer keeps your 🔥 Singleplayer streak alive, on this device or on your profile.',
+        '🌞 A Daily Dump that crashes before its first pipe gives you the day back: tap Play again to start today’s run over, with no penalty. The same goes for a Daily Dump cut off by a reload before its first pipe. Its streak day now counts once you cross a pipe.',
+      ],
+      'zh-Hans': [
+        '🚫 在第一根管道之前就结束的一局不再计入：不会增加你的统计、连续天数或徽章，游戏结束界面也会说明。所以，如果某天你只点了一下就撞了，这一天不再延续你的🔥单人模式连续天数，本机和你的个人资料都一样。',
+        '🌞 每日一拉如果在第一根管道之前就撞了，今天的机会会还给你：点“再玩一次”重新开始今天的一局，不受任何影响。在第一根管道之前因刷新而中断的每日一拉也一样。它的连续天数在你穿过第一根管道时才计入。',
+      ],
+    },
+  },
+  {
     version: '0.29.0',
     date: '25 Nov 2026',
     notes: {
