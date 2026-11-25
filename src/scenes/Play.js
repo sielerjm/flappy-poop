@@ -125,7 +125,7 @@ import { createOnlineNet, onlineProjectConfig } from '../onlineNet.js';
 import { createResumeStore, pageTab, resumeKey, ONLINE_HOST_KEY } from '../onlineRace.js';
 import { createOnlineAccount } from '../onlineAccount.js';
 import { createStatusBeat } from '../onlineFriends.js';
-import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
+import { countsAsRun, runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
@@ -970,6 +970,7 @@ export class Play extends Phaser.Scene {
     this.runCeilingHits = 0; // ☀️ (0 or 1: the ceiling ends a run)
     this.runBoxesBought = 0; // 🎰 boxes bought in the shop this run
     this.runBadges = [];
+    this.runNotCounted = false; // set by endRun: the run crossed no pipe (plan 47), Over says so
     this.mysteryPair = this.course.mysteryPair(); // the pair the guaranteed first box (early level 3) rides after
     // The purse: every run starts empty (coins last across the levels of one run only).
     this.effects.spendCoins(this.effects.coins());
@@ -5105,6 +5106,9 @@ export class Play extends Phaser.Scene {
       return;
     }
     this.queueRunSummary(); // plan 30: the run's summary, sent with the next sync
+    // A run that crossed no pipe is not counted (plan 47, call A; a Daily Dump's, no pair flown that
+    // day): its summary goes all the same (call E), and the sync runs for what was already queued.
+    this.runNotCounted = !countsAsRun({ pipes: this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed });
     // A Daily Dump records only itself: the attempt is final and its score queued for the 🌞 board,
     // never the 🏆 top list or best (an endless score above maxScore would stop every 🏆 post).
     if (this.runIsDaily) {
@@ -5112,6 +5116,13 @@ export class Play extends Phaser.Scene {
       if (rec) this.dailyQueue.add({ ...rec, name: this.save?.name ?? null });
       this.recordCareer('daily');
       this.dailySync = this.syncLeaderboard();
+      return;
+    }
+    // No best, top-list entry or career for a run with no pipe crossed (points picked up before the
+    // first pipe included).
+    if (this.runNotCounted) {
+      this.personalBest = false;
+      this.syncLeaderboard();
       return;
     }
     // A new personal best (Over says so, on screen only): above every score this player had, of
@@ -5192,12 +5203,17 @@ export class Play extends Phaser.Scene {
    * One finished run into the career (plan 08): a normal single-player run or a Daily Dump, never a
    * test run or a match half (endRun returns before). Its counters wait in the career store for the
    * next sync; the badges it earns (judged on this device's totals) are unlocked here and listed on
-   * Over (this.runBadges), their claims queued.
+   * Over (this.runBadges), their claims queued. A run that crossed no pipe adds nothing (plan 47).
    */
   recordCareer(mode) {
     const day = utcDayKey();
     // Pipes passed: fart and skipped pairs included (as for levels); a Daily Dump counts only the pairs flown that day.
     const pipes = mode === 'daily' && this.daily ? Math.max(0, this.pipesPassed - this.daily.startPipes) : this.pipesPassed;
+    // Not a run (plan 47, call A): no counter, no run time (🧱 / 🏃), no streak day, no badge.
+    if (!countsAsRun({ pipes })) {
+      this.runBadges = [];
+      return;
+    }
     const facts = { mode, score: this.score, level: this.level, won: Boolean(this.won), toilet: Boolean(this.toilet), collected: { ...this.collected }, farts: this.runFarts ?? 0, superFarts: this.runSuperFarts ?? 0, pipes, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0 };
     facts.ceilingHits = this.runCeilingHits ?? 0;
     facts.boxesBought = this.runBoxesBought ?? 0;

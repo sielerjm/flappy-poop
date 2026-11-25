@@ -70,7 +70,7 @@ test('countsAsRun: a run counts once it crossed a pipe; the score does not decid
   for (const bad of [null, undefined, {}, { pipes: -1 }, { pipes: 1.5 }, { pipes: '3' }]) assert.equal(countsAsRun(bad), false, JSON.stringify(bad) ?? String(bad));
 });
 
-test('Play.recordCareer: a run with no pipe crossed adds no counter, run time, Singleplayer day or badge; one pipe does', { todo: 'plan 48, 1.2' }, () => {
+test('Play.recordCareer: a run with no pipe crossed adds no counter, run time, Singleplayer day or badge; one pipe does', () => {
   const empty = overScene({ score: 30 }).scene;
   empty.recordCareer('single');
   assert.deepEqual(empty.careerStore.calls, [], 'no markRun, no addRun, no badge');
@@ -84,7 +84,7 @@ test('Play.recordCareer: a run with no pipe crossed adds no counter, run time, S
   assert.equal(real.streakStore.load().single?.streak, 1, 'its Singleplayer day');
 });
 
-test('Play.endRun: a single run with no pipe crossed keeps its summary and the sync, and records nothing else (calls A, E)', { todo: 'plan 48, 1.2' }, () => {
+test('Play.endRun: a single run with no pipe crossed keeps its summary and the sync, and records nothing else (calls A, E)', () => {
   const { scene, calls } = overScene({ score: 30, syncLeaderboard: () => calls.push('sync') });
   scene.endRun();
   assert.equal(scene.runNotCounted, true, 'Over is told');
