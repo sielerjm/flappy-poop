@@ -57,7 +57,8 @@ function tree({ version = '1.2.3', lastUpdated = '1 Jan 2026, 00:00' } = {}) {
   put('src/splash.js', "export const NOTES = [{ art: { file: 'b.png' } }, { art: { file: 'a.png', frames: 2 } }];\n");
   put('src/supabaseLoader.js', "export const SUPABASE_JS_VERSION = '2.0.0';\nconst FILE = 'assets/vendor/supabase.js';\n");
   put('index.html', INDEX);
-  put('sw.js', readFileSync(join(REPO, 'sw.js'), 'utf8'));
+  // The repo's worker with its stamp block reset: `npm run push` stamps sw.js before it runs these tests.
+  put('sw.js', stampSw(readFileSync(join(REPO, 'sw.js'), 'utf8'), '', []));
   for (const f of ['assets/a.png', 'assets/b.png', 'assets/poop.png', 'assets/sfx/s.mp3', 'assets/vendor/phaser.min.js', 'assets/vendor/supabase.js', 'assets/icon-192.png']) put(f, `bytes of ${f}`);
   return { dir, put, read: (p) => readFileSync(join(dir, p), 'utf8') };
 }
