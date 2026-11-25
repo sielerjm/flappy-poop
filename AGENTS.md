@@ -831,7 +831,7 @@ Singleplayer best, so a Sign in or a new device shows the Longest everyone sees)
 (`streak_days`, 34.14 and Checkpoint 34c): Daily Dump course days from `daily_scores` alone (since 10 Nov 2026,
 kept; it takes a day only on that day or the next), and a Singleplayer day as the local day of the run's
 `ended_at + clock_offset_ms`, for a row that arrived within 48 hours of it and has `data.pipes` above 0 or no `pipes`
-key (plan 48, call S; schema stamp 49b8460b70e11ce5; a row that came later, one with no end
+key (plan 48, call S; schema stamp df6e05322d54da82; a row that came later, one with no end
 time and a held run count for no day; the log starts with 0.19.1, 15 Nov 2026, and keeps 90 days). So the streaks
 of players from before 0.24.0 come back too. Offline, nothing changes and the next sync asks again; a merge that
 lands on a later sync forgets `playDaysFor`, so the next sync asks again too. Every profile shows them (34.14, Michael: "Users should be

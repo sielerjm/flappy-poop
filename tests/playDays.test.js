@@ -95,6 +95,14 @@ test('plan 48 (call S): a Singleplayer run that crossed no pipe is no day; one p
   assert.deepEqual((await days(db, P, 'UTC')).single, ['2026-11-20', '2026-11-22', '2026-11-23']);
   const streaks = (await db.query("select public.day_streak(public.streak_days($1, 'single', 'UTC'), '2026-11-23'::date) as s", [P])).rows[0].s;
   assert.deepEqual(streaks, { now: 2, best: 2 }, 'a day with only an empty run breaks the streak (every profile shows it: player_stats)');
+  // run_row_problem lets a data key hold a boolean or a list (only the game's own rows are numbers): such a
+  // crafted pipes reads as no pipes key, never an error that would break play_days and the profile (stage review).
+  const Q = id('PJ');
+  await run(db, Q, 6, 'single', '2026-11-20 12:00+00');
+  await pipes(6, true);
+  await run(db, Q, 7, 'single', '2026-11-21 12:00+00');
+  await pipes(7, [1, 2]);
+  assert.deepEqual((await days(db, Q, 'UTC')).single, ['2026-11-20', '2026-11-21'], 'a pipes that is not a number counts like an old row');
 });
 
 test('play_days answers the newest 400 days of each kind', async () => {
