@@ -203,7 +203,10 @@ the half's place on the course: the scroll, re-anchored at the end of every re-f
 `rebaseDistance` on `courseDistance`, since a fart, a respawn, a skip or a re-fill's fixed lead would
 otherwise drift it from the pipes) and shows the other as a faded **ghost** in its lumen at the
 distance gap (`ghostPlacement`) and as a
-**marker** on its level bar (`rivalMarker`). A crash never ends a match run: it is a **respawn**
+**marker** on its level bar (`rivalMarker`). In a match the bar holds the crossed level, full, from the line to
+the next level's GO (`barShown`, `Play.barDoneLevel`; plan 46): the other player's marker keeps moving along it, and a rival
+over the same line sits at the 🏁 untinted (`'same'`). Single player and the education break keep the old bar
+(`tests/matchBar.test.js`). A crash never ends a match run: it is a **respawn**
 (`startRespawn` / `tickRespawn` / `endRespawn` on `respawnPose`, state `'respawn'`): the half's world
 halts, the score loses `versus.scoring.deathPenaltyPerLevel` × level (floored at 0, the −N popup), the
 slot counts the crash, the poop tumbles, everything not yet credited is cleared, it glides back to
@@ -1146,7 +1149,7 @@ src/
                             cached-load fill, plan 35, 2.5). TUNING.versus = the
                             two-player knobs: minViewportH (the gate), keys (the
                             two keyboard groups), countdownMs, ghostRangePx /
-                            ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
+                            ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha / barRivalOutAlpha (0.25, an ended rival),
                             dividerPx, catchUp (superBehind, beanBehindMin,
                             beanOddsMul), scoring (deathPenaltyPerLevel,
                             levelClearBonus: the first over a line only),
@@ -1430,7 +1433,10 @@ src/
                             join screen's Bracket box), createMatch / resetMatch
                             (the smoke's rematch) / slotTemplate, keyGroup / sameDevice / claimDevice /
                             allClaimed / deviceLabel (the join screen), ghostPlacement
-                            (scaled by the other's alpha, 0 once ended), rivalMarker,
+                            (scaled by the other's alpha, 0 once ended), barShown (the bar's level and
+                            fill; `done` = a match's crossed level, full), rivalMarker
+                            (me.done: a rival over the same line is 'same' at the flag;
+                            out: true once their run ended),
                             catchUpTier / catchUpDraws, matchResult (score, fewer
                             deaths, draw), respawnPose (the crash →
                             glide → blink → done timeline, pure in elapsed ms),
@@ -1931,7 +1937,8 @@ src/
                             geometry from levelBarLayout(). setRival(marker) /
                             rival(): the other player's marker in a match (a small
                             faded poop at rivalMarker's share; gold at the 🏁 a level
-                            ahead, grey at the start behind).
+                            ahead, grey at the start behind; alpha barRivalAlpha, or
+                            versus.barRivalOutAlpha once marker.out, at any time).
     perfMeter.js            The frame meter, debug only (?perf / ?perf=var, perfMode):
                             a DOM <pre> over the canvas (no texture upload, survives
                             Play's restarts) redrawn every perf.refreshMs from
@@ -2492,7 +2499,8 @@ src/
                             publishSlot() every frame; refreshGhost (this.ghost at
                             depth 9.5 from ghostPlacement; a live ghost follows its
                             alpha, an ended one fades over ghostFadeMs) and refreshRival
-                            (levelBar.setRival on a level / pair change); a match
+                            (levelBar.setRival; its key holds the level, the held barDoneLevel,
+                            the other's level / pairs and whether their run ended); a match
                             records nothing: endRun reports to Versus.onRunEnded;
                             showOver is a no-op. die() in a match → startRespawn
                             (state 'respawn', the world halted, scoreAfterDeath +
@@ -3503,6 +3511,11 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             'Versus'), Play.versusHost, the host member list checked
                             against Play's source and Versus, the tournament panel over
                             Play, launch's two routes, splitFits vs versusOffered.
+  matchBar.test.js          Plan 46 (48, 2): barShown (a match's crossed level full, else
+                            the old bar), rivalMarker with me.done / out, Play.barDoneLevel set
+                            at the line in a match only and cleared at GO, refreshRival's key,
+                            the ended marker's alpha. Smoke: versus-match and online-race
+                            check the bar through a break.
   versus.test.js            TUNING.versus sanity (gate, ghost, disjoint key groups,
                             catch-up tiers), versusAvailable, versusLayout (= the wide
                             field's width, the maxWidth / 2 cap), createMatch /
