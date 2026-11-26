@@ -8,7 +8,7 @@ sheets go to the Dropbox checkout's .claude/plans/17-previews/gateA/ (gitignored
 
 Run:    ~/.local/bin/uv run --with pillow python3 tools/advent_preview.py [--sheets 1,2,3,7]
         --sheets  comma list of: 1, 2, 3, 7 (step 1.4), pipes (step 1.5), 4 and 5a (step 2.6a), 5 (step 2.14), 9 (step 1b.1),
-                  or all (default; "all" is the Stage 1 set, 1/2/3/7/pipes: sheets 4, 5a, 5 and 9 are built only when named)
+                  10 (step 1b.2d), or all (default; "all" is the Stage 1 set, 1/2/3/7/pipes: sheets 4, 5a, 5, 9 and 10 are built only when named)
         --art DIR       fitted December art (default <main checkout>/meta/advent-previews/art-fit/)
         --guides DIR    pipe-cap guides (default .../meta/advent-previews/art-guides/)
         --backdrop PNG  sheet 7's ready-screen backdrop (default <out>/backdrop-home-720x1280.png)
@@ -19,6 +19,8 @@ The "main checkout" is found through git's common dir, so a worktree reads the s
 Every game number (radii, scales, colours, layout) is read from src/config.js, src/logic.js and
 tools/make_placeholders.py, so a changed constant changes the sheets and a moved line fails loudly.
 Requires Pillow only. Exit 0 only if every check below passed (otherwise 1, with the reasons).
+Sheet 10 (step 1b.2d, "Choose your 🎅": twelve mock-ups): the 18 picker emoji are PNGs, a one-off CoreText render kept in
+meta/advent-previews/emoji/ (Pillow here has no raqm, so it cannot draw skin tones or ZWJ sequences); `emoji_png` reads them.
 
 Checks (any failure exits non-zero):
   - every sheet is 720 x 1280;
@@ -38,6 +40,9 @@ Checks (any failure exits non-zero):
     `check_book_tiles`: each owned piece's 166 px slot matches its puzzle frame (mean absolute difference per channel below 3,
     the star's corner box ignored) and each other slot's centre pixel is the locked fill (42, 20, 32); the piece order is read
     from src/config.js and asserted equal to the copy here;
+  - sheet 10 (the picker, the Daily marks and the help card, 12 sheets; named only): every sheet is 720 x 1280; every grid cell and the
+    glyph zone are at least 88 x 88; no two of the (?), glyph and X zones overlap; the grid lies inside the picker panel; the help card fits
+    y 84 to 1196; twelve PNGs. --selftest feeds an 80 px cell, an 80 px glyph zone and a (?) moved 10 px right into the glyph zone;
   - step 1.5: the printed cream distances (pipe 43 / 35 / 31 / 29 at 55 / 60 / 70 / 80 %; villi
     50 / 21 / 21 / 41 at 40 / 55 / 70 / 80 %) are within 1 of the plan's, and formula V changes no
     pixel that is not the villi fill on villi.png, ceiling.png and ground.png.
@@ -1953,6 +1958,392 @@ def book_selftest(missed):
         missed.append("a book tile 6 px off")
 
 
+# ---- sheet 10 (step 1b.2d): the "Choose your 🎅" mock-ups (Gate A, twelve sheets)
+PANEL_FILL = (26, 11, 20)  # the Daily window's panel fill, also the picker's
+PK_PINK, PK_TITLE = (232, 94, 150), (248, 160, 200)
+Q_CENTRE, X_CENTRE, ZONE = (104, 244), (616, 244), 88
+RED_DOT = (255, 59, 48)
+ZONE_CYAN, ZONE_YELLOW, ZONE_WHITE = (0, 200, 255), (255, 214, 0), (255, 255, 255)
+PICK_PANEL = (60, 290, 660, 990)
+GRID_X0, GRID_Y0, CELL, STEP = 86, 420, 88, 92
+TONES = ["", "\U0001F3FB", "\U0001F3FC", "\U0001F3FD", "\U0001F3FE", "\U0001F3FF"]
+CJK_PATHS = ("/System/Library/Fonts/PingFang.ttc", "/Library/Fonts/Arial Unicode.ttf")
+HELP_EN = ("All December, the \U0001F385 in the Daily Dump changes each time you visit. Tap it to choose your favourite, in any skin tone. "
+           "It is saved on this device only.\n\nEach day's Daily hides one Advent piece. Find all 24 by 24 December for the \U0001F384, "
+           "or by 31 December for the \U0001F332. Catch-ups count for both.")
+HELP_ZH = ("整个十二月，每日一拉里的\U0001F385每次来访都会变。点它，选你最喜欢的一个，任何肤色都行。只保存在这台设备上。\n\n"
+           "每天的每日一拉都藏着一块圣诞拼图。12月24日前找齐24块得\U0001F384，12月31日前找齐得\U0001F332。补领的都算。")
+FONTS_USED = set()
+_EMOJI_PNG = {}
+_S10_SHOTS = {}
+
+
+def emoji_png(seq, size):
+    """One of the 18 picker emoji from meta/advent-previews/emoji/<hex code points joined by '-'>.png, cropped to its alpha box and
+    fitted (aspect kept, centred) into a size x size square. SystemExit naming the file if it is missing."""
+    name = "-".join(f"{ord(c):x}" for c in seq) + ".png"
+    key = (name, size)
+    if key not in _EMOJI_PNG:
+        p = main_checkout() / "meta/advent-previews/emoji" / name
+        if not p.exists():
+            raise SystemExit(f"FAIL: missing emoji PNG {p}")
+        im = Image.open(p).convert("RGBA")
+        bb = ink_bbox(im)
+        if not bb:
+            raise SystemExit(f"FAIL: emoji PNG {p} is empty")
+        im = im.crop(bb)
+        k = size / max(im.size)
+        im = im.resize((max(1, int(round(im.width * k))), max(1, int(round(im.height * k)))), Image.Resampling.LANCZOS)
+        out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        out.alpha_composite(im, ((size - im.width) // 2, (size - im.height) // 2))
+        _EMOJI_PNG[key] = out
+    return _EMOJI_PNG[key].copy()
+
+
+def cjk_font(size):
+    for p in CJK_PATHS:
+        if Path(p).exists():
+            return ImageFont.truetype(p, size)
+    raise SystemExit("FAIL: no CJK font (PingFang.ttc or Arial Unicode.ttf) for the Chinese sheets")
+
+
+class Face:
+    """A text face: Helvetica (Latin) or a CJK font; CJK bold is faked with a 1 px stroke (the CJK fonts here have no bold)."""
+
+    def __init__(self, cjk, size, bold=False):
+        self.size, self.fake = size, bool(cjk and bold)
+        self.f = cjk_font(size) if cjk else font(size, bold)
+        FONTS_USED.add(f"{Path(self.f.path).name}{' (1 px stroke for bold)' if self.fake else ''}")
+        self.asc, self.desc = self.f.getmetrics()
+
+    def length(self, s):
+        return self.f.getlength(s) + (2 if self.fake else 0)
+
+    def draw(self, sheet, xy, s, fill):
+        ImageDraw.Draw(sheet).text(xy, s, font=self.f, fill=fill, anchor="ls", stroke_width=1 if self.fake else 0, stroke_fill=fill)
+
+
+_EMO = r"[\U0001F000-\U0001FAFF][\U0001F3FB-\U0001F3FF]?(?:‍[\U0001F000-\U0001FAFF][\U0001F3FB-\U0001F3FF]?)*️?"
+_CJKR = r"　-〿㐀-鿿＀-￯"
+_TOK = re.compile(_EMO + r"|\s+|[" + _CJKR + r"]|[^\s" + _CJKR + r"\U0001F000-\U0001FAFF]+")
+_NOBREAK = set("，。；：、！？）」』”")
+
+
+def tokens(s):
+    return [("e" if re.fullmatch(_EMO, t) else "s" if t.isspace() else "t", t) for t in _TOK.findall(s)]
+
+
+def tok_w(face, kind, t):
+    return face.size if kind == "e" else face.length(t)
+
+
+def line_w(face, toks):
+    return sum(tok_w(face, k, t) for k, t in toks)
+
+
+def wrap_text(s, face, maxw):
+    """Greedy wrap at maxw px: a list of lines (token lists); '\\n' starts a paragraph, an empty paragraph is one blank line."""
+    lines = []
+    for para in s.split("\n"):
+        cur, w = [], 0.0
+        for kind, t in tokens(para):
+            tw = tok_w(face, kind, t)
+            if kind == "s" and not cur:
+                continue
+            if kind != "s" and cur and w + tw > maxw and t not in _NOBREAK:
+                while cur and cur[-1][0] == "s":
+                    cur.pop()
+                lines.append(cur)
+                cur, w = [], 0.0
+            cur.append((kind, t))
+            w += tw
+        lines.append(cur)
+    return lines
+
+
+def draw_toks(sheet, toks, face, fill, x, baseline):
+    for kind, t in toks:
+        if kind == "e":
+            sheet.alpha_composite(emoji_img(t, face.size), (int(round(x)), int(round(baseline - 0.35 * face.size - face.size / 2))))
+        elif kind == "t":
+            face.draw(sheet, (x, baseline), t, fill)
+        x += tok_w(face, kind, t)
+
+
+def mixed_mm(sheet, s, face, fill, cx, cy):
+    """One line of text with inline emoji, centred on (cx, cy) the way anchor 'mm' centres plain text."""
+    toks = tokens(s)
+    draw_toks(sheet, toks, face, fill, cx - line_w(face, toks) / 2, cy + (face.asc - face.desc) / 2)
+
+
+def caption(sheet, paras):
+    """A light panel y 1196 to 1280 with 1 to 3 centred lines (20 px); each paragraph wraps at 664 px."""
+    sheet.alpha_composite(Image.new("RGBA", (W_PX, 84), (245, 240, 235, 255)), (0, 1196))
+    face = Face(False, 20)
+    lines = [ln for p in paras for ln in wrap_text(p, face, 664)]
+    for i, toks in enumerate(lines):
+        mixed_mm(sheet, "".join(t for _, t in toks), face, (40, 20, 40), 360, 1238 - (len(lines) - 1) * 13 + i * 26)
+
+
+def s10_shot(group, name):
+    key = (group, name)
+    if key not in _S10_SHOTS:
+        im = load(main_checkout() / ".claude/plans/17-previews" / group / "shots" / name)
+        if im.size != (W_PX, H_PX):
+            raise SystemExit(f"FAIL: {name} is {im.size}, not 720 x 1280")
+        _S10_SHOTS[key] = im
+    return _S10_SHOTS[key].copy()
+
+
+def daily_shot(zh=False):
+    return book_res().shot("D2b-popup-1205-p1-5-zh.png") if zh else s10_shot("E", "E4a-daily-1214-en.png")
+
+
+def measure_g(im):
+    """The title glyph's box (x0, y0, x1, y1; half-open): in the band y 236 to 304, x 80 to 400, the first run of ink columns from the left
+    (a pixel differing from the panel fill by more than 40 in any channel) that ends at a gap of 6 or more empty columns."""
+    px = im.convert("RGB").load()
+    cols = []
+    for x in range(80, 400):
+        cols.append([y for y in range(236, 304) if max(abs(px[x, y][i] - PANEL_FILL[i]) for i in range(3)) > 40])
+    start = next((i for i, c in enumerate(cols) if c), None)
+    if start is None:
+        raise SystemExit("FAIL: no ink in the title row (y 236 to 304, x 80 to 400)")
+    last, i = start, start
+    while i < len(cols) and i - last < 6:
+        if cols[i]:
+            last = i
+        i += 1
+    if i - last < 6:
+        raise SystemExit("FAIL: the title glyph's ink run has no 6 px gap before x 400")
+    ys = [y for c in cols[start:last + 1] for y in c]
+    return (80 + start, min(ys), 80 + last + 1, max(ys) + 1)
+
+
+def glyph_zone(g):
+    cx, cy = (g[0] + g[2]) / 2, (g[1] + g[3]) / 2
+    x0, y0 = int(round(cx - ZONE / 2)), int(round(cy - ZONE / 2))
+    return (x0, y0, x0 + ZONE, y0 + ZONE)
+
+
+def zone_at(c):
+    return (c[0] - ZONE // 2, c[1] - ZONE // 2, c[0] + ZONE // 2, c[1] + ZONE // 2)
+
+
+def zone_gap(a, b):
+    """Signed gap in px between two boxes (x0, y0, x1, y1): negative means they overlap, 0 means they touch."""
+    return max(b[0] - a[2], a[0] - b[2], b[1] - a[3], a[1] - b[3])
+
+
+def check_min_box(name, box, m=ZONE):
+    w, h = box[2] - box[0], box[3] - box[1]
+    return [] if w >= m and h >= m else [f"{name} is {w} x {h}, under {m} x {m}"]
+
+
+def check_zones(q, g, x):
+    fails = []
+    for an, a, bn, b in (("(?)", q, "glyph", g), ("(?)", q, "close", x), ("glyph", g, "close", x)):
+        if zone_gap(a, b) < 0:
+            fails.append(f"the {an} zone {a} overlaps the {bn} zone {b} by {-zone_gap(a, b)} px")
+    return fails
+
+
+def check_inside(name, inner, outer):
+    ok = inner[0] >= outer[0] and inner[1] >= outer[1] and inner[2] <= outer[2] and inner[3] <= outer[3]
+    return [] if ok else [f"{name} {inner} is not inside {outer}"]
+
+
+def check_help_fit(name, top, bottom):
+    return [] if top >= 84 and bottom <= 1196 else [f"{name}: the card spans y {top} to {bottom}, outside 84 to 1196"]
+
+
+def red_dot(sheet, cx, cy, r=9):
+    n, k = 2 * (r + 2) + 4, 4
+    big = Image.new("RGBA", (n * k, n * k), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    c = n * k / 2
+    d.ellipse((c - (r + 2) * k, c - (r + 2) * k, c + (r + 2) * k, c + (r + 2) * k), fill=(255, 255, 255, 255))
+    d.ellipse((c - r * k, c - r * k, c + r * k, c + r * k), fill=RED_DOT + (255,))
+    sheet.alpha_composite(big.resize((n, n), Image.Resampling.LANCZOS), (int(round(cx - n / 2)), int(round(cy - n / 2))))
+
+
+def zone_outline(sheet, box, colour):
+    dashed_rect(sheet, (box[0], box[1], box[2] - 1, box[3] - 1), colour, 8, 5, 2)
+
+
+def daily_marks(s, zones=True, q_centre=Q_CENTRE):
+    """The Daily window's marks on shot `s`: the (?) top left, the pencil and the red dot on the title glyph, optionally the zones.
+    Returns (g, glyph zone, (?) zone, close zone, gap between the (?) and glyph zones)."""
+    g = measure_g(s)
+    ring(s, q_centre[0], q_centre[1], 24, (255, 255, 255), 3, halo=False)
+    ImageDraw.Draw(s).text(q_centre, "?", font=font(30, True), fill=(255, 255, 255), anchor="mm")
+    pen, (pcx, pcy) = _fit_pencil()
+    s.alpha_composite(pen, (int(round(g[2] + 4 - pcx)), int(round(g[3] - 2 - pcy))))
+    red_dot(s, g[2] - 3, g[1] + 3)
+    gz, qz, xz = glyph_zone(g), zone_at(q_centre), zone_at(X_CENTRE)
+    if zones:
+        zone_outline(s, gz, ZONE_CYAN)
+        zone_outline(s, qz, ZONE_YELLOW)
+        zone_outline(s, xz, ZONE_WHITE)
+    return g, gz, qz, xz, zone_gap(qz, gz)
+
+
+def close_x(sheet, res, cx, cy, size):
+    """The Daily window's white X (D2a's, as book_sheet takes it) as a mask at `size` px (48 = as in the shot), centred on (cx, cy)."""
+    x = res.shot("D2a-popup-1205-p1-5-en.png").convert("RGB").crop((588, 216, 644, 272))
+    bg = x.getpixel((2, 2))
+    lum = x.convert("L").point(lambda v: max(0, min(255, int(round((v - sum(bg) / 3) / (255 - sum(bg) / 3) * 255)))))
+    n = int(round(56 * size / 48))
+    if n != 56:
+        lum = lum.resize((n, n), Image.Resampling.LANCZOS)
+    paint(sheet, (int(round(cx - n / 2)), int(round(cy - n / 2))), (255, 255, 255), lum)
+
+
+def glow_gold(sheet, box, grow=10, blur=6, alpha=0.6):
+    m = Image.new("L", sheet.size, 0)
+    ImageDraw.Draw(m).rounded_rectangle((box[0] - grow, box[1] - grow, box[2] - 1 + grow, box[3] - 1 + grow), 14 + grow, fill=255)
+    paint(sheet, (0, 0), B_GOLD, m.filter(ImageFilter.GaussianBlur(blur)), alpha)
+
+
+def variant(r, c):
+    base = ("\U0001F385", "\U0001F936", "\U0001F9D1")[r]
+    return base + TONES[c] + ("‍\U0001F384" if r == 2 else "")
+
+
+def picker(res, bg, zh=False, ringed=None, save_live=True, pad_ring=False, rows=((0, range(6)), (1, range(6)), (2, range(6)))):
+    """The picker over the dimmed Daily shot `bg`. `rows` lists (character row, columns drawn), each row centred on x 360 and the rows
+    closed up from the grid's top. Returns (sheet, list of every cell box, grid box)."""
+    s = bg.copy()
+    dim_box(s, (0, 0, W_PX, H_PX), 0.55)
+    s.alpha_composite(Image.new("RGBA", (600, 700), PANEL_FILL + (int(round(0.97 * 255)),)), (60, 290))
+    rrect(s, PICK_PANEL, 0, stroke=PK_PINK, sw=8)
+    mixed_mm(s, "选择你的\U0001F385" if zh else "Choose your \U0001F385", Face(zh, 40, True), PK_TITLE, 360, 350)
+    close_x(s, res, 616, 324, 48)
+    cells = []
+    for i, (r, cols) in enumerate(rows):
+        cols = list(cols)
+        x0 = 360 - (len(cols) * CELL + (len(cols) - 1) * (STEP - CELL)) / 2
+        for j, c in enumerate(cols):
+            x, y = int(round(x0 + j * STEP)), GRID_Y0 + STEP * i
+            cells.append(((x, y, x + CELL, y + CELL), r, c))
+    for box, r, c in cells:
+        if ringed == (r, c):
+            glow_gold(s, box)
+    for box, r, c in cells:
+        on = ringed == (r, c)
+        rrect(s, box, 14, fill=(42, 18, 32), stroke=B_GOLD if on else (90, 42, 68), sw=5 if on else 2)
+        s.alpha_composite(emoji_png(variant(r, c), 60), (box[0] + 14, box[1] + 14))
+    save_col = PK_TITLE if save_live else (120, 90, 105)
+    rrect(s, (210, 756, 510, 844), 20, fill=PANEL_FILL, alpha=1.0 if save_live else 0.5, stroke=PK_PINK if save_live else save_col, sw=4)
+    mixed_mm(s, "保存" if zh else "Save", Face(zh, 40, True), save_col, 360, 800)
+    mixed_mm(s, "v0.35.0 beta", Face(False, 24), PK_TITLE, 360, 950)
+    if pad_ring:
+        zx = zone_at((616, 324))
+        rrect(s, (zx[0] - 8, zx[1] - 8, zx[2] + 8, zx[3] + 8), 16, stroke=(255, 255, 255), sw=4)
+    grid = (min(b[0] for b, _, _ in cells), min(b[1] for b, _, _ in cells), max(b[2] for b, _, _ in cells), max(b[3] for b, _, _ in cells))
+    return s, [b for b, _, _ in cells], grid
+
+
+def help_card(res, bg, zh):
+    s = bg.copy()
+    dim_box(s, (0, 0, W_PX, H_PX), 0.55)
+    face = Face(zh, 28)
+    lines = wrap_text(HELP_ZH if zh else HELP_EN, face, 480)
+    lh = face.asc + face.desc
+    th = len(lines) * lh + (len(lines) - 1) * 8
+    h = 64 + th + 40
+    top = int(round(640 - h / 2))
+    rrect(s, (80, top, 640, top + h), 20, fill=(36, 16, 28), stroke=PK_TITLE, sw=4)
+    close_x(s, res, 640 - 36, top + 36, 40)
+    for i, toks in enumerate(lines):
+        draw_toks(s, toks, face, (226, 200, 214), 120, top + 64 + i * (lh + 8) + face.asc)
+    return s, top, top + h
+
+
+def sheet10(inp, out, manifest, failures):
+    res = book_res()
+    saved = []
+    srcs = ["E/shots E4a (Daily en), D/shots D2b (Daily zh), E1b (home en), D2a (the X)", "meta/advent-previews/emoji/*.png (the 18 picker emoji)"]
+
+    def save(sheet, name, cap):
+        caption(sheet, cap)
+        failures.extend(check_still_size(sheet, name[:-4]))
+        sheet_save(sheet, out, name, srcs, manifest)
+        saved.append(name)
+
+    print("sheet 10: Choose your \U0001F385")
+    # a, b, c: the Daily window's marks
+    for name, zh, swap in (("sheet10-a-daily-en.png", False, False), ("sheet10-b-daily-zh.png", True, False), ("sheet10-c-daily-zwj-en.png", False, True)):
+        s = daily_shot(zh)
+        if swap:
+            g0 = measure_g(s)
+            ImageDraw.Draw(s).rectangle((g0[0] - 4, g0[1] - 4, g0[2] + 4 - 1, g0[3] + 4 - 1), fill=PANEL_FILL + (255,))
+            em = emoji_png("\U0001F9D1\U0001F3FD‍\U0001F384", 52)
+            s.alpha_composite(em, (int(round((g0[0] + g0[2]) / 2 - 26)), int(round((g0[1] + g0[3]) / 2 - 26))))
+        g, gz, qz, xz, gap = daily_marks(s)
+        print(f"  {name[:-4]}: g = {g} ({g[2] - g[0]} x {g[3] - g[1]}), glyph zone {gz}, (?) zone {qz}, gap (?) to glyph {gap} px")
+        failures.extend(f"{name}: {m}" for m in check_min_box("the glyph zone", gz) + check_zones(qz, gz, xz))
+        who = "Daily (zh)" if zh else "Daily (en)" + (", ZWJ title glyph (52 px)" if swap else "")
+        save(s, name, [f"{who}: (?), pencil, red dot on the glyph",
+                       f"zones: cyan glyph, yellow (?), white X; glyph box {g[2] - g[0]} x {g[3] - g[1]}",
+                       f"gap between the (?) zone and the glyph zone: {gap} px"])
+    # d: the home row, without and with the dot
+    home = s10_shot("E", "E1b-home-1214-unseen14-en.png")
+    s = new_sheet(PANEL_FILL)
+    for y, label, dot in ((40, "without the home dot", False), (340, "with the home dot (radius 9, on the button's rim at 45 degrees)", True)):
+        s.alpha_composite(home.crop((0, 0, W_PX, 260)), (0, y))
+        if dot:
+            red_dot(s, 360 + 31, y + 124 - 31)
+        text(s, (360, y - 20), label, 22, (255, 255, 255), False, "mm")
+    save(s, "sheet10-d-home-en.png", ["Home, en: the \U0001F385 button (88 px at 360, 124) without and with the home dot"])
+    # e to j: the picker
+    en = daily_shot(False)
+
+    def pick(name, bg=en, **kw):
+        s, cells, grid = picker(res, bg, **kw)
+        failures.extend(f"{name}: {m}" for c in cells for m in check_min_box("a grid cell", c))
+        failures.extend(f"{name}: {m}" for m in check_inside("the grid", grid, PICK_PANEL))
+        return s
+
+    save(pick("e", ringed=None, save_live=False), "sheet10-e-picker-empty-en.png", ["Picker, nothing saved: no cell ringed, Save greyed"])
+    save(pick("f", ringed=(0, 0), save_live=True), "sheet10-f-picker-empty-alt-en.png", ["Picker, nothing saved, the other option: this visit's \U0001F385 (the plain one) ringed, Save live"])
+    save(pick("g", ringed=(1, 4), pad_ring=True), "sheet10-g-picker-saved-en.png", ["Picker, a saved choice (the dark-tone Mrs. Claus, row 2, column 5) ringed, Save live, pad focus ring on the X"])
+    save(pick("h", ringed=None), "sheet10-h-picker-cleared-en.png", ["Way back W1: after tapping the ringed choice again, no cell ringed", "Save now brings back the changing \U0001F385"])
+    save(pick("i", bg=daily_shot(True), zh=True, ringed=(1, 4), pad_ring=True), "sheet10-i-picker-zh.png", ["Picker, zh: as g (saved choice ringed, Save live, pad focus ring on the X)"])
+    s = pick("j", ringed=None, save_live=False, rows=((0, [0]), (1, [0])))
+    s.paste(en.crop((60, 230, 660, 310)), (60, 1020))
+    mixed_mm(s, "one variant: the title \U0001F385 is not tappable: no pencil, no dot", Face(False, 22), (255, 255, 255), 360, 1128)
+    save(s, "sheet10-j-picker-narrow-en.png", ["Picker on a device that draws only the plain \U0001F385 and \U0001F936: one cell per row, each row centred, the third row left out"])
+    # k, l: the help card
+    for name, zh in (("sheet10-k-help-en.png", False), ("sheet10-l-help-zh.png", True)):
+        s, top, bottom = help_card(res, daily_shot(zh), zh)
+        failures.extend(f"{name}: {m}" for m in check_help_fit(name, top, bottom))
+        print(f"  {name[:-4]}: card y {top} to {bottom}")
+        save(s, name, [f"Help card ({'zh' if zh else 'en'}) over the Daily window, shown when the (?) is tapped"])
+    if len(saved) != 12:
+        failures.append(f"sheet 10 wrote {len(saved)} PNGs, expected 12")
+    print("  fonts used: " + "; ".join(sorted(FONTS_USED)))
+
+
+def sheet10_selftest(missed):
+    """Step 1b.2d's negative controls: an 80 px grid cell, an 80 px glyph zone and a (?) moved 10 px right into the glyph zone must each be rejected."""
+    g = measure_g(daily_shot(False))
+    gz, qz, xz = glyph_zone(g), zone_at(Q_CENTRE), zone_at(X_CENTRE)
+    real = check_min_box("a grid cell", (GRID_X0, GRID_Y0, GRID_X0 + CELL, GRID_Y0 + CELL)) + check_min_box("the glyph zone", gz) + check_zones(qz, gz, xz)
+    if real:
+        print(f"selftest: the real picker numbers already fail: {real[0]}")
+        missed.append("real sheet 10 numbers fail")
+
+    def report(what, fails):
+        print(f"selftest: {what}: {'REJECTED' if fails else 'ACCEPTED (check is blind!)'}" + (f" ({fails[0]})" if fails else ""))
+        if not fails:
+            missed.append(what)
+
+    report("a grid cell of 80 px", check_min_box("a grid cell", (GRID_X0, GRID_Y0, GRID_X0 + 80, GRID_Y0 + 80)))
+    report("a glyph zone of 80 px", check_min_box("the glyph zone", (gz[0], gz[1], gz[0] + 80, gz[1] + 80)))
+    report("the (?) moved 10 px right into the glyph zone", check_zones(zone_at((Q_CENTRE[0] + 10, Q_CENTRE[1])), gz, xz))
+
+
 # ---------------------------------------------------------------- the manifest and the driver
 def print_manifest(manifest):
     print("\nMANIFEST (sheet, size, inputs):")
@@ -2046,6 +2437,7 @@ def selftest(inp):
         missed.append("wrong pipe fill")
     storm_selftest(inp, missed)
     book_selftest(missed)
+    sheet10_selftest(missed)
     if missed:
         print("selftest: FAILED to catch:", ", ".join(missed))
         return 2
@@ -2056,7 +2448,7 @@ def selftest(inp):
 def main():
     main_co = main_checkout()
     ap = argparse.ArgumentParser(description="Gate A mock-up sheets for the December art (plan 17, 1.4, 1.5, 2.6a, 2.14 and 1b.1)")
-    ap.add_argument("--sheets", default="all", help="comma list of 1, 2, 3, 7, pipes, 4, 5a, 5, 9 or all (all = 1, 2, 3, 7, pipes)")
+    ap.add_argument("--sheets", default="all", help="comma list of 1, 2, 3, 7, pipes, 4, 5a, 5, 9, 10 or all (all = 1, 2, 3, 7, pipes)")
     ap.add_argument("--art", default=str(main_co / "meta/advent-previews/art-fit"))
     ap.add_argument("--guides", default=str(main_co / "meta/advent-previews/art-guides"))
     ap.add_argument("--out", default=str(main_co / ".claude/plans/17-previews/gateA"))
@@ -2068,7 +2460,7 @@ def main():
     if args.selftest:
         sys.exit(selftest(inp))
     wanted = {"1", "2", "3", "7", "pipes"} if args.sheets == "all" else set(args.sheets.split(","))
-    unknown = wanted - {"1", "2", "3", "7", "pipes", "4", "5a", "5", "9"}
+    unknown = wanted - {"1", "2", "3", "7", "pipes", "4", "5a", "5", "9", "10"}
     if unknown:
         raise SystemExit(f"unknown sheet(s): {', '.join(sorted(unknown))}")
     manifest, failures = [], []
@@ -2090,6 +2482,8 @@ def main():
         sheet5a(inp, args.out, manifest, failures)
     if "5" in wanted:
         sheet5(inp, args.out, manifest, failures)
+    if "10" in wanted:
+        sheet10(inp, args.out, manifest, failures)
     for m in manifest:
         if m["size"] != m.get("expect", (W_PX, H_PX)):
             failures.append(f"{m['sheet']} is {m['size']}, not {m.get('expect', (W_PX, H_PX))}")
