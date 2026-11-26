@@ -103,6 +103,16 @@
   License. Loops quietly under a December snow storm (re-encoded mono, 48 kbps,
   its last 1.5 s crossfaded into its start so it loops without a seam). Bundled
   inside the game only; not redistributed as a standalone file.
+- `assets/sfx/Advent_PieceAdd.mp3` — "Christmas Chimes Whoosh" by djartmusic,
+  https://pixabay.com/sound-effects/film-special-effects-christmas-chimes-whoosh-264365/,
+  Pixabay Content License. Plays as a new piece flies into the December Advent
+  book (re-encoded mono, 64 kbps, trimmed to its first 6 s with a 1.5 s fade
+  out). Bundled inside the game only; not redistributed as a standalone file.
+- `assets/sfx/Advent_PieceLock.mp3` — "Click Button" by universfield,
+  https://pixabay.com/sound-effects/film-special-effects-click-button-140881/,
+  Pixabay Content License. Plays as the piece clicks into its place in the
+  Advent book (re-encoded mono, 96 kbps). Bundled inside the game only; not
+  redistributed as a standalone file.
 
 ## Services
 

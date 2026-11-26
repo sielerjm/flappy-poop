@@ -1883,10 +1883,10 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   // The Bowelidays image (plan 17, 1.14; D16 (b)): above the title, under the top row's halos. Drawn only.
   const bw = width * t.advent.bowelidays.widthFrac;
   const bowelidays = { id: 'bowelidays', x: cx, y: t.advent.bowelidays.y, width: bw, height: bw * t.advent.bowelidays.aspect };
-  // The Advent chip (plan 17, 2.6): the count alone, "🧩 5/24" (Michael, 26 Nov), under the 🎅, between its circle's halo
-  // and the Bowelidays image's top. Drawn only, never hit. Stage 2c moves it onto the Advent button (S14).
-  const adventChip = { id: 'adventChip', x: cx, y: daily.y + boxH / 2 + t.advent.chipGapPx, width: t.advent.chipWidth, height: t.advent.chipPx + 8 };
-  return { title, poop, toilet, howto, daily, profile, countdown, bowelidays, adventChip, ...switches };
+  // The Advent button (plan 17, 2.15a; S14, Gate A sheet 5): the same round button in the top-left corner, on the ? row,
+  // mirroring the ? (its halo inside the field), with "N/24" on its lower right. It replaced 2.6's chip under the 🎅.
+  const advent = { id: 'advent', x: x0 + 16 + haloR, y: howto.y, width: boxH, height: boxH, round: true };
+  return { title, poop, toilet, howto, daily, profile, countdown, bowelidays, advent, ...switches };
 }
 
 function inBox(x, y, box) {
@@ -2039,13 +2039,14 @@ export function shareCardLayout(t) {
 
 /**
  * Which ready-screen box contains (x, y): 'toilet' | 'versus' | 'educationInfo' | 'education' |
- * 'howto' | 'daily' | 'profile' | null (null = start the run). A switch not offered has no box, so it is never hit. The profile (user) button is always
+ * 'howto' | 'daily' | 'advent' | 'profile' | null (null = start the run; Play starts it too on 'advent' while the
+ * Advent button is hidden: off season with no piece owned). A switch not offered has no box, so it is never hit. The profile (user) button is always
  * there: it reads "Load user" until a name is set; either way it opens the save panel. The 📚
  * glyph's box (educationInfo) lies inside the 📚 switch's, so it is looked at first.
  */
 export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.versus, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.profile]) {
+  for (const box of [layout.toilet, layout.versus, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.advent, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;

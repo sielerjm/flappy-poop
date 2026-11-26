@@ -249,7 +249,9 @@ test('the real tree: every asset Boot, loadLazyAudio, the Advent book, the splas
     assert.ok(existsSync(join(REPO, u.split('?')[0])), `${u}: the file exists`);
   }
   const bytes = plan.files.reduce((n, [u]) => n + statSync(join(REPO, u === 'index.html' ? 'index.html' : u.split('?')[0])).size, 0);
-  assert.ok(bytes < 6e6, `one build in Cache Storage is ${(bytes / 1e6).toFixed(2)} MB (the design's estimate: about 4.7 MB)`);
+  // 6.5 MB since plan 17, 2.15a (was 6): the Advent book's picture (0.40 MB) and its two sounds took the build to 6.01 MB;
+  // D8 accepted precaching December's art. Michael's call at Preview E (the other way: keep the picture out of the precache).
+  assert.ok(bytes < 6.5e6, `one build in Cache Storage is ${(bytes / 1e6).toFixed(2)} MB (the design's estimate: about 4.7 MB, about 6.0 with December's art)`);
 });
 
 test('the committed tree is unstamped or consistently stamped (the push restamps it)', () => {

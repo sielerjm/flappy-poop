@@ -4,6 +4,8 @@ import { VERSION, versionText, chromeIntent, overlayOutsideHit, adventBookLayout
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, hasOverlayUnder, openChangelog } from '../ui/overlayStack.js';
 import { t, metaFontSize } from '../i18n.js';
+import { createRectGlow } from '../ui/glow.js';
+import { prefersReducedMotion } from '../ui/snowfall.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const V = `?v=${VERSION}`;
@@ -49,18 +51,24 @@ export class Advent extends Phaser.Scene {
     this.season = book?.season ?? null;
     this.pieces = book ? adventBookPieces(book.found, book.season, T) : [];
     const owned = new Map(this.pieces.map((p) => [p.cell, p]));
-    const hasArt = this.textures.exists('advent-puzzle'); // offline before its first load: owned slots show as lit squares
-    this.tiles = new Map();
+    this.hasArt = this.textures.exists('advent-puzzle'); // offline before its first load: owned slots show as lit squares
+    // S14: the pieces not yet shown added wait in locked slots and arrive by the animation; they count as seen from now
+    // (closing mid-way still lands them), so the home button stops glowing.
+    const fresh = new Set((book?.unseen ?? []).filter((k) => this.pieces.some((p) => p.piece === k)));
+    if (fresh.size) book.markSeen([...fresh]);
+    this.locks = new Map();
     L.slots.forEach((s, cell) => {
       const p = owned.get(cell);
-      if (!p) {
-        this.add.rectangle(s.x + L.slot / 2, s.y + L.slot / 2, L.slot - 2, L.slot - 2, b.lockFill).setStrokeStyle(1, b.lockLine).setDepth(1);
+      if (!p || fresh.has(p.piece)) {
+        this.locks.set(cell, this.add.rectangle(s.x + L.slot / 2, s.y + L.slot / 2, L.slot - 2, L.slot - 2, b.lockFill).setStrokeStyle(1, b.lockLine).setDepth(1));
         return;
       }
-      this.tiles.set(cell, this.drawPiece(p, s, L.slot, hasArt));
+      this.drawPiece(p, s, L.slot);
     });
     this.countText = this.add.text(L.count.x, L.count.y, '', { ...STYLE, fontSize: `${b.countPx}px`, color: '#ffd700' }).setOrigin(0.5).setDepth(3);
-    this.setCount(this.pieces.length);
+    this.shownCount = this.pieces.length - fresh.size;
+    this.setCount(this.shownCount);
+    this.arrivals = (book?.unseen ?? []).filter((k) => fresh.has(k)).map((k) => this.pieces.find((p) => p.piece === k));
 
     const version = this.add
       .text(L.panel.x - L.panel.width / 2 + 24, L.close.y, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: '#f8a0c8', fontStyle: 'normal' })
@@ -73,6 +81,120 @@ export class Advent extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => this.close());
     this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('changelog', version)] });
     this.focus.show(); // only under a controller (registry padMode)
+    // A tap inside the book skips the flight under way to its landing (the click still plays).
+    this.input.on('pointerdown', (pointer) => {
+      if (this.flight && !overlayOutsideHit(pointer.x, pointer.y, L.panel)) this.flight.finish();
+    });
+    this.events.once('shutdown', () => this.flight?.finish(true));
+    this.startArrivals();
+  }
+
+  /**
+   * S14's add-piece animation for the pieces that arrived since the book last showed (by day found): the latest
+   * `flights` fly in one after another, older ones land in place at once; under reduced motion none flies.
+   */
+  startArrivals() {
+    const a = T.advent.bookAnim;
+    const list = this.arrivals;
+    if (!list.length) return;
+    const flyCount = prefersReducedMotion() ? 0 : Math.min(a.flights, list.length);
+    const instant = list.slice(0, list.length - flyCount);
+    const flying = list.slice(list.length - flyCount);
+    if (instant.length) {
+      for (const p of instant) this.land(p, true);
+      this.playSound('advent-lock', T.advent.sound.lockVolume);
+    }
+    const next = () => {
+      const p = flying.shift();
+      if (p) this.fly(p, next);
+    };
+    next();
+  }
+
+  /** Piece `p` lands in its slot: the lock gives way to the art, the count ticks, a glow fades over it (with `glow`). */
+  land(p, glow) {
+    const L = this.layout;
+    const s = L.slots[p.cell];
+    this.locks.get(p.cell)?.destroy();
+    this.locks.delete(p.cell);
+    this.drawPiece(p, s, L.slot);
+    this.shownCount += 1;
+    this.setCount(this.shownCount);
+    if (!glow) return;
+    const halo = this.makeGlow(s.x + L.slot / 2, s.y + L.slot / 2, L.slot);
+    this.tweens.add({ targets: halo, alpha: 0, duration: T.advent.bookAnim.fadeMs, onComplete: () => halo.destroy() });
+  }
+
+  /** One flight: large at the grid's centre over its glow with the book dimmed, then into its slot; `done` after the glow fades. */
+  fly(p, done) {
+    const a = T.advent.bookAnim;
+    const L = this.layout;
+    const s = L.slots[p.cell];
+    const big = T.advent.puzzle.cellPx; // the frame's own size: 1:1
+    const to = { x: s.x + L.slot / 2, y: s.y + L.slot / 2 };
+    const dim = this.add.rectangle(L.panel.x, L.panel.y, L.panel.width, L.panel.height, 0x000000, a.dim).setDepth(4).setAlpha(0);
+    const halo = this.makeGlow(L.centre.x, L.centre.y, big).setDepth(5).setAlpha(0);
+    const piece = (this.hasArt ? this.add.image(L.centre.x, L.centre.y, 'advent-puzzle', p.cell) : this.add.rectangle(L.centre.x, L.centre.y, big, big, 0xc89a64)).setDepth(6).setAlpha(0);
+    const scaleOf = (size) => size / big;
+    piece.setScale(scaleOf(big) * 0.6);
+    halo.setScale(0.6);
+    this.playSound('advent-add', T.advent.sound.addVolume);
+    const tweens = [];
+    let landed = false;
+    const finishLanding = () => {
+      if (landed) return;
+      landed = true;
+      for (const tw of tweens) tw.stop();
+      piece.destroy();
+      dim.destroy();
+      halo.destroy();
+      this.playSound('advent-lock', T.advent.sound.lockVolume);
+      this.land(p, true);
+    };
+    const end = () => {
+      this.flight = null;
+      done();
+    };
+    // finish(): a tap jumps to the landing; the glow then fades and the next flight follows. finish(true): the book closed.
+    this.flight = {
+      finish: (closing = false) => {
+        if (closing) {
+          for (const tw of tweens) tw.stop(); // the book is going: nothing new is drawn (the piece is already seen)
+          return;
+        }
+        finishLanding();
+        if (this.flightTimer) this.flightTimer.remove();
+        this.flightTimer = this.time.delayedCall(a.fadeMs, end);
+      },
+    };
+    tweens.push(this.tweens.add({ targets: [piece, halo, dim], alpha: 1, duration: a.popMs }));
+    tweens.push(this.tweens.add({ targets: piece, scale: 1, duration: a.popMs, ease: 'Back.easeOut' }));
+    tweens.push(this.tweens.add({ targets: halo, scale: 1, duration: a.popMs, ease: 'Back.easeOut' }));
+    tweens.push(
+      this.tweens.add({
+        targets: [piece, halo],
+        x: to.x,
+        y: to.y,
+        scale: (target) => (target === piece ? scaleOf(L.slot) : L.slot / big),
+        delay: a.appearMs,
+        duration: a.flyMs,
+        ease: 'Sine.easeInOut',
+        onComplete: () => this.flight?.finish(),
+      }),
+    );
+    tweens.push(this.tweens.add({ targets: dim, alpha: 0, delay: a.appearMs, duration: a.flyMs }));
+  }
+
+  /** A white glow around a square of `size` px centred at (x, y) (the add-piece animation's, S14). */
+  makeGlow(x, y, size) {
+    const pad = T.advent.bookAnim.glowPad;
+    const big = T.advent.puzzle.cellPx;
+    return createRectGlow(this, x, y, { key: 'advent-glow', width: big, height: big, radius: 6, pad }).setScale(size / big).setDepth(5);
+  }
+
+  /** A sample through Play's sound rules (mute, sound off); nothing until its file has landed. */
+  playSound(key, volume) {
+    this.scene.get('Play')?.playSample?.(key, volume, null);
   }
 
   /** "N of 24 found". */
@@ -81,10 +203,10 @@ export class Advent extends Phaser.Scene {
   }
 
   /** Piece `p` in its slot `s` (top-left), `size` px: its frame of the picture (or a lit square without it) and, found on its day, the star. */
-  drawPiece(p, s, size, hasArt) {
+  drawPiece(p, s, size) {
     const cx = s.x + size / 2;
     const cy = s.y + size / 2;
-    const image = hasArt ? this.add.image(cx, cy, 'advent-puzzle', p.cell).setDisplaySize(size, size) : this.add.rectangle(cx, cy, size, size, 0xc89a64);
+    const image = this.hasArt ? this.add.image(cx, cy, 'advent-puzzle', p.cell).setDisplaySize(size, size) : this.add.rectangle(cx, cy, size, size, 0xc89a64);
     image.setDepth(2);
     const star = p.onDay ? this.drawStar(s.x + size - T.advent.book.starInset, s.y + T.advent.book.starInset) : null;
     return { image, star };
@@ -115,6 +237,7 @@ export class Advent extends Phaser.Scene {
     const back = this.onBack;
     this.onBack = null;
     this.scene.stop();
+    play?.refreshSeasonHome?.(); // the Advent button stops glowing once its pieces are shown
     if (back) back();
     else if (result.armResumeLockout) play?.armResumeLockout?.();
   }

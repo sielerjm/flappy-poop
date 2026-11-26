@@ -8451,8 +8451,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       // --- (1) 5 Dec, a real Daily ---
       await pinClock('2026-12-05');
       await load({ clear: true });
-      const home0 = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ day: new Date().toISOString().slice(0, 10), test: p.isTestMode(), chip: p.adventChip?.visible ? p.adventChip.text : null, halo: Boolean(p.dailyHalo?.visible) }); })()`).then(JSON.parse);
-      ok(home0.day === '2026-12-05' && !home0.test && home0.chip === '\u{1F9E9} 0/24' && home0.halo, `5 Dec home: the chip under the 🎅 reads the count alone (${home0.chip}) and the 🎅 glows while a piece is to find (${home0.halo})`);
+      const home0 = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ day: new Date().toISOString().slice(0, 10), test: p.isTestMode(), chip: p.adventShown ? p.adventCount.text : null, glow: Boolean(p.adventHalo?.visible), halo: Boolean(p.dailyHalo?.visible) }); })()`).then(JSON.parse);
+      ok(home0.day === '2026-12-05' && !home0.test && home0.chip === '0/24' && !home0.glow && home0.halo, `5 Dec home: the Advent button reads the count alone (${home0.chip}), not glowing (${home0.glow}), and the 🎅 glows while a piece is to find (${home0.halo})`);
       await evaluate(`(${play}.scene.launch('Daily'), true)`);
       await until(`__flappy.scene.isActive('Daily')`, 40);
       await sleep(400);
@@ -8469,13 +8469,13 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       const s1b = await stored();
       ok(Boolean(o1?.includes("Found today's gift!  \u{1F9E9} 1/24")) && o1.includes('New best today!') && s1b.daily.length === 1, `Over: "Found today's gift!  🧩 1/24" and "New best today!"; one 🌞 post queued (score ${s1b.daily[0]?.score})`);
       await homeAgain();
-      const chip1 = await evaluate(`${play}.adventChip.text`);
+      const chip1 = await evaluate(`${play}.adventCount.text + (${play}.adventHalo.visible ? ' glow' : '')`); // the caught piece waits to be shown added: the button glows (S14)
       // A second, lower run: one pipe, then the crash; its piece from the last pair of the window, never reached.
       const run2 = await flyDaily({ rng: [0.99, 0.999999], until: (s) => s.passed >= 1, maxMs: 15000 });
       await crash();
       const o2 = await overTexts();
       const s2 = await stored();
-      ok(chip1 === '\u{1F9E9} 1/24' && run2.passed >= 1 && !run2.advent?.found && Boolean(o2?.includes('No gift this run, play again  \u{1F9E9} 1/24')) && !o2.includes('New best today!') && s2.daily.length === 1 && s2.daily[0].score === s1b.daily[0].score && s2.queue.length === 1, `a second, lower run: "No gift this run, play again", no new best; the queued best stays ${s2.daily[0]?.score}, nothing more queued`);
+      ok(chip1 === '1/24 glow' && run2.passed >= 1 && !run2.advent?.found && Boolean(o2?.includes('No gift this run, play again  \u{1F9E9} 1/24')) && !o2.includes('New best today!') && s2.daily.length === 1 && s2.daily[0].score === s1b.daily[0].score && s2.queue.length === 1, `a second, lower run: "No gift this run, play again", no new best; the queued best stays ${s2.daily[0]?.score}, nothing more queued`);
 
       // --- (2) 7 Dec, a storm ---
       await pinClock('2026-12-07');

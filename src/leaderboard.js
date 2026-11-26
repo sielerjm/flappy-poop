@@ -589,7 +589,7 @@ export function createDailyQueue(storage = browserStorage(), { key = LEADERBOARD
 
 const PIECE_OK = (k) => Number.isInteger(k) && k >= 1 && k <= TUNING.advent.piece.count;
 
-/** A season's record, or the empty one: { found: { piece: day }, miss: { day, n } | null }. */
+/** A season's record, or the empty one: { found: { piece: day }, miss: { day, n } | null, seen: [piece] } (seen: S14, the pieces the book has shown added). */
 function normalizeAdvent(raw) {
   const found = {};
   const src = raw && typeof raw === 'object' && raw.found && typeof raw.found === 'object' ? raw.found : {};
@@ -599,7 +599,8 @@ function normalizeAdvent(raw) {
   }
   const m = raw?.miss;
   const miss = m && typeof m === 'object' && typeof m.day === 'string' && DAY_RE.test(m.day) && Number.isInteger(m.n) && m.n > 0 ? { day: m.day, n: m.n } : null;
-  return { found, miss };
+  const seen = Array.isArray(raw?.seen) ? [...new Set(raw.seen.filter((k) => PIECE_OK(k) && found[k]))].sort((a, b) => a - b) : [];
+  return { found, miss, seen };
 }
 
 /**
@@ -607,7 +608,9 @@ function normalizeAdvent(raw) {
  * add(piece, day) (true when new or earlier: a piece keeps its earliest day), merge(list) (advent_progress'
  * [{ piece, day }]: the union, the earlier day; how many changed), misses(day) / addMiss(day) (the day's runs
  * that ended without their piece: the spawn window's pity). `storage` null keeps it in memory (the practice
- * sandbox: a test run or a Pretend date never touches the real record). Nothing here throws.
+ * sandbox: a test run or a Pretend date never touches the real record). unseen() lists the pieces the book has not shown
+ * added yet (by day found, then piece; S14: the Advent button glows while there is one), markSeen(pieces) records them
+ * (a piece merged from another device arrives unseen). Nothing here throws.
  */
 export function createAdventStore(storage = browserStorage(), season, { prefix = LEADERBOARD.adventKey } = {}) {
   const box = createJsonStore(storage, `${prefix}.${season}`, normalizeAdvent);
@@ -620,6 +623,20 @@ export function createAdventStore(storage = browserStorage(), season, { prefix =
   return {
     found: () => ({ ...box.read().found }),
     count: () => Object.keys(box.read().found).length,
+    unseen() {
+      const rec = box.read();
+      const seen = new Set(rec.seen);
+      return Object.keys(rec.found).map(Number).filter((k) => !seen.has(k)).sort((a, b) => (rec.found[a] < rec.found[b] ? -1 : rec.found[a] > rec.found[b] ? 1 : a - b));
+    },
+    markSeen(pieces) {
+      const rec = box.read();
+      const seen = new Set(rec.seen);
+      const before = seen.size;
+      for (const k of Array.isArray(pieces) ? pieces : []) if (rec.found[k]) seen.add(k);
+      if (seen.size === before) return;
+      rec.seen = [...seen].sort((a, b) => a - b);
+      box.write(rec);
+    },
     add(piece, day) {
       const rec = box.read();
       if (!put(rec, piece, day)) return false;

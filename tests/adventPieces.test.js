@@ -324,25 +324,45 @@ test('the Daily window\'s two December lines (S14): the count and what is left; 
   assert.deepEqual(adventDailyLines('en', at(upTo(3), '2026-12-05'), 24), ['\u{1F9E9} 3 of 24 found · 21 left', "Today's piece: not found yet"]);
   assert.deepEqual(adventDailyLines('en', at(upTo(20), '2026-12-27'), 24), ['\u{1F9E9} 20 of 24 found · 4 left', '\u{1F332} by 31 Dec'], 'no piece of the day after the 24th');
   assert.deepEqual(adventDailyLines('zh-Hans', at(upTo(5), '2026-12-05'), 24), ['\u{1F9E9} 已找到 5/24 · 还剩 19', '今天的拼图：已找到 · \u{1F384} 进度正好']);
-  // The home chip: the count only (Michael, 26 Nov), whatever the tree.
-  let text = null;
+  // The home screen's Advent button (2.15a, S14; it replaced 2.6's chip): the count only (Michael, 26 Nov), whatever
+  // the tree; it glows while a piece waits to be shown added; the 🧩 until the box's file has landed.
+  const { readyLayout } = await import('../src/logic.js');
+  const seen = {};
+  const stub = (name) => ({ setText(v) { seen[`${name}Text`] = v; return this; }, setVisible(v) { seen[name] = v; return this; } });
   const s = pieceScene();
-  s.adventStores.get(2026).merge(Object.entries(upTo(5)).map(([k, day]) => ({ piece: Number(k), day })));
-  Object.assign(s, { locale: 'en', readyUiShown: true, adventChip: { setText(v) { text = v; return this; }, setVisible() { return this; } } });
-  s.refreshAdventChip('2026-12-05');
-  assert.equal(text, '\u{1F9E9} 5/24');
+  const store = s.adventStores.get(2026);
+  store.merge(Object.entries(upTo(5)).map(([k, day]) => ({ piece: Number(k), day })));
+  Object.assign(s, { locale: 'en', readyUiShown: true, readyBoxes: readyLayout(720, 1280, T), adventBtn: stub('btn'), adventGlyph: stub('glyph'), adventCount: stub('count'), adventHalo: stub('halo'), adventIcon: null, textures: { exists: () => false } });
+  s.refreshAdventButton('2026-12-05');
+  assert.deepEqual({ ...seen, shown: s.adventShown }, { btn: true, glyph: true, countText: '5/24', count: true, halo: true, shown: true });
+  store.markSeen([1, 2, 3, 4, 5]);
+  s.refreshAdventButton('2026-12-05');
+  assert.equal(seen.halo, false, 'every piece shown: no glow');
+  s.refreshAdventButton(null);
+  assert.deepEqual([seen.btn, seen.count, seen.halo, s.adventShown], [false, false, false, false], 'a match: hidden');
+  s.readyUiShown = false;
+  s.refreshAdventButton('2026-12-05');
+  assert.equal(seen.btn, false, 'hidden with the ready UI (a run)');
 });
 
-test('Over\'s found line (Michael, 26 Nov: "Found a previous day\'s puzzle") and the home chip\'s box between the 🎅\'s halo and the Bowelidays image', async () => {
+test('Over\'s found line (Michael, 26 Nov: "Found a previous day\'s puzzle") and the Advent button mirroring the ? on its row (2.15a)', async () => {
   const { adventFoundText } = await import('../src/i18n.js');
-  const { readyLayout } = await import('../src/logic.js');
+  const { readyLayout, readyHit } = await import('../src/logic.js');
   assert.equal(adventFoundText('en', { found: 5, late: false }), "Found today's gift!");
   assert.equal(adventFoundText('en', { found: 1, late: true }), "Found a previous day's puzzle!");
   assert.equal(adventFoundText('en', { found: null, late: false }), 'No gift this run, play again');
   assert.equal(adventFoundText('zh-Hans', { found: 1, late: true }), '找到了往日的拼图！');
-  const L = readyLayout(720, 1280, T);
-  const c = L.adventChip;
-  assert.ok(c.y - c.height / 2 >= L.daily.y + L.daily.height / 2, 'under the 🎅 circle');
-  assert.ok(c.y + c.height / 2 <= L.bowelidays.y - L.bowelidays.height / 2, 'above the Bowelidays image');
-  assert.equal(c.x, L.daily.x, 'centred under the 🎅');
+  for (const [W, x0] of [[720, 0], [1100, 190]]) {
+    const L = readyLayout(W, 1280, T, x0);
+    const a = L.advent;
+    assert.equal(L.adventChip, undefined, 'the chip under the 🎅 is gone');
+    assert.deepEqual({ y: a.y, width: a.width, height: a.height, round: a.round }, { y: L.howto.y, width: L.howto.width, height: L.howto.height, round: true });
+    assert.equal(a.x - x0, x0 + W - L.howto.x, 'the ?\'s mirror image');
+    const haloR = a.width / 2 + T.readyPromptGlowPx;
+    assert.ok(a.x - haloR >= x0, 'its halo stays inside the field');
+    assert.ok(L.daily.x - a.x >= 2 * haloR, 'its halo clears the 🎅\'s');
+    const k = T.advent.button;
+    assert.ok(a.y + k.countDy + k.countPx / 2 < L.bowelidays.y - L.bowelidays.height / 2, 'its count clears the Bowelidays image');
+    assert.equal(readyHit(a.x, a.y, L), 'advent');
+  }
 });

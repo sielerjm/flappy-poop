@@ -549,9 +549,9 @@ export const TUNING = {
     // first band slot nothing else took from a pair in [minPair, maxPair] pairs into the run (per-attempt RNG, never the
     // course). Each run of the day that ends without it takes pityStep pairs off maxPair, down to floorPair.
     piece: { count: 24, minPair: 3, maxPair: 20, pityStep: 3, floorPair: 6, todayWeight: 3 },
-    chipPx: 26, // px font of the home screen's Advent chip (the count alone, "🧩 5/24": Michael, 26 Nov; readyLayout's adventChip box)
-    chipWidth: 320, // px width of that box (drawn only, never hit)
-    chipGapPx: 46, // px from the 🎅 circle's bottom to the chip's centre (clear of its halo; above the Bowelidays image)
+    // The home screen's Advent button (2.15a; S14, Gate A sheet 5): the piece's box at iconPx in the round button, and
+    // "N/24" (countPx, gold) centred countDx / countDy from the button's centre, on its lower right as the 📚's count.
+    button: { iconPx: 60, countPx: 24, countDx: 40, countDy: 40 },
     // The Advent book's picture (Stage 2c, 2.13): Michael's picture cut by tools/advent_puzzle.py into cols x rows square
     // cells of cellPx texture px (2x, drawn at half: 166 logical px), frames in reading order (cell c at column c mod cols,
     // row floor(c / cols)). Piece k (out on k Dec) fills cell order[k − 1]: one plain shuffle shared by every player
@@ -562,6 +562,11 @@ export const TUNING = {
     // A locked slot is a flat lockFill square with a 1 px lockLine; a piece found on its own day wears a gold star of
     // radius starR, starInset px in from its slot's top-right corner.
     book: { width: 696, height: 1112, countPx: 36, countDy: -508, gridDy: -460, lockFill: 0x2a1420, lockLine: 0x4a2a3a, starR: 13, starInset: 18 },
+    // The add-piece animation (2.15a; S14): a piece the book has not shown yet appears at the grid's centre at 1:1 (its
+    // 332 px frame) over a white glow (glowPad px) with the book dimmed by `dim` (appearMs, the chimes building), flies to
+    // its slot (flyMs), lands with the lock click while its glow fades (fadeMs). At most `flights` pieces fly when the
+    // book opens (the latest ones); older ones land in place at once. Under reduced motion none flies.
+    bookAnim: { appearMs: 1000, flyMs: 1300, fadeMs: 1000, popMs: 300, glowPad: 28, dim: 0.45, flights: 3 },
     // Snow storms (Stage 2, 2.7): December Daily runs only, from the day's shared course (course.storm), so every run of a
     // day meets the same storms at the same pairs. A pair at least firstPair pairs into the run, and pairs + gapPairs after
     // the last storm's first pair, starts one when its draw is under `chance`; a banner shows one pair ahead; the storm
@@ -582,7 +587,7 @@ export const TUNING = {
     },
     // December's sounds (2.7a; Michael's Pixabay clips, CREDITS.md): the twinkle when a piece is caught, and the blizzard
     // looped under a storm, faded in from the banner (blizzardFadeMs) and out as the storm ends. Levels for his listen check.
-    sound: { foundVolume: 0.6, blizzardVolume: 0.35, blizzardFadeMs: 1200 },
+    sound: { foundVolume: 0.6, blizzardVolume: 0.35, blizzardFadeMs: 1200, addVolume: 0.7, lockVolume: 0.8 }, // addVolume / lockVolume: the book's chimes and click (2.15a)
     // The 🎅 that stands in for the 🌞 all December, a new one each time the home screen shows (pickSanta):
     // Santa, Mrs. Claus and Mx Claus in the five skin tones and plain. The first is the fallback; variants a
     // device cannot draw as one glyph are dropped at the first pick (supportedSantas). Drop the plain three here.

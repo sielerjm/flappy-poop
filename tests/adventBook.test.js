@@ -83,3 +83,29 @@ test('the Daily window\'s 🧩 line and the save panel open the book', () => {
   assert.match(panel, /id: 'save-advent-btn'/);
   assert.match(panel, /openAdvent\?\.\(\{ onClose: \(\) => play\.openSavePanel\?\.\(\) \}\)/);
 });
+
+test('the found-day store\'s seen flag (S14): unseen pieces by day found, markSeen keeps only found pieces, junk reads as unseen', async () => {
+  const { createAdventStore } = await import('../src/leaderboard.js');
+  const { fakeStorage } = await import('./support/scenes.js');
+  const storage = fakeStorage();
+  const s = createAdventStore(storage, 2026);
+  assert.deepEqual(s.unseen(), []);
+  s.add(5, '2026-12-05');
+  s.add(2, '2026-12-05');
+  s.add(3, '2026-12-03');
+  assert.deepEqual(s.unseen(), [3, 2, 5], 'by day found, then piece');
+  s.markSeen([2, 9]);
+  assert.deepEqual(s.unseen(), [3, 5], 'a piece not found is never marked');
+  s.merge([{ piece: 7, day: '2026-12-07' }]);
+  assert.deepEqual(s.unseen(), [3, 5, 7], 'a piece from another device arrives unseen');
+  s.markSeen([3, 5, 7]);
+  assert.deepEqual(s.unseen(), []);
+  assert.equal(s.count(), 4, 'seen changes no count');
+  assert.deepEqual(createAdventStore(storage, 2026).unseen(), [], 'kept in storage');
+  storage.setItem(`flappyPoop.advent.2026`, JSON.stringify({ found: { 1: '2026-12-01' }, seen: 'all' }));
+  assert.deepEqual(s.unseen(), [1]);
+  const sandbox = createAdventStore(null, 2026);
+  sandbox.add(1, '2026-12-01');
+  sandbox.markSeen([1]);
+  assert.deepEqual(sandbox.unseen(), [], 'the practice sandbox keeps its own');
+});

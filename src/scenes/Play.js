@@ -131,6 +131,7 @@ import {
   adventSpawnHere,
   adventStatus,
   adventBookSeason,
+  adventBookPieces,
   adventAward,
   stormStartsHere,
   stormPhase,
@@ -141,7 +142,7 @@ import {
   stormFlapMul,
   stormScrollMul,
 } from '../logic.js';
-import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines, adventLineText } from '../i18n.js';
+import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
 import { createRunStats, stubRow } from '../runStats.js';
 import { VERSION as APP_VERSION } from '../logic.js';
@@ -569,9 +570,25 @@ export class Play extends Phaser.Scene {
     {
       const b = this.readyBoxes.countdown;
       this.countdownText = this.add.text(b.x, b.y, '', { ...TEXT_STYLE, fontSize: `${T.advent.countdownPx}px`, strokeThickness: 8 }).setOrigin(0.5).setDepth(20);
-      // The Advent chip under the 🎅 (plan 17, 2.6): the pieces found and the tree in reach (refreshSeasonHome).
-      const c = this.readyBoxes.adventChip;
-      this.adventChip = this.add.text(c.x, c.y, '', { ...TEXT_STYLE, fontSize: `${T.advent.chipPx}px`, strokeThickness: 8 }).setOrigin(0.5).setDepth(20).setVisible(false);
+    }
+    // The Advent button (plan 17, 2.15a; S14): top left, the piece's wrapped box in a circle (the 🧩 glyph until its
+    // file has landed, or off season) and "N/24" on its corner; it glows while a piece waits to be shown added, and a
+    // tap opens the book (refreshAdventButton, from refreshSeasonHome). It replaced 2.6's "🧩 N/24" chip under the 🎅.
+    {
+      const b = this.readyBoxes.advent;
+      this.adventHalo = createGlow(this, b.x, b.y, { radius: T.beans.glowRadiusPx, fadeFrac: T.beans.glowFadeFrac })
+        .setDepth(19)
+        .setScale((b.width / 2 + T.readyPromptGlowPx) / T.beans.glowRadiusPx)
+        .setAlpha(T.readyPromptMinAlpha)
+        .setVisible(false);
+      this.adventHaloTween = this.tweens.add({ targets: this.adventHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
+      this.adventBtn = createButton(this, b, '', { ...TEXT_STYLE, fontSize: '44px' });
+      this.adventBtn.setVisible(false);
+      this.adventGlyph = this.add.text(b.x, b.y, '\u{1F9E9}', { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(21).setVisible(false);
+      this.adventIcon = null; // the piece's box, made once its texture exists
+      const k = T.advent.button;
+      this.adventCount = this.add.text(b.x + k.countDx, b.y + k.countDy, '', { ...TEXT_STYLE, fontSize: `${k.countPx}px`, color: '#ffd700', strokeThickness: 8 }).setOrigin(0.5).setDepth(22).setVisible(false);
+      this.adventShown = false;
     }
     this.snowfall = null;
     this.countdownImage = null; // the Bowelidays image (all December), made once its file has landed
@@ -746,6 +763,7 @@ export class Play extends Phaser.Scene {
             { id: 'education', box: this.switchBoxes.education, visible: () => onReady() && Boolean(this.readyBoxes.education), activate: () => this.toggleEducation() },
             // The 📚 glyph (and its gold count): "Your cards" (toggleEduCard; plan 26, A2).
             { id: 'educationInfo', box: this.switchBoxes.educationInfo, visible: () => onReady() && Boolean(this.readyBoxes.educationInfo), activate: () => this.toggleEduCard() },
+            { id: 'advent', box: this.readyBoxes.advent, visible: () => onReady() && this.adventShown, activate: () => this.handleChrome('advent') },
             { id: 'daily', box: this.readyBoxes.daily, visible: onReady, activate: () => this.handleChrome('daily') },
             { id: 'howto', box: this.readyBoxes.howto, visible: () => onReady() || (this.helpShown && this.state === 'paused'), activate: () => this.handleChrome('howto') },
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
@@ -1645,6 +1663,10 @@ export class Play extends Phaser.Scene {
           this.handleChrome('daily');
           return;
         }
+        if (hit === 'advent' && this.adventShown) {
+          this.handleChrome('advent'); // the Advent book (plan 17, 2.15a); hidden, its corner starts the run as before
+          return;
+        }
         if (hit === 'toilet') {
           this.toggleToilet();
           return;
@@ -1991,14 +2013,14 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * What the Advent book shows (2.15): { season, found } for December's season (practice's sandbox in test mode, as
+   * What the Advent book shows (2.15): { season, found, unseen, markSeen (S14's seen flag) } for December's season (practice's sandbox in test mode, as
    * adventNow), or after it last December's real record while it holds a piece (adventBookSeason); null: no book.
    */
   adventBook(day = dailyDay(this.registry)) {
     const season = adventBookSeason(day, T, (y) => createAdventStore(undefined, y).count() > 0);
     if (season === null) return null;
     const store = this.adventSeasonOf(day) ? this.adventStoreFor(day, this.isTestMode()) : createAdventStore(undefined, season);
-    return { season, found: store.found() };
+    return { season, found: store.found(), unseen: store.unseen(), markSeen: (pieces) => store.markSeen(pieces) };
   }
 
   /** Open the Advent book; `onClose` (the save panel's button) runs when it closes, in place of going home. */
@@ -2007,10 +2029,25 @@ export class Play extends Phaser.Scene {
     this.handleChrome('advent');
   }
 
-  /** The home screen's Advent chip, on `day` (null hides it: off season, a match): the count only, "🧩 5/24" (Michael, 26 Nov: the tree's status stays in the Daily window). */
-  refreshAdventChip(day) {
-    const now = day && this.adventChip ? this.adventNow(day) : null;
-    this.adventChip?.setText(now ? adventLineText(this.locale, { n: now.status.n, tree: null }, T.advent.piece.count) : '').setVisible(Boolean(now) && this.readyUiShown);
+  /**
+   * The home screen's Advent button on `day` (null hides it: a match): shown with the ready UI while the book has a
+   * season (adventBook), with "N/24" (the count alone: the tree's status stays in the Daily window, Michael 26 Nov),
+   * glowing while a piece waits to be shown added (S14). The piece's box replaces the 🧩 once its file has landed.
+   */
+  refreshAdventButton(day) {
+    if (!this.adventBtn) return;
+    const book = day ? this.adventBook(day) : null;
+    const shown = Boolean(book) && this.readyUiShown;
+    this.adventShown = shown;
+    const b = this.readyBoxes.advent;
+    const icon = this.textures.exists(ADVENT_ART.piece);
+    if (icon && !this.adventIcon?.active) this.adventIcon = this.add.image(b.x, b.y, ADVENT_ART.piece).setDisplaySize(T.advent.button.iconPx, T.advent.button.iconPx).setDepth(21);
+    this.adventBtn.setVisible(shown);
+    this.adventIcon?.setVisible(shown);
+    this.adventGlyph.setVisible(shown && !icon);
+    const n = book ? adventBookPieces(book.found, book.season, T).length : 0;
+    this.adventCount.setText(`${n}/${T.advent.piece.count}`).setVisible(shown);
+    this.adventHalo.setVisible(shown && book.unseen.length > 0);
   }
 
   /**
@@ -4514,7 +4551,7 @@ export class Play extends Phaser.Scene {
       this.countdownImage = this.add.image(b.x, b.y, img).setDisplaySize(b.width, b.height).setDepth(20);
     }
     this.countdownImage?.setVisible(Boolean(img) && this.readyUiShown);
-    this.refreshAdventChip(home ? day : null);
+    this.refreshAdventButton(this.match ? null : day); // also after December, while last season's book holds a piece
     if (season && !this.snowfall) this.snowfall = createSnowfall(this, { x: 0, y: 0, width: this.fieldW, height: GAME_HEIGHT }, T.advent.snow);
     if (!season && this.snowfall) {
       this.snowfall.destroy();
@@ -4998,10 +5035,12 @@ export class Play extends Phaser.Scene {
     if (!has('flush')) this.load.audio('flush', 'assets/sfx/ToiletFlush_Win.mp3' + V); // a two-player GO
     // In December the twins too (plan 17, 1.10; D8, D15), never in Boot: the stock frame shows until they land.
     for (const [key, file] of Object.entries(this.skin.files)) if (!this.textures.exists(key)) this.load.image(key, file + V);
-    // And December's two sounds (2.7a), in season only (the season's skin has files).
+    // And December's sounds (2.7a, 2.15a), in season only (the season's skin has files).
     if (Object.keys(this.skin.files).length) {
       if (!has('advent-found')) this.load.audio('advent-found', 'assets/sfx/Advent_PieceFound.mp3' + V); // a piece caught
       if (!has('advent-blizzard')) this.load.audio('advent-blizzard', 'assets/sfx/Advent_Blizzard.mp3' + V); // under a storm (looped)
+      if (!has('advent-add')) this.load.audio('advent-add', 'assets/sfx/Advent_PieceAdd.mp3' + V); // a piece flies into the book (2.15a)
+      if (!has('advent-lock')) this.load.audio('advent-lock', 'assets/sfx/Advent_PieceLock.mp3' + V); // it lands in its cell
     }
     if (!this.load.list.size) {
       registerWorker();
