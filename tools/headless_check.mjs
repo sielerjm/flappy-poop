@@ -22,6 +22,10 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { LEADERBOARD } from '../src/config.js';
+
+/** The live project's host (from the Data API URL the game ships): no smoke page may send it anything. */
+export const LIVE_HOST = new URL(LEADERBOARD.dataApi).host;
 
 export const DEFAULT_URL = 'http://localhost:8000';
 
@@ -99,7 +103,7 @@ export const SECTIONS = [
   { name: 'overlays', needs: [], about: 'every overlay opens from the ready screen, keeps the loop alive and closes' },
   { name: 'level1', needs: [], about: "level 1's scripted pairs and still pickups; the finish-line texture" },
   { name: 'howto-seen', needs: ['overlays'], about: 'opening How to play stops the ? pulse and stamps this build' },
-  { name: 'run', needs: [], about: 'a run starts; the leaderboard mid-run pauses it; the reopen race; board names fit (live board)' },
+  { name: 'run', needs: [], about: 'a run starts; the leaderboard mid-run pauses it; the reopen race; board names fit (stubbed rows, the widest names)' },
   { name: 'farts', about: 'probiotic HUD and its pulse, score popups, normal and super fart, the glow texture' },
   { name: 'levels', about: "finish line → level break, overlays in the break, the shop, a fart cut at level 2's line" },
   { name: 'mystery', about: "mystery boxes and draws, the guaranteed kernel and purse, a sweeping gap item, the level bar" },
@@ -253,6 +257,15 @@ async function connect(port) {
   const pending = new Map();
   const exceptions = [];
   const consoleErrors = [];
+  /** Every request or socket the page opened to the live project (LIVE_HOST), refused or not: the run's last check wants none. */
+  const liveHits = [];
+  const liveUrl = (u) => {
+    try {
+      return new URL(u).host === LIVE_HOST;
+    } catch {
+      return false;
+    }
+  };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.id && pending.has(m.id)) {
@@ -263,6 +276,10 @@ async function connect(port) {
       exceptions.push((d.exception?.description ?? d.text ?? '').split('\n').slice(0, 2).join(' '));
     } else if (m.method === 'Runtime.consoleAPICalled' && (m.params.type === 'error' || m.params.type === 'warning')) {
       consoleErrors.push(m.params.args.map((a) => a.value ?? a.description).join(' '));
+    } else if (m.method === 'Network.requestWillBeSent' && liveUrl(m.params.request?.url)) {
+      liveHits.push(`${m.params.request.method} ${m.params.request.url.split('?')[0]}`);
+    } else if (m.method === 'Network.webSocketCreated' && liveUrl(m.params.url)) {
+      liveHits.push(`socket ${m.params.url.split('?')[0]}`);
     }
   };
   await new Promise((resolve, reject) => {
@@ -283,7 +300,7 @@ async function connect(port) {
   };
   await send('Runtime.enable');
   await send('Page.enable');
-  return { send, evaluate, exceptions, consoleErrors, close: () => ws.close() };
+  return { send, evaluate, exceptions, consoleErrors, liveHits, close: () => ws.close() };
 }
 
 export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) {
@@ -326,6 +343,12 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
     // (globalThis.__flappy) exists only on local hosts unless a driver opts in before the page's
     // scripts run (debugHandleAllowed): opt in, so --url=<any host> keeps working.
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `globalThis.__flappyDebug = true; Object.defineProperty(navigator, 'getGamepads', { value: () => [], configurable: true });` });
+    // Never the live project: the page itself has no board here (src/onlineNet.js devBoardProject: the
+    // opt-in above makes any host a dev host), the browser refuses *supabase.co* from the first load on
+    // (a section may add to the list, never drop it), and every request or socket to the live host is
+    // recorded (connect's liveHits) for the run's last check.
+    await cdp.send('Network.enable');
+    await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
     // The clock pin (plan 17, 1.9): the page and this process run from `day` 12:00 UTC on (--date wins
     // over every pin). It takes effect on the next navigation, so a section that pins its own day reloads.
     const pinClock = async (day) => {
@@ -417,6 +440,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       if (!splashGone) await sleep(100);
     }
     ok(splashGone, 'splash: removed from the page after Continue');
+    const board = await evaluate(`import('./src/config.js').then((m) => [globalThis.__flappyBoard, m.LEADERBOARD.dataApi])`);
+    ok(board[0] === 'off' && board[1] === '', `the page booted with no board: a driver's page is a dev host (${JSON.stringify(board)})`);
     await sleep(300);
     ok((await evaluate(`__flappy.scene.getScene('Play').state`)) === 'ready', 'splash: the Continue key did not reach the ready screen (no run started)');
     // Hermetic career (plan 08): the counters, the claims and the profile never reach the live board.
@@ -1188,7 +1213,9 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       await sleep(400);
       ok((await playState()) === 'paused' && !(await active('Leaderboard')), 'closing it leaves the run paused');
 
-      // Close-and-reopen while a load is in flight draws the board once.
+      // Close-and-reopen while a load is in flight draws the board once. The page has no board of its
+      // own (a dev host), so the rows are stubbed: the widest names a player can pick (NAME_MAX, 16).
+      await evaluate(`(() => { globalThis.__fetchR = globalThis.fetch; const top = [['WWWWWWWWWWWWWWWW', 999], ['MMMMMMMMMMMMMMMM', 998], ['Wide Name Tester', 512], ['💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩', 301], ['A', 7]].map(([name, score]) => ({ name, score, toilet: false, level: 7 })); globalThis.fetch = async (url) => (String(url).includes('/scores?') ? new Response(JSON.stringify(top), { status: 200 }) : new Response('{"message":"stub"}', { status: 503 })); return import('./src/config.js').then((m) => { globalThis.__apiR = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
       await chrome('leaderboard');
       await sleep(50);
       await closeTop('Leaderboard');
@@ -1209,6 +1236,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       })()`);
       ok(overflow.checked > 0 && overflow.overflow.length === 0, `board names fit their column (${overflow.checked} measured${overflow.overflow.length ? `, overflow: ${overflow.overflow.join(', ')}` : ''})`);
       await closeTop('Leaderboard');
+      await evaluate(`(globalThis.fetch = globalThis.__fetchR, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__apiR; return true; }))`);
     });
 
     const play = `__flappy.scene.getScene('Play')`;
@@ -8354,6 +8382,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
     if (cdp.consoleErrors.length) console.log(`note: console errors/warnings:\n  ${cdp.consoleErrors.join('\n  ')}`);
     const due = selected ? selected.size : SECTIONS.length;
     ok(reached === SECTIONS.length && ran.length === due, `every ${selected ? 'selected ' : ''}section ran (${ran.length} / ${due})`);
+    const hits = cdp.liveHits;
+    ok(hits.length === 0, hits.length ? `the page sent ${hits.length} request(s) to the live project ${LIVE_HOST}:\n  ${[...new Set(hits)].join('\n  ')}` : `no request or socket to the live project (${LIVE_HOST})`);
   } catch (err) {
     ok(false, `driver error: ${err.message}`);
     if (cdp?.exceptions.length) console.log(`  page exceptions:\n  ${cdp.exceptions.join('\n  ')}`);

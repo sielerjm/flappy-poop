@@ -1563,7 +1563,16 @@ src/
                             dev host (debugHandleAllowed) the test project `?onlinetest=
                             <code>` stored in this browser (encodeDevProject /
                             devProjectFrom; `=off` forgets it) under its own session and
-                            trust keys (DEV_PROJECT_KEY). ONLINE_RPCS includes finish_match
+                            trust keys (DEV_PROJECT_KEY). devBoardProject / applyDevBoard
+                            (src/main.js, before the boot): on a dev host the page has no
+                            board at all (LEADERBOARD.dataApi emptied; the public key stays,
+                            so the board, the posts, career, 📚 sharing and online play
+                            send nothing), unless this browser holds a test project (the
+                            board uses it too) or the address says `?board=live` (kept for
+                            the tab in sessionStorage, BOARD_LIVE_KEY; `?board=off`
+                            forgets it; stripped from the address); globalThis.__flappyBoard
+                            says 'off' / 'test' / 'live'. A public host keeps the live board.
+                            ONLINE_RPCS includes finish_match
                             and online_history, plus friend_list, send_friend_request,
                             respond_friend_request, remove_friend, block_user and
                             unblock_user (3.1), online_beat and friend_statuses (3.2), send_invite, invite_list,
@@ -3782,7 +3791,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             the look finding it free), a relaunch's stale record, Create
                             beside a live race
   onlineDevProject.test.js  onlineProjectConfig and ?onlinetest: dev hosts only, own keys,
-                            off, blocked storage
+                            off, blocked storage; devBoardProject / applyDevBoard: no board
+                            on a dev host unless a test project or ?board=live (per tab)
   onlineSignOut.test.js     Sign out and a Sign in as another player leave online play only on
                             a device holding a session (Play.onlineSessionHeld /
                             onlineLeave); otherwise no client load
@@ -4176,7 +4186,9 @@ tools/
                             need (needs omitted = every earlier section; [] = passes alone,
                             set only once shown), skipping and never reordering; the
                             hermetic stubs, the boot wait and the leaderboard muzzle sit
-                            outside every section, and so does the clock pin (plan 17: SMOKE_PIN_DAY,
+                            outside every section (the live guard too: *supabase.co* blocked
+                            before the first load, the page booted with no board, and a
+                            last check that no request or socket reached LIVE_HOST), and so does the clock pin (plan 17: SMOKE_PIN_DAY,
                             pinOffset, clockStubSource; the page's Date and this process's Date.now run
                             from the pinned noon UTC, a section may pin its own day, --date overrides all;
                             the `christmas` section checks December on a 5 Dec pin), and so does startEducationRun (plan 26
@@ -4674,6 +4686,13 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `?onlinetest=<code>` (`onlineProjectConfig`) works on dev hosts only, keeps its own session
   and trust keys, and the repo never holds a test project's URL or key
   (`tools/online_test_link.mjs` builds the link from an env file).
+- Nothing run on a dev host writes to the live project (24 Nov 2026: a test score from a local
+  page reached the live board). A page on this machine, the LAN or under a driver boots with no board
+  (`devBoardProject`); only `?board=live` in the address turns live on, for that tab, and smoke,
+  previews and agents never use it. The smoke also blocks `*supabase.co*` before its first load and
+  fails if any request or socket reaches the live host (`LIVE_HOST`, `liveHits`); a section may add
+  to that block list, never drop `*supabase.co*` from it (tests/tools.test.js). A preview driver
+  blocks it too.
 - Backend change → edit `db/schema.sql`, `npm run schema:stamp`, list a new anon
   function and its undo line in the file's header (a new argument on an existing function: add it
   last with a default, `drop function if exists` the old signature just before `create`, and move its

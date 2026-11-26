@@ -149,6 +149,88 @@ export function onlineProjectConfig({ search = '', hostname = '', optIn = false,
   return { config, test: true, param, dev: true };
 }
 
+// --- the board on a dev host: off unless asked for -----------------------------------------------
+
+/** The address parameter for the board on a dev host: 'live' turns the live project on for this tab, 'off' forgets that. */
+export const BOARD_PARAM = 'board';
+/** Where a tab keeps `?board=live` (sessionStorage: it ends with the tab, so a later session starts off again). */
+export const BOARD_LIVE_KEY = 'flappyPoop.boardLive';
+
+/**
+ * Which project the board, the posts and online play reach on this page. On a public host: the live one
+ * (`base`), as always. On a dev host (debugHandleAllowed: this machine, the LAN, a driver's opt-in, so the
+ * smoke and every preview and hand session on a worktree's server): none, so nothing written there
+ * reaches the live board (a test score from a local page did, 24 Nov 2026), unless the page asks. The
+ * test project this browser holds (`?onlinetest=`, onlineProjectConfig) is used for the board too, and
+ * `?board=live` turns the live one on for this tab (`?board=off` forgets it); live wins over a test
+ * project. `param` says the caller should strip `?board=` from the address. Never throws.
+ * → { mode: 'live' | 'test' | 'off', dataApi, publishableKey, param }
+ */
+export function devBoardProject({ search = '', hostname = '', optIn = false, storage = null, tab = null, base = LEADERBOARD } = {}) {
+  const live = { dataApi: base.dataApi, publishableKey: base.publishableKey };
+  if (!debugHandleAllowed(hostname, optIn)) return { mode: 'live', ...live, param: false };
+  let q = null;
+  try {
+    q = new URLSearchParams(search ?? '');
+  } catch {
+    q = null;
+  }
+  const value = q?.get(BOARD_PARAM) ?? null;
+  let asked = false;
+  try {
+    if (value === 'live') tab?.setItem(BOARD_LIVE_KEY, '1');
+    else if (value === 'off') tab?.removeItem(BOARD_LIVE_KEY);
+    asked = value === 'live' || tab?.getItem(BOARD_LIVE_KEY) === '1';
+  } catch {
+    asked = value === 'live'; // a tab without storage: this load only
+  }
+  const param = value !== null;
+  if (asked) return { mode: 'live', ...live, param };
+  let held = null;
+  try {
+    const code = q?.get(DEV_PROJECT_PARAM);
+    if (code && code !== 'off') held = devProjectFrom(code);
+    else if (code !== 'off') {
+      const raw = storage?.getItem(DEV_PROJECT_KEY);
+      held = raw ? devProjectFrom(JSON.parse(raw)) : null;
+    }
+  } catch {
+    held = null;
+  }
+  if (held) return { mode: 'test', dataApi: `${held.url}/rest/v1`, publishableKey: held.key, param };
+  return { mode: 'off', dataApi: '', publishableKey: base.publishableKey, param }; // no URL is enough (leaderboard.js baseUrl); the public key stays, so a driver's stub URL still works
+}
+
+/**
+ * Applies devBoardProject to this page's LEADERBOARD before the game boots (src/main.js): every module
+ * reads LEADERBOARD.dataApi / publishableKey at call time, so an empty dataApi turns the board, the posts,
+ * the career, 📚 sharing and online play off on this page (leaderboard.js: no requests are made). Strips
+ * `?board=` from the address. Returns the mode, also kept as globalThis.__flappyBoard for drivers.
+ */
+export function applyDevBoard(scope = globalThis) {
+  const loc = scope.location;
+  let tab = null;
+  try {
+    tab = scope.sessionStorage ?? null;
+  } catch {
+    tab = null;
+  }
+  const r = devBoardProject({ search: loc?.search, hostname: loc?.hostname, optIn: scope.__flappyDebug === true, storage: browserStorage(scope), tab });
+  LEADERBOARD.dataApi = r.dataApi;
+  LEADERBOARD.publishableKey = r.publishableKey;
+  if (r.param) {
+    try {
+      const url = new URL(loc.href);
+      url.searchParams.delete(BOARD_PARAM);
+      scope.history?.replaceState?.(scope.history.state, '', url.href);
+    } catch {
+      /* the address keeps it: read the same way next time */
+    }
+  }
+  scope.__flappyBoard = r.mode;
+  return r.mode;
+}
+
 /** 'https://<ref>.supabase.co/rest/v1' → 'https://<ref>.supabase.co'; '' when the feature is off. */
 function projectUrl(config) {
   const api = typeof config?.dataApi === 'string' ? config.dataApi.replace(/\/+$/, '') : '';

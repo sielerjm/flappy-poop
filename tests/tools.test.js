@@ -117,3 +117,19 @@ test('smoke expandOnly: a section brings what it needs, in run order; omitted ne
   assert.deepEqual(expandOnly(['e'], fixture), ['a', 'b', 'c', 'd', 'e']);
   assert.deepEqual(expandOnly(['home']), ['home']);
 });
+
+test('the smoke never reaches the live project: blocked before the first load, every request to it a failed check', async () => {
+  const { LIVE_HOST } = await import('../tools/headless_check.mjs');
+  const { LEADERBOARD } = await import('../src/config.js');
+  assert.equal(LIVE_HOST, new URL(LEADERBOARD.dataApi).host);
+  assert.match(LIVE_HOST, /^[a-z0-9]+\.supabase\.co$/);
+  const firstBlock = smokeSrc.indexOf("cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] })");
+  const firstLoad = smokeSrc.indexOf("cdp.send('Page.navigate'");
+  assert.ok(firstBlock > 0 && firstBlock < firstLoad, 'the block is on before the first page load');
+  // A section may add to the block list, never drop the live project from it.
+  for (const m of smokeSrc.matchAll(/setBlockedURLs', \{ urls: \[([^\]]*)\]/g)) assert.match(m[1], /'\*supabase\.co\*'/, m[0]);
+  assert.match(smokeSrc, /Network\.requestWillBeSent' && liveUrl/, 'requests to the live host are recorded');
+  assert.match(smokeSrc, /Network\.webSocketCreated' && liveUrl/, 'and sockets');
+  assert.match(smokeSrc, /ok\(hits\.length === 0,/, 'the last checks want none');
+  assert.match(smokeSrc, /__flappyBoard/, 'and the page booted with no board');
+});

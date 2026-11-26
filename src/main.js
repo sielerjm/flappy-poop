@@ -2,6 +2,7 @@ import './phaserReady.js'; // first: Phaser exists before this module runs (plan
 import { FIELD } from './config.js';
 import { fieldWidth, perfMode, inviteFromSearch, withoutInvite, debugHandleAllowed } from './logic.js';
 import { joinCodeFromSearch, withoutJoin } from './online.js';
+import { applyDevBoard } from './onlineNet.js';
 import { attachPerfMeter } from './ui/perfMeter.js';
 import { installErrorCard } from './ui/errorCard.js';
 import { Boot } from './scenes/Boot.js';
@@ -24,6 +25,11 @@ import { stopWorkerIfAsked } from './swClient.js';
 // The service worker (plan 35, Stage 3): ?nosw, or a local host without ?sw, removes it and its caches
 // first thing; Play registers it once its lazy sounds are in (src/swClient.js).
 stopWorkerIfAsked(globalThis);
+
+// The board on a dev host (this machine, the LAN, a driver): off unless the page asks for it
+// (?board=live for this tab, or the test project from ?onlinetest=), before anything can post.
+// src/onlineNet.js devBoardProject; a public host keeps the live board.
+applyDevBoard(globalThis);
 
 // ?perf shows the frame meter (src/ui/perfMeter.js); ?perf=var also lets Arcade step by each
 // frame's delta instead of its fixed 60 Hz, to A/B the physics step on a phone. Debug only.
