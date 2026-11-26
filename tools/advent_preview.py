@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""advent_preview.py: Gate A mock-up sheets for the December art (plan 17, steps 1.4, 1.5 and 2.6a).
+"""advent_preview.py: Gate A mock-up sheets for the December art (plan 17, steps 1.4, 1.5, 2.6a and 2.14).
 
 Composites draft art (fitted December files from meta/advent-previews/art-fit/) onto the real game
 art (assets/*.png) at in-game size, on the level colours a run can have, so Michael can approve,
@@ -7,13 +7,13 @@ change or cut each piece before it enters assets/advent/. Nothing here touches s
 sheets go to the Dropbox checkout's .claude/plans/17-previews/gateA/ (gitignored).
 
 Run:    ~/.local/bin/uv run --with pillow python3 tools/advent_preview.py [--sheets 1,2,3,7]
-        --sheets  comma list of: 1, 2, 3, 7 (step 1.4), pipes (step 1.5), 4 and 5a (step 2.6a), or all (default;
-                  "all" is the Stage 1 set, 1/2/3/7/pipes: sheets 4 and 5a are built only when named)
+        --sheets  comma list of: 1, 2, 3, 7 (step 1.4), pipes (step 1.5), 4 and 5a (step 2.6a), 5 (step 2.14), or all (default;
+                  "all" is the Stage 1 set, 1/2/3/7/pipes: sheets 4, 5a and 5 are built only when named)
         --art DIR       fitted December art (default <main checkout>/meta/advent-previews/art-fit/)
         --guides DIR    pipe-cap guides (default .../meta/advent-previews/art-guides/)
         --backdrop PNG  sheet 7's ready-screen backdrop (default <out>/backdrop-home-720x1280.png)
         --out DIR       default <main checkout>/.claude/plans/17-previews/gateA/
-        --selftest      feed the sheet-1 check a twin shifted by 3 px (and a few other broken inputs)
+        --selftest      feed the sheet-1 check a twin shifted by 3 px (and a few other broken inputs, a book tile 6 px off)
                         and exit non-zero, as the checks must; writes nothing
 The "main checkout" is found through git's common dir, so a worktree reads the same Dropbox folders.
 Every game number (radii, scales, colours, layout) is read from src/config.js, src/logic.js and
@@ -33,6 +33,11 @@ Checks (any failure exits non-zero):
     in Light or A), the Light control against src/ui/snowfall.js, and a coverage table (pipe gaps and the poop's hitbox);
   - sheet 5a (the Advent piece beside December's pickups): the fitted icon is 192 x 192, has transparent corners
     and keeps its opaque near-white "?" (>= 2 % of the pixels);
+  - sheet 5 (the Advent book mock-up, 11 sheets: four book states, three add-piece frames, two home sheets with the button,
+    the Daily window with its two marks, the board with an Advent tab; module section "sheet 5"): every sheet is 720 x 1280;
+    `check_book_tiles`: each owned piece's 166 px slot matches its puzzle frame (mean absolute difference per channel below 3,
+    the star's corner box ignored) and each other slot's centre pixel is the locked fill (42, 20, 32); the piece order is read
+    from src/config.js and asserted equal to the copy here;
   - step 1.5: the printed cream distances (pipe 43 / 35 / 31 / 29 at 55 / 60 / 70 / 80 %; villi
     50 / 21 / 21 / 41 at 40 / 55 / 70 / 80 %) are within 1 of the plan's, and formula V changes no
     pixel that is not the villi fill on villi.png, ceiling.png and ground.png.
@@ -45,7 +50,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageStat
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
@@ -1505,6 +1510,352 @@ def sheet5a(inp, out, manifest, failures):
         sheet_save(sheet, out, f"sheet5a-pickups-L{lvl}.png", ["art-fit/advent, candy-cane, gingerbread, bacteria-santa", "assets/bean, postbiotic, mystery (frame 0), coin (frame 0)"], manifest)
 
 
+# ---- sheet 5 (step 2.14): the Advent book mock-up on the real December shots
+BOOK_ORDER = [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6]  # TUNING.advent.puzzle.order (asserted)
+BOOK_COLS, BOOK_ROWS, BOOK_SLOT, BOOK_X0, BOOK_Y0 = 4, 6, 166, 28, 180
+B_FILL, B_STROKE, B_GOLD = (26, 11, 20), (232, 94, 150), (255, 214, 0)
+B_LOCK, B_LOCK_LINE = (42, 20, 32), (74, 42, 58)
+B_LATE = {3, 7, 10, 12}  # found after their day (no star)
+B_OWNED_B = set(range(1, 15)) - {6, 9, 13}
+STAR_BOX = (133, 3, 163, 33)  # slot-relative box the tile check ignores (the on-the-day star)
+BOOK_TILE_TOL = 3.0  # mean absolute difference per channel
+
+
+def book_order():
+    """TUNING.advent.puzzle.order from src/config.js (cfg() reads numbers only, so a small regex), asserted equal to the hard-coded copy."""
+    m = re.search(r"puzzle:\s*\{[^}]*?order:\s*\[([0-9,\s]+)\]", _config)
+    if not m:
+        raise SystemExit("FAIL: TUNING.advent.puzzle.order not found in src/config.js")
+    got = [int(v) for v in m.group(1).replace(",", " ").split()]
+    if got != BOOK_ORDER:
+        raise SystemExit(f"FAIL: src/config.js puzzle order {got} differs from advent_preview.py's copy {BOOK_ORDER}")
+    return got
+
+
+def slot_xy(cell):
+    return BOOK_X0 + BOOK_SLOT * (cell % BOOK_COLS), BOOK_Y0 + BOOK_SLOT * (cell // BOOK_COLS)
+
+
+def emoji_img(ch, size):
+    """An Apple Color Emoji (only its 160 px bitmap strike exists) resized to size x size."""
+    im = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
+    ImageDraw.Draw(im).text((0, 0), ch, font=ImageFont.truetype("/System/Library/Fonts/Apple Color Emoji.ttc", 160), embedded_color=True)
+    return im.resize((size, size), Image.Resampling.LANCZOS)
+
+
+def _mask(size, fn, k=4):
+    m = Image.new("L", (size[0] * k, size[1] * k), 0)
+    fn(ImageDraw.Draw(m), k)
+    return m.resize(size, Image.Resampling.LANCZOS)
+
+
+def paint(sheet, xy, colour, mask, alpha=1.0):
+    if alpha != 1.0:
+        mask = mask.point(lambda v: int(round(v * alpha)))
+    sheet.paste(tuple(colour) + (255,), (int(xy[0]), int(xy[1]), int(xy[0]) + mask.width, int(xy[1]) + mask.height), mask)
+
+
+def rrect(sheet, box, radius, fill=None, alpha=1.0, stroke=None, sw=0):
+    """A rounded rectangle on its edge box (x0, y0, x1, y1), anti-aliased; the stroke is centred on the edge (sw px wide)."""
+    x0, y0, x1, y1 = box
+    pad = sw // 2 + 2
+    ox, oy, size = x0 - pad, y0 - pad, (x1 - x0 + 2 * pad, y1 - y0 + 2 * pad)
+    if fill is not None:
+        paint(sheet, (ox, oy), fill, _mask(size, lambda d, k: d.rounded_rectangle(((x0 - ox) * k, (y0 - oy) * k, (x1 - ox) * k - 1, (y1 - oy) * k - 1), radius * k, fill=255)), alpha)
+    if stroke is not None and sw:
+        h = sw / 2
+
+        def ring_fn(d, k):
+            d.rounded_rectangle((round((x0 - ox - h) * k), round((y0 - oy - h) * k), round((x1 - ox + h) * k) - 1, round((y1 - oy + h) * k) - 1), round((radius + h) * k), fill=255)
+            d.rounded_rectangle((round((x0 - ox + h) * k), round((y0 - oy + h) * k), round((x1 - ox - h) * k) - 1, round((y1 - oy - h) * k) - 1), max(0, round((radius - h) * k)), fill=0)
+        paint(sheet, (ox, oy), stroke, _mask(size, ring_fn))
+
+
+def dim_box(sheet, box, a):
+    reg = sheet.crop(box)
+    sheet.paste(Image.blend(reg, Image.new("RGBA", reg.size, (0, 0, 0, 255)), a), box[:2])
+
+
+def glow_box(sheet, box, grow, blur, alpha):
+    """A white glow: the box grown by `grow` px each side, Gaussian-blurred, at `alpha`."""
+    m = Image.new("L", sheet.size, 0)
+    ImageDraw.Draw(m).rectangle((box[0] - grow, box[1] - grow, box[2] - 1 + grow, box[3] - 1 + grow), fill=255)
+    paint(sheet, (0, 0), (255, 255, 255), m.filter(ImageFilter.GaussianBlur(blur)), alpha)
+
+
+def star_tile(cx, cy):
+    """The on-the-day star: 5 points, outer radius 13, inner 5.5, one point up, gold with a 2 px dark outline centred on its edge.
+    Returns (tile, top-left x, y) for a 40 x 40 RGBA tile."""
+    k, n = 4, 40
+    big = Image.new("RGBA", (n * k, n * k), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    pts = [((n / 2 + (13 if i % 2 == 0 else 5.5) * math.cos(math.radians(-90 + 36 * i))) * k,
+            (n / 2 + (13 if i % 2 == 0 else 5.5) * math.sin(math.radians(-90 + 36 * i))) * k) for i in range(10)]
+    d.polygon(pts, fill=B_GOLD + (255,))
+    d.line(pts + [pts[0]], fill=B_FILL + (255,), width=2 * k, joint="curve")
+    return big.resize((n, n), Image.Resampling.LANCZOS), int(round(cx - n / 2)), int(round(cy - n / 2))
+
+
+class BookRes:
+    """The Advent book's inputs (loaded once): the puzzle frames at 332 and 166, the shots, the piece icon."""
+
+    def __init__(self):
+        mc = main_checkout()
+        self.order = book_order()
+        sheet = load(mc / "meta/advent-previews/puzzle/out/advent-puzzle.png").convert("RGB")
+        if sheet.size != (BOOK_COLS * 332, BOOK_ROWS * 332):
+            raise SystemExit(f"FAIL: advent-puzzle.png is {sheet.size}, not {BOOK_COLS * 332} x {BOOK_ROWS * 332}")
+        self.frames = [sheet.crop((332 * (c % BOOK_COLS), 332 * (c // BOOK_COLS), 332 * (c % BOOK_COLS + 1), 332 * (c // BOOK_COLS + 1))) for c in range(24)]
+        self.tiles = [f.resize((BOOK_SLOT, BOOK_SLOT), Image.Resampling.LANCZOS) for f in self.frames]
+        self.shots = mc / ".claude/plans/17-previews/D/shots"
+        self.icon = load(ROOT / "assets/advent/advent.png")
+        self._shot = {}
+
+    def shot(self, name):
+        if name not in self._shot:
+            im = load(self.shots / name)
+            if im.size != (W_PX, H_PX):
+                raise SystemExit(f"FAIL: {name} is {im.size}, not 720 x 1280")
+            self._shot[name] = im
+        return self._shot[name].copy()
+
+    def home(self):
+        """D1a with its Advent chip covered by the same box of D0 (x 180..540, y 192..238)."""
+        im = self.shot("D1a-home-1205-none-en.png")
+        im.paste(self.shot("D0-home-1115-none-en.png").crop((180, 192, 540, 238)), (180, 192))
+        return im
+
+
+_BOOK_RES = []
+
+
+def book_res():
+    if not _BOOK_RES:
+        _BOOK_RES.append(BookRes())
+    return _BOOK_RES[0]
+
+
+def book_sheet(res, owned, stars, count=None, draw_pieces=True):
+    """The Advent book: D1a home darkened to 0.45, the panel, the count line, 24 slots (owned pieces at their cell, locked ones plain)."""
+    sheet = res.home()
+    sheet.paste(sheet.convert("RGB").point(lambda v: int(round(v * 0.45))).convert("RGBA"))
+    sheet.alpha_composite(Image.new("RGBA", (696, 1112), B_FILL + (int(round(0.95 * 255)),)), (12, 84))
+    rrect(sheet, (12, 84, 708, 1196), 0, stroke=B_STROKE, sw=8)
+    x = res.shot("D2a-popup-1205-p1-5-en.png").convert("RGB").crop((588, 216, 644, 272))
+    bg = x.getpixel((2, 2))
+    lum = x.convert("L").point(lambda v: max(0, min(255, int(round((v - sum(bg) / 3) / (255 - sum(bg) / 3) * 255)))))
+    paint(sheet, (636, 100), (255, 255, 255), lum)  # the Daily window's white X, same size, as a mask so its background does not show
+    text(sheet, (360, 132), f"{len(owned) if count is None else count} of 24 found", 36, B_GOLD, True, "mm")
+    cell_piece = {res.order[k - 1]: k for k in owned}
+    d = ImageDraw.Draw(sheet)
+    for c in range(24):
+        sx, sy = slot_xy(c)
+        if c in cell_piece:
+            sheet.paste(res.tiles[c], (sx, sy))
+            if cell_piece[c] in stars:
+                tile, tx, ty = star_tile(sx + 148, sy + 18)
+                sheet.alpha_composite(tile, (tx, ty))
+        else:
+            d.rectangle((sx, sy, sx + BOOK_SLOT - 1, sy + BOOK_SLOT - 1), fill=B_LOCK + (255,), outline=B_LOCK_LINE + (255,), width=1)
+    return sheet
+
+
+def check_book_tiles(sheet_img, owned, tiles, order=BOOK_ORDER):
+    """Failure strings: every owned piece's slot must hold its frame (mean absolute difference per channel below 3, the star's corner box
+    ignored) and every other slot's centre pixel must be the locked fill."""
+    fails = []
+    im = sheet_img.convert("RGB")
+    if im.size != (W_PX, H_PX):
+        return [f"book sheet is {im.size}, not 720 x 1280"]
+    cells = {order[k - 1]: k for k in owned}
+    ignored = (STAR_BOX[2] - STAR_BOX[0]) * (STAR_BOX[3] - STAR_BOX[1])
+    n = BOOK_SLOT * BOOK_SLOT - ignored
+    for c in range(24):
+        sx, sy = slot_xy(c)
+        if c in cells:
+            reg = im.crop((sx, sy, sx + BOOK_SLOT, sy + BOOK_SLOT))
+            diff = ImageChops.difference(reg, tiles[c])
+            ImageDraw.Draw(diff).rectangle((STAR_BOX[0], STAR_BOX[1], STAR_BOX[2] - 1, STAR_BOX[3] - 1), fill=(0, 0, 0))
+            means = [s / n for s in ImageStat.Stat(diff).sum]
+            if max(means) >= BOOK_TILE_TOL:
+                fails.append(f"piece {cells[c]} (cell {c}): slot at ({sx}, {sy}) differs from its frame by {max(means):.2f} per channel (limit {BOOK_TILE_TOL:g})")
+        else:
+            px = im.getpixel((sx + BOOK_SLOT // 2, sy + BOOK_SLOT // 2))
+            if px != B_LOCK:
+                fails.append(f"locked slot {c} at ({sx}, {sy}): centre pixel {px}, not {B_LOCK}")
+    return fails
+
+
+def _fit_pencil():
+    """U+270E 22 px tall, white with a 3 px dark outline, as a tile (from Arial Unicode; a drawn polygon if the font is missing)."""
+    k = 4
+    try:
+        f100 = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 100)
+        h100 = f100.getmask("✎").getbbox()
+        size = int(round(100 * 22 * k / (h100[3] - h100[1])))
+        f = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", size)
+        pad = 3 * k + 4
+        bb = f.getmask("✎").getbbox()
+        w, h = bb[2] - bb[0], bb[3] - bb[1]
+        big = Image.new("RGBA", (w + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
+        d = ImageDraw.Draw(big)
+        d.text((pad - bb[0], pad - bb[1]), "✎", font=f, fill=B_FILL + (255,), stroke_width=3 * k, stroke_fill=B_FILL + (255,))
+        d.text((pad - bb[0], pad - bb[1]), "✎", font=f, fill=(255, 255, 255, 255))
+        ink = (pad, pad, pad + w, pad + h)
+    except Exception:
+        w, h = 31 * k, 22 * k
+        pad = 3 * k + 4
+        big = Image.new("RGBA", (w + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
+        d = ImageDraw.Draw(big)
+        poly = [(pad + 4, pad + h), (pad, pad + h - 10 * k // 2), (pad + w - 10, pad), (pad + w, pad + 8), (pad + 14, pad + h)]
+        d.polygon(poly, fill=B_FILL + (255,), outline=B_FILL + (255,), width=3 * k)
+        d.polygon(poly, fill=(255, 255, 255, 255))
+        ink = (pad, pad, pad + w, pad + h)
+    small = big.resize((big.width // k, big.height // k), Image.Resampling.LANCZOS)
+    return small, ((ink[0] + ink[2]) / 2 / k, (ink[1] + ink[3]) / 2 / k)
+
+
+def dominant(im, box, light=True):
+    """The most common colour in a box among the light (or dark) pixels: a shot's text colour without hard-coding it."""
+    from collections import Counter
+    raw = im.convert("RGB").crop(box).tobytes()
+    px = [p for p in zip(raw[0::3], raw[1::3], raw[2::3]) if (sum(p) > 400) == light]
+    return Counter(px).most_common(1)[0][0]
+
+
+def sheet5(inp, out, manifest, failures):
+    res = book_res()
+    order = res.order
+    srcs_book = ["puzzle/out/advent-puzzle.png", "D shots: D1a (home), D0 (chip patch), D2a (the X)", "src/config.js advent.puzzle.order"]
+    saved = []
+
+    def save(sheet, name, inputs):
+        failures.extend(check_still_size(sheet, name[:-4]))
+        sheet_save(sheet, out, name, inputs, manifest)
+        saved.append(name)
+        return manifest[-1]["path"]
+
+    print("sheet 5: the Advent book")
+    all_p = set(range(1, 25))
+    states = [("sheet5-book-a-none.png", set(), set()),
+              ("sheet5-book-b-mix.png", B_OWNED_B, B_OWNED_B - B_LATE),
+              ("sheet5-book-c-all.png", all_p, all_p - B_LATE),
+              ("sheet5-book-c2-all-nomarks.png", all_p, set())]
+    for name, owned, stars in states:
+        path = save(book_sheet(res, owned, stars), name, srcs_book)
+        bad = check_book_tiles(Image.open(path), owned, res.tiles, order)
+        print(f"  {name}: {len(owned)} owned, {len(stars)} starred, tile check {'ok' if not bad else 'FAIL'}")
+        failures.extend(f"{name}: {b}" for b in bad)
+    # the add-piece animation: state b without piece 14 in its slot
+    owned10 = B_OWNED_B - {14}
+    stars10 = owned10 - B_LATE
+    cell14 = order[13]
+    sx, sy = slot_xy(cell14)
+    assert (sx, sy) == (194, 678), (sx, sy)
+    f14 = res.frames[cell14]
+    panel_box = (8, 80, 712, 1200)
+    caps = ["Frame 1 of 3 · 0 to 1.0 s · chimes build", "Frame 2 of 3 · 1.0 to 2.3 s · chimes peak", "Frame 3 of 3 · 2.3 s lock click · glow fades to 3.3 s"]
+    # frame 1: dim 0.45, glow (grown 28, blur 14, 0.9), the piece at 332 centred at (360, 678)
+    s = book_sheet(res, owned10, stars10)
+    dim_box(s, panel_box, 0.45)
+    glow_box(s, (194, 512, 526, 844), 28, 14, 0.9)
+    s.paste(f14, (194, 512))
+    text(s, (360, 1238), caps[0], 22, (255, 255, 255), False, "mm", halo=B_FILL)
+    save(s, "sheet5-anim-1.png", srcs_book + ["frame of piece 14 (cell %d)" % cell14])
+    # frame 2: dim 0.25, glow scaled to the piece (grown 21, blur 10.5, 0.75), the piece at 249 centred at (318.5, 719.5)
+    s = book_sheet(res, owned10, stars10)
+    dim_box(s, panel_box, 0.25)
+    glow_box(s, (194, 595, 443, 844), 21, 10.5, 0.75)
+    s.paste(f14.resize((249, 249), Image.Resampling.LANCZOS), (194, 595))
+    text(s, (360, 1238), caps[1], 22, (255, 255, 255), False, "mm", halo=B_FILL)
+    save(s, "sheet5-anim-2.png", srcs_book + ["frame of piece 14 (cell %d)" % cell14])
+    # frame 3: no dim, the piece in its slot at 166, glow under it (grown 14, blur 8, 0.45), 11 found
+    s = book_sheet(res, owned10, stars10, count=11)
+    glow_box(s, (sx, sy, sx + BOOK_SLOT, sy + BOOK_SLOT), 14, 8, 0.45)
+    s.paste(res.tiles[cell14], (sx, sy))
+    tile, tx, ty = star_tile(sx + 148, sy + 18)
+    s.alpha_composite(tile, (tx, ty))
+    text(s, (360, 1238), caps[2], 22, (255, 255, 255), False, "mm", halo=B_FILL)
+    save(s, "sheet5-anim-3.png", srcs_book + ["frame of piece 14 (cell %d)" % cell14])
+    # the home screen with the Advent button
+    srcs_home = ["D shots: D1a (home), D0 (chip patch)", "assets/advent/advent.png"]
+    for name, haloed in (("sheet5-home-a-normal.png", False), ("sheet5-home-b-glow.png", True)):
+        s = res.home()
+        if haloed:  # white radial halo: alpha 0.9 up to the rim (r 44), fading linearly to 0 at r 84
+            g = Image.new("L", (168, 168))
+            g.putdata([int(round(255 * 0.9 * max(0.0, min(1.0, 1 - (math.hypot(x + 0.5 - 84, y + 0.5 - 84) - 44) / 40)))) for y in range(168) for x in range(168)])
+            paint(s, (100 - 84, 124 - 84), (255, 255, 255), g)
+        rrect(s, (56, 80, 144, 168), 44, fill=B_FILL, alpha=0.55, stroke=B_STROKE, sw=4)
+        icon = res.icon.resize((60, 60), Image.Resampling.LANCZOS)
+        s.alpha_composite(icon, (70, 94))
+        ImageDraw.Draw(s).text((140, 164), "5/24", font=font(24, True), fill=B_GOLD, anchor="mm", stroke_width=2, stroke_fill=B_FILL)
+        save(s, name, srcs_home)
+    # the Daily window with the (?) and the pencil
+    s = res.shot("D2a-popup-1205-p1-5-en.png")
+    ring(s, 104, 244, 24, (255, 255, 255), 3, halo=False)
+    ImageDraw.Draw(s).text((104, 244), "?", font=font(30, True), fill=(255, 255, 255), anchor="mm")
+    pen, (pcx, pcy) = _fit_pencil()
+    s.alpha_composite(pen, (int(round(222 - pcx)), int(round(292 - pcy))))
+    save(s, "sheet5-daily.png", ["D shots: D2a (the Daily window)", "U+270E from Arial Unicode"])
+    # the board with a fifth tab (Advent)
+    src = res.shot("D5-board-1205-gifts-en.png")
+    s = src.copy()
+    panel = src.getpixel((100, 208))[:3]
+    track, stroke, pill = src.getpixel((190, 208))[:3], src.getpixel((360, 181))[:3], src.getpixel((290, 208))[:3]
+    title_pink, sub_col = dominant(src, (190, 110, 530, 170)), dominant(src, (270, 245, 450, 276))
+    glyphs = {x: src.crop((x - 26, 180, x + 26, 232)) for x in (216, 312, 408, 504)}
+    d = ImageDraw.Draw(s)
+    d.rectangle((162, 176, 558, 240), fill=panel + (255,))  # the old 384 px track
+    rrect(s, (120, 180, 600, 236), 28, fill=track, stroke=stroke, sw=4)
+    rrect(s, (508, 185, 596, 231), 23, fill=pill)
+    # The 🎅 was cropped from under the shot's selected pill: its pill-coloured pixels take the track's colour.
+    g = glyphs[312].convert("RGB")
+    g.putdata([track if sum(abs(a - b) for a, b in zip(px, pill)) < 40 else px for px in g.getdata()])
+    glyphs[312] = g
+    for old, new in zip((216, 312, 408, 504), (168, 264, 360, 456)):
+        s.paste(glyphs[old], (new - 26, 206 - 26))
+    s.alpha_composite(emoji_img("\U0001f9e9", 40), (552 - 20, 206 - 20))
+    d.rectangle((190, 108, 530, 172), fill=panel + (255,))  # title
+    d.rectangle((262, 244, 458, 276), fill=panel + (255,))  # sub-line
+    d.text((360, 159), "ADVENT", font=font(51, True), fill=title_pink, anchor="ms")
+    d.text((360, 267), "Dec 2026 · pieces found", font=font(22), fill=sub_col, anchor="ms")
+    d.rectangle((48, 270, 672, 530), fill=panel + (255,))  # rows 1 to 5
+    rows = [(1, "Gerty", "\U0001f384", 24), (2, "Bean", "\U0001f332", 24), (3, "Plop", None, 17), (4, "Michael", None, 11), (5, "Zed", None, 6)]
+    for (rank, name, tree, n), y in zip(rows, (296, 348, 400, 452, 504)):
+        mine = rank == 4
+        d.text((96, y + 12), f"{rank}.", font=font(34, True), fill=title_pink, anchor="ls")
+        d.text((164, y + 12), name, font=font(34, True), fill=title_pink if mine else (255, 255, 255), anchor="ls")
+        if tree:
+            ex = 164 + font(34, True).getlength(name) + 8
+            s.alpha_composite(emoji_img(tree, 28), (int(round(ex)), y - 1 - 14))
+        d.text((624, y + 12), str(n), font=font(34, True), fill=title_pink if mine else (255, 255, 255), anchor="rs")
+    foot = dominant(src, (260, 1074, 460, 1100))
+    d.rectangle((200, 1070, 520, 1104), fill=panel + (255,))  # "You: #4 of 5 · 42" (the Daily's score)
+    d.text((360, 1096), "You: #4 of 5 · 11", font=font(24), fill=foot, anchor="ms")
+    save(s, "sheet5-board-tabs.png", ["D shots: D5 (the board)", "Apple Color Emoji (puzzle, trees)"])
+    if len(saved) != 11:
+        failures.append(f"sheet 5 wrote {len(saved)} sheets, expected 11")
+    return res
+
+
+def book_selftest(missed):
+    """Step 2.14's negative control: a state-b book with one owned tile pasted 6 px right of its slot must be rejected by check_book_tiles."""
+    res = book_res()
+    good = book_sheet(res, B_OWNED_B, B_OWNED_B - B_LATE)
+    if check_book_tiles(good, B_OWNED_B, res.tiles, res.order):
+        print("selftest: the real state-b book already fails its own tile check")
+        missed.append("real book fails")
+    bad = good.copy()
+    cell = res.order[1]  # piece 2
+    sx, sy = slot_xy(cell)
+    ImageDraw.Draw(bad).rectangle((sx, sy, sx + BOOK_SLOT - 1, sy + BOOK_SLOT - 1), fill=B_LOCK + (255,))
+    bad.paste(res.tiles[cell], (sx + 6, sy))
+    fails = check_book_tiles(bad, B_OWNED_B, res.tiles, res.order)
+    print(f"selftest: a book tile pasted 6 px right of its slot: {'REJECTED' if fails else 'ACCEPTED (check is blind!)'}" + (f" ({fails[0]})" if fails else ""))
+    if not fails:
+        missed.append("a book tile 6 px off")
+
+
 # ---------------------------------------------------------------- the manifest and the driver
 def print_manifest(manifest):
     print("\nMANIFEST (sheet, size, inputs):")
@@ -1597,6 +1948,7 @@ def selftest(inp):
     if not fails:
         missed.append("wrong pipe fill")
     storm_selftest(inp, missed)
+    book_selftest(missed)
     if missed:
         print("selftest: FAILED to catch:", ", ".join(missed))
         return 2
@@ -1606,8 +1958,8 @@ def selftest(inp):
 
 def main():
     main_co = main_checkout()
-    ap = argparse.ArgumentParser(description="Gate A mock-up sheets for the December art (plan 17, 1.4, 1.5 and 2.6a)")
-    ap.add_argument("--sheets", default="all", help="comma list of 1, 2, 3, 7, pipes, 4, 5a or all (all = 1, 2, 3, 7, pipes)")
+    ap = argparse.ArgumentParser(description="Gate A mock-up sheets for the December art (plan 17, 1.4, 1.5, 2.6a and 2.14)")
+    ap.add_argument("--sheets", default="all", help="comma list of 1, 2, 3, 7, pipes, 4, 5a, 5 or all (all = 1, 2, 3, 7, pipes)")
     ap.add_argument("--art", default=str(main_co / "meta/advent-previews/art-fit"))
     ap.add_argument("--guides", default=str(main_co / "meta/advent-previews/art-guides"))
     ap.add_argument("--out", default=str(main_co / ".claude/plans/17-previews/gateA"))
@@ -1619,7 +1971,7 @@ def main():
     if args.selftest:
         sys.exit(selftest(inp))
     wanted = {"1", "2", "3", "7", "pipes"} if args.sheets == "all" else set(args.sheets.split(","))
-    unknown = wanted - {"1", "2", "3", "7", "pipes", "4", "5a"}
+    unknown = wanted - {"1", "2", "3", "7", "pipes", "4", "5a", "5"}
     if unknown:
         raise SystemExit(f"unknown sheet(s): {', '.join(sorted(unknown))}")
     manifest, failures = [], []
@@ -1637,6 +1989,8 @@ def main():
         sheet4(inp, args.out, manifest, failures)
     if "5a" in wanted:
         sheet5a(inp, args.out, manifest, failures)
+    if "5" in wanted:
+        sheet5(inp, args.out, manifest, failures)
     for m in manifest:
         if m["size"] != m.get("expect", (W_PX, H_PX)):
             failures.append(f"{m['sheet']} is {m['size']}, not {m.get('expect', (W_PX, H_PX))}")
