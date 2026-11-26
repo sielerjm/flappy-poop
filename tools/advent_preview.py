@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""advent_preview.py: Gate A mock-up sheets for the December art (plan 17, steps 1.4 and 1.5).
+"""advent_preview.py: Gate A mock-up sheets for the December art (plan 17, steps 1.4, 1.5, 2.6a and 2.14).
 
 Composites draft art (fitted December files from meta/advent-previews/art-fit/) onto the real game
 art (assets/*.png) at in-game size, on the level colours a run can have, so Michael can approve,
@@ -7,12 +7,13 @@ change or cut each piece before it enters assets/advent/. Nothing here touches s
 sheets go to the Dropbox checkout's .claude/plans/17-previews/gateA/ (gitignored).
 
 Run:    ~/.local/bin/uv run --with pillow python3 tools/advent_preview.py [--sheets 1,2,3,7]
-        --sheets  comma list of: 1, 2, 3, 7 (step 1.4), pipes (step 1.5), 9 (step 1b.1), or all (default)
+        --sheets  comma list of: 1, 2, 3, 7 (step 1.4), pipes (step 1.5), 4 and 5a (step 2.6a), 5 (step 2.14), 9 (step 1b.1),
+                  or all (default; "all" is the Stage 1 set, 1/2/3/7/pipes: sheets 4, 5a, 5 and 9 are built only when named)
         --art DIR       fitted December art (default <main checkout>/meta/advent-previews/art-fit/)
         --guides DIR    pipe-cap guides (default .../meta/advent-previews/art-guides/)
         --backdrop PNG  sheet 7's ready-screen backdrop (default <out>/backdrop-home-720x1280.png)
         --out DIR       default <main checkout>/.claude/plans/17-previews/gateA/
-        --selftest      feed the sheet-1 check a twin shifted by 3 px (and a few other broken inputs)
+        --selftest      feed the sheet-1 check a twin shifted by 3 px (and a few other broken inputs, a book tile 6 px off)
                         and exit non-zero, as the checks must; writes nothing
 The "main checkout" is found through git's common dir, so a worktree reads the same Dropbox folders.
 Every game number (radii, scales, colours, layout) is read from src/config.js, src/logic.js and
@@ -24,18 +25,32 @@ Checks (any failure exits non-zero):
   - sheet 1: for each of the 12 hatted twins, the brown-mask right and bottom edges (the mask of
     tools/process_art.py: r > g > b and r - b > 60), measured from the canvas centre, sit within 1 game
     px of the stock frame's, and the hitbox circle's centre is the canvas centre;
+  - sheet 4 (storms over the Stage 1 snow, S8): eight stills (4 options x levels 1 and 5, flakes at t = 1.2 s with
+    6 faint trails), two banner sheets and four 36-frame GIFs, all from one seeded simulation (module section
+    "step 2.6a"; the model there is what step 2.7 reproduces in the game). Checks: sizes, byte-identical re-render
+    (seeded RNG), simulated flake counts 36 / 108 / 180 / 288, gusts (the wind changes sign and spans >= G; exactly 0
+    for Light), swirls (>= 5 % of flakes starting within R/2 of a vortex head upward; none of the light flakes does
+    in Light or A), the Light control against src/ui/snowfall.js, and a coverage table (pipe gaps and the poop's hitbox);
+  - sheet 5a (the Advent piece beside December's pickups): the fitted icon is 192 x 192, has transparent corners
+    and keeps its opaque near-white "?" (>= 2 % of the pixels);
+  - sheet 5 (the Advent book mock-up, 11 sheets: four book states, three add-piece frames, two home sheets with the button,
+    the Daily window with its two marks, the board with an Advent tab; module section "sheet 5"): every sheet is 720 x 1280;
+    `check_book_tiles`: each owned piece's 166 px slot matches its puzzle frame (mean absolute difference per channel below 3,
+    the star's corner box ignored) and each other slot's centre pixel is the locked fill (42, 20, 32); the piece order is read
+    from src/config.js and asserted equal to the copy here;
   - step 1.5: the printed cream distances (pipe 43 / 35 / 31 / 29 at 55 / 60 / 70 / 80 %; villi
     50 / 21 / 21 / 41 at 40 / 55 / 70 / 80 %) are within 1 of the plan's, and formula V changes no
     pixel that is not the villi fill on villi.png, ceiling.png and ground.png.
 """
 import argparse
 import math
+import random
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageStat
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
@@ -202,6 +217,22 @@ def dashed_hline(sheet, y, x0, x1, colour, dash=10, gap=6, width=2):
     while x < x1:
         d.line((x, y, min(x + dash, x1), y), fill=colour, width=width)
         x += dash + gap
+
+
+def dashed_vline(sheet, x, y0, y1, colour, dash=10, gap=6, width=2):
+    d = ImageDraw.Draw(sheet)
+    y = y0
+    while y < y1:
+        d.line((x, y, x, min(y + dash, y1)), fill=colour, width=width)
+        y += dash + gap
+
+
+def dashed_rect(sheet, box, colour, dash=8, gap=5, width=2):
+    x0, y0, x1, y1 = box
+    dashed_hline(sheet, y0, x0, x1, colour, dash, gap, width)
+    dashed_hline(sheet, y1, x0, x1, colour, dash, gap, width)
+    dashed_vline(sheet, x0, y0, y1, colour, dash, gap, width)
+    dashed_vline(sheet, x1, y0, y1, colour, dash, gap, width)
 
 
 def rect(sheet, box, colour, width=2):
@@ -526,10 +557,10 @@ def pipe_with_snow(pipe_im, snow, ox, oy):
     return layer  # 20 px margin on every side
 
 
-def run_frame(inp, level, villi_im, ceil_im, ground_im, still_pipe, move_pipe, snow, snow_off, caption, sub):
+def run_frame(inp, level, villi_im, ceil_im, ground_im, still_pipe, move_pipe, snow, snow_off, caption, sub, poop_key="poop-santa"):
     sheet = new_sheet(level_rgb(level))
     sheet.alpha_composite(villi_im, (0, 0))
-    poop = half(inp.twin("poop-santa"))
+    poop = half(inp.twin(poop_key))
     # pipes: a still pair and a moving pair; the ground and ceiling strips go over them (depth 5)
     pairs = [(230, 560, still_pipe, "still pair"), (520, 760, move_pipe, "moving pair, 25 % white (W)")]
     for xc, gy, pimg, _ in pairs:
@@ -543,10 +574,11 @@ def run_frame(inp, level, villi_im, ceil_im, ground_im, still_pipe, move_pipe, s
     sheet.alpha_composite(ground_im, (0, H_PX - GROUND_H))
     sheet.alpha_composite(ceil_im, (0, 0))
     lab = (40, 30, 20)
-    panel = Image.new("RGBA", (W_PX - 40, 52), (255, 255, 255, 215))
-    sheet.alpha_composite(panel, (20, 244))
-    text(sheet, (W_PX // 2, 250), caption, 15, lab, True, "ma")
-    text(sheet, (W_PX // 2, 272), sub, 12, lab, False, "ma")
+    if caption is not None:  # sheet 4 passes None: it has its own header and no caption panel
+        panel = Image.new("RGBA", (W_PX - 40, 52), (255, 255, 255, 215))
+        sheet.alpha_composite(panel, (20, 244))
+        text(sheet, (W_PX // 2, 250), caption, 15, lab, True, "ma")
+        text(sheet, (W_PX // 2, 272), sub, 12, lab, False, "ma")
     for xc, gy, _, label in pairs:
         text(sheet, (xc, gy + GAP_H // 2 + 70), label, 12, lab, False, "ma", halo=(255, 255, 255, 140))
     return sheet
@@ -960,11 +992,1013 @@ def pipes_sheets(inp, out, manifest, failures):
                    ["assets/villi.png, ceiling.png, ground.png via V", "assets/pipe.png via O", "LEVEL_COLORS"], manifest)
 
 
+# ---------------------------------------------------------------- step 2.6a: storms over the Stage 1 snow (sheet 4) and the Advent piece (sheet 5a)
+def _snow_cfg():
+    """TUNING.advent.snow's numbers, parsed from its one line of src/config.js (as cfg() reads a number)."""
+    found = re.findall(r"\bsnow:\s*\{([^}]*)\}", _config)
+    if len(found) != 1:
+        raise SystemExit(f"FAIL: expected one `snow: {{ ... }}` line in src/config.js, found {len(found)}")
+    d = {k: float(v) for k, v in re.findall(r"(\w+):\s*(-?[0-9]*\.?[0-9]+)", found[0])}
+    for k in ("count", "minSpeed", "maxSpeed", "driftPx", "driftMs", "minPx", "maxPx", "alpha", "depth"):
+        if k not in d:
+            raise SystemExit(f"FAIL: snow.{k} not found in src/config.js")
+    return d
+
+
+def _hud_cfg():
+    m = re.search(r"popup:\s*\{\s*rowY:\s*\[(\d+),\s*(\d+)\],.*?fontPx:\s*(\d+)", _config, re.S)
+    c = re.search(r"coin:\s*\{\s*displayPx:\s*([0-9.]+)", _config)
+    t = re.search(r"barTrackColor:\s*0x([0-9a-fA-F]{6})", _config)
+    if not (m and c and t):
+        raise SystemExit("FAIL: popup.rowY / popup.fontPx / coin.displayPx / barTrackColor moved in src/config.js; update advent_preview.py")
+    track = int(t.group(1), 16)
+    return (int(m.group(1)), int(m.group(2))), int(m.group(3)), float(c.group(1)), ((track >> 16) & 255, (track >> 8) & 255, track & 255)
+
+
+SNOW = _snow_cfg()
+POPUP_ROWS, POPUP_FONT, COIN_PX, BAR_TRACK = _hud_cfg()
+HUD_SCORE_Y = int(cfg("hudScoreY"))
+HUD_STROKE_PX, HUD_STROKE_RGB = 12, (0x5a, 0x2a, 0x44)  # TEXT_STYLE in src/scenes/Play.js: strokeThickness 12, '#5a2a44'
+RUN_PAIRS = [(230, 560), (520, 760)]  # run_frame()'s two pairs: (centre x, gap centre y)
+STORM_DT = 1.0 / 60  # s per sim step
+STORM_STEPS = 144  # 2.4 s
+STORM_T = 1.2  # s: the stills' instant
+TRAIL_S, TRAIL_N = 0.24, 6
+GIF_FRAMES, GIF_EVERY, GIF_SIZE = 36, 4, (360, 640)
+LIGHT_SEED, VORTEX_SEED = 1700, 1800
+EXPECTED_COUNTS = {"light": 36, "A": 108, "B": 180, "C": 288, "fart": 36}
+_PX = (SNOW["minPx"], SNOW["maxPx"])
+# The storm options (Michael's S8 call; the numbers are the brief's). idx seeds 1700 + idx (flakes) and 1800 + idx (vortices).
+# Michael, 26 Nov, after the first sheets: "drift from left to right diagonally when a snow storm is happening. And right to
+# left horizontally while the fart is activated." So a storm's wind G (px/s) now always blows left to right, at the storm
+# flakes' mean fall speed (a 45 degree slant), with gusts of +-GUST around it; the fart option F blows right to left at
+# about 9x the light flakes' mean fall (near horizontal), ramped on at FART_ON and off at FART_OFF over FART_RAMP s.
+GUST = 0.35
+_MEAN_VY = (SNOW["minSpeed"] + SNOW["maxSpeed"]) / 2
+FART_ON, FART_OFF, FART_RAMP = 0.4, 1.9, 0.25
+STORM_OPTIONS = {
+    "light": dict(key="light", name="Light", idx=0, extra=0, vy_mult=1.0, px=_PX, G=0.0, K=0, R=0.0, S=0.0),
+    "A": dict(key="A", name="A x3", idx=1, extra=72, vy_mult=1.6, px=_PX, G=_MEAN_VY * 1.6, K=0, R=0.0, S=0.0),
+    "B": dict(key="B", name="B x5", idx=2, extra=144, vy_mult=2.0, px=(5.0, 14.0), G=_MEAN_VY * 2.0, K=2, R=160.0, S=180.0),
+    "C": dict(key="C", name="C x8", idx=3, extra=252, vy_mult=2.5, px=(5.0, 16.0), G=_MEAN_VY * 2.5, K=3, R=180.0, S=240.0),
+    "fart": dict(key="fart", name="Fart wind", idx=4, extra=0, vy_mult=1.0, px=_PX, G=0.0, F=420.0, K=0, R=0.0, S=0.0, poop="poop-fart-santa1"),
+}
+
+
+def sheet_name(key, level, ext):
+    return f"sheet4c-fart-wind-L{level}.{ext}" if key == "fart" else f"sheet4-storm-{key}-L{level}.{ext}"
+
+
+def fart_ramp(t):
+    """0 before FART_ON, up to 1 over FART_RAMP s, 1 until FART_OFF, back to 0 over FART_RAMP s."""
+    if t <= FART_ON or t >= FART_OFF + FART_RAMP:
+        return 0.0
+    if t < FART_ON + FART_RAMP:
+        return (t - FART_ON) / FART_RAMP
+    if t > FART_OFF:
+        return 1.0 - (t - FART_OFF) / FART_RAMP
+    return 1.0
+
+
+def storm_wind(spec, t):
+    """px/s added to every flake's horizontal velocity (times the flake's own factor m); positive = left to right.
+    A storm: G x (1 + gust x the two-sine wobble), so it never changes direction; the fart: -F x fart_ramp(t)."""
+    if spec.get("F"):
+        return -spec["F"] * fart_ramp(t)
+    if not spec["G"]:
+        return 0.0
+    g = spec.get("gust", GUST)
+    return spec["G"] * (1 + g * (0.65 * math.sin(2 * math.pi * t / 2.6) + 0.35 * math.sin(2 * math.pi * t / 1.1 + 1.3)))
+
+
+def _make_flakes(rng, n, px, vy):
+    """snowfall.js makeFlakes' draws (x, y, px, vy, phase per flake), then every flake's wind factor m in [0.7, 1.3]."""
+    fl = [dict(x=rng.random() * W_PX, y=rng.random() * H_PX, px=px[0] + rng.random() * (px[1] - px[0]),
+               vy=vy[0] + rng.random() * (vy[1] - vy[0]), phase=rng.random() * 2 * math.pi) for _ in range(n)]
+    for f in fl:
+        f["m"] = 0.7 + 0.6 * rng.random()
+    return fl
+
+
+def vortex_centres(spec, make_rng=random.Random):
+    """K vortex heads, x in [100, 620], y in [300, 1000], from Random(1800 + idx). A draw closer than 2R to a head
+    already placed is drawn again (supervisor rule, 26 Nov: B's first draw put a clockwise and a counter-clockwise
+    head 39 px apart, and they cancelled); after 1000 tries the field is too small for K and R, which fails loudly."""
+    rng = make_rng(VORTEX_SEED + spec["idx"])
+    out, tries = [], 0
+    while len(out) < int(spec["K"]):
+        c = (100 + 520 * rng.random(), 300 + 700 * rng.random())
+        tries += 1
+        if all(math.hypot(c[0] - o[0], c[1] - o[1]) >= 2 * spec["R"] for o in out):
+            out.append(c)
+        elif tries > 1000:
+            raise SystemExit(f"FAIL: storm {spec['key']}: cannot place {spec['K']} vortex heads 2R ({2 * spec['R']:g} px) apart")
+    return out
+
+
+class Storm:
+    """One option's simulation: every flake's drawn position and velocity at each 1/60 s step, plus the wind."""
+
+
+def simulate(spec, make_rng=random.Random, extra=None, steps=STORM_STEPS):
+    """Light flakes (36, Random(1700), the same in every option) and the option's extra flakes (Random(1700 + idx)),
+    stepped at 1/60 s: y += (vy + swirl_y) dt, x += (wind x m + swirl_x) dt, drawn x = x + the snowfall.js drift sine;
+    a flake past the bottom re-enters at the top, past a side it wraps. Vortex heads drift at 0.5 x wind and wrap."""
+    n_light = int(SNOW["count"])
+    light = _make_flakes(make_rng(LIGHT_SEED), n_light, _PX, (SNOW["minSpeed"], SNOW["maxSpeed"]))
+    n_extra = spec["extra"] if extra is None else extra
+    extra_f = _make_flakes(make_rng(LIGHT_SEED + spec["idx"]), n_extra, spec["px"],
+                           (SNOW["minSpeed"] * spec["vy_mult"], SNOW["maxSpeed"] * spec["vy_mult"]))
+    flakes = light + extra_f
+    cen = [list(c) for c in vortex_centres(spec, make_rng)]
+    x0 = [f["x"] for f in flakes]
+    x = list(x0)
+    y = [f["y"] for f in flakes]
+    drift_rate = SNOW["driftPx"] * 2 * math.pi * 1000 / SNOW["driftMs"]
+    st = Storm()
+    st.spec, st.flakes, st.n_light, st.steps, st.x0 = spec, flakes, n_light, steps, x0
+    st.count = len(flakes)
+    st.wind, st.xd, st.y, st.vel, st.cen = [], [], [], [], []
+    for k in range(steps + 1):
+        t = k * STORM_DT
+        w = storm_wind(spec, t)
+        st.wind.append(w)
+        st.cen.append([tuple(c) for c in cen])
+        xd_k, y_k, v_k = [], [], []
+        for i, f in enumerate(flakes):
+            ph = f["phase"] + 2 * math.pi * t * 1000 / SNOW["driftMs"]
+            xd_k.append(x[i] + math.sin(ph) * SNOW["driftPx"])
+            y_k.append(y[i])
+            sx = sy = 0.0
+            for j, (cx, cy) in enumerate(cen):
+                dx, dy = x[i] - cx, y[i] - cy
+                r = math.hypot(dx, dy)
+                if 0 < r < spec["R"]:
+                    mag = spec["S"] * math.sin(math.pi * r / spec["R"])
+                    tx, ty = (dy, -dx) if j % 2 == 0 else (-dy, dx)  # even j counter-clockwise on screen, odd j clockwise
+                    sx += mag * tx / r
+                    sy += mag * ty / r
+            vx, vyy = w * f["m"] + sx, f["vy"] + sy
+            v_k.append((vx + math.cos(ph) * drift_rate, vyy))  # the drawn velocity: the drift sine's slope on top
+            if k < steps:
+                x[i] = (x[i] + vx * STORM_DT) % W_PX
+                y[i] += vyy * STORM_DT
+                if y[i] - f["px"] > H_PX:
+                    y[i] = -f["px"]
+        st.xd.append(xd_k)
+        st.y.append(y_k)
+        st.vel.append(v_k)
+        for c in cen:
+            c[0] = (c[0] + 0.5 * w * STORM_DT) % W_PX
+    return st
+
+
+def pos_at(st, t):
+    """Every flake's drawn (x, y) at time t: linear between the two sim steps around it (a wrap jump takes the nearer one)."""
+    u = max(0.0, t / STORM_DT)
+    k0 = min(int(math.floor(u + 1e-9)), st.steps)
+    k1 = min(k0 + 1, st.steps)
+    fr = max(0.0, min(1.0, u - k0))
+    out = []
+    for i in range(st.count):
+        xa, ya, xb, yb = st.xd[k0][i], st.y[k0][i], st.xd[k1][i], st.y[k1][i]
+        if abs(xb - xa) > 300 or abs(yb - ya) > 300:
+            out.append((xa, ya) if fr < 0.5 else (xb, yb))
+        else:
+            out.append((xa + (xb - xa) * fr, ya + (yb - ya) * fr))
+    return out
+
+
+# ---- the flake sprite: snowfall.js's 16 px texture (three filled circles), drawn scaled to the flake's px at alpha 0.9
+_SPRITES = {}
+
+
+def _texture16():
+    k = 4
+    tex = Image.new("RGBA", (16 * k, 16 * k), (0, 0, 0, 0))
+    for r, rgb, a in ((8, (143, 166, 189), 0.35), (6.5, (143, 166, 189), 0.6), (5, (255, 255, 255), 1.0)):
+        layer = Image.new("RGBA", tex.size, (0, 0, 0, 0))
+        ImageDraw.Draw(layer).ellipse((8 * k - r * k, 8 * k - r * k, 8 * k + r * k - 1, 8 * k + r * k - 1), fill=rgb + (int(round(a * 255)),))
+        tex.alpha_composite(layer)
+    return tex.resize((16, 16), Image.Resampling.LANCZOS)
+
+
+def flake_sprite(size, alpha):
+    key = (size, round(alpha, 4))
+    if key not in _SPRITES:
+        if "tex" not in _SPRITES:
+            _SPRITES["tex"] = _texture16()
+        spr = _SPRITES["tex"].resize((size, size), Image.Resampling.LANCZOS)
+        r, g, b, a = spr.split()
+        _SPRITES[key] = Image.merge("RGBA", (r, g, b, a.point(lambda v: int(round(v * alpha)))))
+    return _SPRITES[key]
+
+
+def put(layer, spr, x, y):
+    x0, y0 = max(0, -x), max(0, -y)
+    x1, y1 = min(spr.width, layer.width - x), min(spr.height, layer.height - y)
+    if x1 > x0 and y1 > y0:
+        layer.alpha_composite(spr, (x + x0, y + y0), (x0, y0, x1, y1))
+
+
+def flake_layers(st, t, trails):
+    """(flakes-only layer, trail layer or None) at time t. Trails: 6 ghosts at t - 0.04 i, alpha 0.12 falling to 0.04."""
+    flake = Image.new("RGBA", (W_PX, H_PX), (0, 0, 0, 0))
+    trail = Image.new("RGBA", (W_PX, H_PX), (0, 0, 0, 0)) if trails else None
+    sizes = [max(2, int(round(f["px"]))) for f in st.flakes]
+    if trails:
+        for i in range(1, TRAIL_N + 1):
+            a = 0.12 - (i - 1) * (0.12 - 0.04) / (TRAIL_N - 1)
+            for (gx, gy), s in zip(pos_at(st, t - i * TRAIL_S / TRAIL_N), sizes):
+                put(trail, flake_sprite(s, a), int(round(gx - s / 2)), int(round(gy - s / 2)))
+    for (fx, fy), s in zip(pos_at(st, t), sizes):
+        put(flake, flake_sprite(s, SNOW["alpha"]), int(round(fx - s / 2)), int(round(fy - s / 2)))
+    return flake, trail
+
+
+def poop_centre(inp):
+    """Where run_frame() puts the hatted poop: pasted at (60, 560 - h // 2 + 20); its canvas centre is the hitbox centre."""
+    p = half(inp.twin("poop-santa"))
+    return 60 + p.width / 2, 560 - p.height // 2 + 20 + p.height / 2
+
+
+def coverage(layer, inp):
+    """(% of the two pipe gaps' rectangles, % of the poop's hitbox circle) covered by flake pixels with alpha >= 128."""
+    a = layer.getchannel("A").point(lambda v: 255 if v >= 128 else 0)
+    tot = cov = 0
+    for xc, gy in RUN_PAIRS:
+        reg = a.crop((xc - PIPE_W // 2, gy - GAP_H // 2, xc + PIPE_W // 2, gy + GAP_H // 2))
+        tot += reg.width * reg.height
+        cov += reg.histogram()[255]
+    cx, cy = poop_centre(inp)
+    r = int(POOP_RADIUS)
+    x0, y0 = int(round(cx)) - r, int(round(cy)) - r
+    mask = Image.new("L", (2 * r, 2 * r), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, 2 * r - 1, 2 * r - 1), fill=255)
+    n_mask = mask.histogram()[255]
+    n_cov = ImageChops.multiply(a.crop((x0, y0, x0 + 2 * r, y0 + 2 * r)), mask).histogram()[255]
+    return 100.0 * cov / tot, 100.0 * n_cov / n_mask
+
+
+def top_panel(lines):
+    """A translucent white panel across y 0 to 90 with `lines` (the first bold and larger), as an RGBA overlay."""
+    ov = Image.new("RGBA", (W_PX, H_PX), (0, 0, 0, 0))
+    ov.paste(Image.new("RGBA", (W_PX, 90), (255, 255, 255, 215)), (0, 0))
+    ys = [6 + i * 20 if i == 0 else 26 + (i - 1) * 18 for i in range(len(lines))]
+    for i, (ln, y) in enumerate(zip(lines, ys)):
+        size = 15 if i == 0 else 12
+        while size > 9 and font(size, i == 0).getlength(ln) > W_PX - 16:  # a long line shrinks to fit the sheet
+            size -= 1
+        text(ov, (W_PX // 2, y), ln, size, (40, 20, 40), i == 0, "ma")
+    return ov
+
+
+def storm_header(spec, level, cov, trails):
+    n = int(SNOW["count"]) + spec["extra"]
+    lo, hi = SNOW["minSpeed"] * spec["vy_mult"], SNOW["maxSpeed"] * spec["vy_mult"]
+    swirl = f"; K {spec['K']}" + (f", R {spec['R']:g}, S {spec['S']:g}" if spec["K"] else "")
+    return top_panel([
+        (f"Sheet 4c, the fart wind (every December run, while a fart is on), level {level} ({LEVEL_NAMES[level - 1]}), t = {STORM_T:g} s" if spec.get("F") else
+         f"Sheet 4, storm option {spec['name']}" + (" (control: Stage 1 as live)" if spec["key"] == "light" else "") + f", level {level} ({LEVEL_NAMES[level - 1]}), t = {STORM_T:g} s"),
+        (f"{n} light flakes blown right to left at {spec['F']:g} px/s (on at {FART_ON:g} s, off at {FART_OFF:g} s, {FART_RAMP:g} s ramps)" if spec.get("F") else
+         f"{n} flakes ({int(SNOW['count'])} light + {spec['extra']}); fall {lo:g} to {hi:g} px/s; flake px {spec['px'][0]:g} to {spec['px'][1]:g}; "
+         + (f"wind left to right {spec['G']:g} px/s +-{GUST:.0%}" if spec["G"] else "no wind") + swirl),
+        f"coverage (flakes only, alpha >= 128): pipe gaps {cov[0]:.1f} %, poop hitbox {cov[1]:.1f} %",
+        "trails show the last 0.24 s (sheet aid only; the game draws no trails)" if trails else "animation: t = 0 to 2.4 s, 15 fps, no trails; coverage above is at t = 1.2 s",
+    ])
+
+
+def storm_base(inp, level, poop="poop-santa"):
+    """run_frame()'s mock at a level's colour with no caption panel (cached), the poop on `poop`'s frame."""
+    key = ("storm-base", level, poop)
+    if key not in inp._cache:
+        pipe = inp.stock("pipe")
+        snow = half(inp.twin("pipe-snow"))
+        ox, oy, _ = pipe_snow_anchor(inp)
+        inp._cache[key] = run_frame(inp, level, inp.stock("villi"), inp.stock("ceiling"), inp.stock("ground"), pipe, whiten(pipe, MOVE_FRAC),
+                                    snow, (ox, oy), None, None, poop_key=poop)
+    return inp._cache[key]
+
+
+def render_storm_still(inp, spec, level, make_rng=random.Random, sim=None):
+    """(image, coverage, sim): the level's run frame, trails, flakes at t = 1.2 s, then the header."""
+    st = sim or simulate(spec, make_rng)
+    img = storm_base(inp, level, spec.get("poop", "poop-santa")).copy()
+    flake, trail = flake_layers(st, STORM_T, True)
+    cov = coverage(flake, inp)
+    img.alpha_composite(trail)
+    img.alpha_composite(flake)
+    img.alpha_composite(storm_header(spec, level, cov, True))
+    return img, cov, st
+
+
+# ---- the checks (each returns failure strings; selftest feeds each a broken input)
+def check_still_size(im, label, expect=(W_PX, H_PX)):
+    return [] if im.size == expect else [f"{label} is {im.size[0]} x {im.size[1]}, not {expect[0]} x {expect[1]}"]
+
+
+def check_counts(st, key):
+    want = EXPECTED_COUNTS[key]
+    return [] if st.count == want and len(st.flakes) == want and len(st.xd[0]) == want else [f"storm {key}: {st.count} simulated flakes, the spec says {want}"]
+
+
+def _mean_heading(st, flakes, steps):
+    """Degrees of the mean drawn velocity of `flakes` over `steps` from straight down; + = to the right, - = to the left."""
+    vx = sum(st.vel[k][i][0] for k in steps for i in flakes)
+    vy = sum(st.vel[k][i][1] for k in steps for i in flakes)
+    return math.degrees(math.atan2(vx, vy))
+
+
+def check_gusts(st, expect):
+    """The wind as Michael set it (26 Nov): a storm blows left to right throughout, gusty, its own flakes slanting 30 to
+    60 degrees right of straight down; the fart blows right to left, its flakes 75 to 90 degrees left of down at full
+    strength; Light has none."""
+    w = st.wind
+    lo, hi = min(w), max(w)
+    key = expect["key"]
+    if expect.get("F"):
+        full = [k for k in range(st.steps + 1) if fart_ramp(k * STORM_DT) == 1.0]
+        fails = [] if hi <= 0 else [f"{key}: the fart wind blows left to right at some step (up to {hi:+.1f} px/s)"]
+        if not full or lo > -0.99 * abs(expect["F"]):
+            fails.append(f"{key}: the fart wind never reaches full strength ({lo:+.1f} px/s)")
+        h = _mean_heading(st, range(st.n_light), full) if full else 0.0
+        if not (-90 <= h <= -75):
+            fails.append(f"{key}: at full strength the flakes head {h:+.1f} deg from straight down, not 75 to 90 to the left (horizontal)")
+        st.heading = h
+        return fails
+    if expect["G"] == 0:
+        return [] if all(v == 0 for v in w) else [f"storm {key}: wind is not exactly 0 (range {lo:.2f} to {hi:.2f})"]
+    fails = []
+    if lo <= 0:
+        fails.append(f"storm {key}: the wind does not blow left to right throughout (range {lo:+.1f} to {hi:+.1f})")
+    if hi - lo < 0.25 * expect["G"]:
+        fails.append(f"storm {key}: the gusts span {hi - lo:.1f} px/s, under a quarter of the mean wind {expect['G']:g}")
+    h = _mean_heading(st, range(st.n_light, st.count), range(st.steps + 1))
+    if not (30 <= h <= 60):
+        fails.append(f"storm {key}: the storm flakes head {h:+.1f} deg from straight down, not 30 to 60 to the right (diagonal)")
+    st.heading = h
+    return fails
+
+
+def _angles(st, i):
+    """(max angle from straight down, max angle from the flake's own first heading) in degrees over the run, drawn velocity."""
+    v0 = st.vel[0][i]
+    a0 = math.atan2(v0[0], v0[1])
+    down = turn = 0.0
+    for k in range(st.steps + 1):
+        vx, vy = st.vel[k][i]
+        down = max(down, abs(math.degrees(math.atan2(vx, vy))))
+        d = abs(math.degrees(math.atan2(vx, vy) - a0))
+        turn = max(turn, min(d, 360 - d))
+    return down, turn
+
+
+def check_swirls(st, expect, make_rng=random.Random):
+    """B and C: >= 5 % of the flakes passing within R/2 of a (spec'd) vortex head swing past 90 degrees from straight down
+    (heading up the screen); Light and A: none of the light flakes does. Returns (failures, info line)."""
+    ang = [_angles(st, i) for i in range(st.count)]
+    if expect["K"] == 0:
+        worst = max(a[0] for a in ang[: st.n_light])
+        worst_turn = max(a[1] for a in ang[: st.n_light])
+        info = f"storm {expect['key']}: light flakes' largest angle from straight down {worst:.1f} deg (limit 90); largest swing from their own first heading {worst_turn:.1f} deg"
+        return ([] if worst <= 90 else [f"storm {expect['key']}: a light flake turns past 90 degrees ({worst:.1f})"]), info
+    # Every flake that passes within R/2 of a (moving) vortex head at any step over the 2.4 s, not only those that
+    # start there (supervisor fix, 26 Nov: the start-only sample held 4 flakes for B). The vortex heads come from the
+    # simulation (they drift with the wind); `cs` is the spec'd start, compared with the simulation's first step.
+    cs = vortex_centres(expect, make_rng)
+    if len(st.cen[0]) != len(cs) or any(math.hypot(a[0] - b[0], a[1] - b[1]) > 1e-6 for a, b in zip(st.cen[0], cs)):
+        return [f"storm {expect['key']}: the simulated vortex heads are not the spec'd ones ({len(st.cen[0])} vs {len(cs)})"], f"storm {expect['key']}: vortex mismatch"
+    half = expect["R"] / 2
+    sel = [i for i in range(st.count)
+           if any(math.hypot(st.xd[k][i] - cx, st.y[k][i] - cy) < half for k in range(st.steps + 1) for cx, cy in st.cen[k])]
+    n_turn = sum(1 for i in sel if ang[i][0] > 90)
+    frac = n_turn / len(sel) if sel else 0.0
+    info = (f"storm {expect['key']}: {len(sel)} flakes pass within R/2 of a vortex head; {n_turn} ({frac:.0%}) head past 90 deg "
+            f"from straight down, i.e. up the screen (need >= 5 %)")
+    return ([] if sel and frac >= 0.05 else [f"storm {expect['key']}: only {frac:.1%} of the flakes near a vortex turn past 90 degrees (need 5 %)"]), info
+
+
+
+def check_light_control(st):
+    """The Light option is snowfall.js as built: each light flake's vy inside the config range, drawn x within driftPx of its base x."""
+    fails = []
+    for i in range(st.n_light):
+        f = st.flakes[i]
+        if not (SNOW["minSpeed"] <= f["vy"] <= SNOW["maxSpeed"]):
+            fails.append(f"light flake {i}: vy {f['vy']:.1f} outside [{SNOW['minSpeed']:g}, {SNOW['maxSpeed']:g}]")
+        if not (_PX[0] <= f["px"] <= _PX[1]):
+            fails.append(f"light flake {i}: px {f['px']:.1f} outside [{_PX[0]:g}, {_PX[1]:g}]")
+        worst = max(abs(st.xd[k][i] - st.x0[i]) for k in range(st.steps + 1))
+        if worst > SNOW["driftPx"] + 1e-9:
+            fails.append(f"light flake {i}: drawn x strays {worst:.2f} px from its base x (driftPx {SNOW['driftPx']:g})")
+    return fails
+
+
+def near_white_mask(im):
+    """255 where a pixel is opaque near-white: r, g, b >= 235 and alpha >= 250."""
+    r, g, b, a = im.split()
+    m = ImageChops.multiply(ImageChops.multiply(r.point(lambda v: 255 if v >= 235 else 0), g.point(lambda v: 255 if v >= 235 else 0)),
+                            ImageChops.multiply(b.point(lambda v: 255 if v >= 235 else 0), a.point(lambda v: 255 if v >= 250 else 0)))
+    return m
+
+
+def check_piece_icon(im):
+    """art-fit/advent.png: 192 x 192, four corner pixels alpha 0, >= 2 % of its pixels opaque near-white (the "?")."""
+    if im.size != (192, 192):
+        return [f"advent.png is {im.size[0]} x {im.size[1]}, not 192 x 192"], 0.0
+    fails = []
+    w, h = im.size
+    for c in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+        if im.getpixel(c)[3] != 0:
+            fails.append(f"advent.png corner {c} has alpha {im.getpixel(c)[3]}, not 0 (the knockout failed)")
+    n = near_white_mask(im).histogram()[255]
+    share = 100.0 * n / (w * h)
+    if share < 2.0:
+        fails.append(f"advent.png has {share:.2f} % opaque near-white pixels, under 2 % (the white ? did not survive)")
+    return fails, share
+
+
+def bow_holes(im, min_area=20):
+    """Enclosed transparent regions (alpha < 128, not reachable from the border through such pixels): [(area, cx, cy)]."""
+    w, h = im.size
+    a = im.getchannel("A").load()
+    seen = [[False] * w for _ in range(h)]
+
+    def fill(sx, sy):
+        stack, cells = [(sx, sy)], []
+        seen[sy][sx] = True
+        while stack:
+            x, y = stack.pop()
+            cells.append((x, y))
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if 0 <= nx < w and 0 <= ny < h and not seen[ny][nx] and a[nx, ny] < 128:
+                    seen[ny][nx] = True
+                    stack.append((nx, ny))
+        return cells
+
+    for x in range(w):
+        for y in (0, h - 1):
+            if a[x, y] < 128 and not seen[y][x]:
+                fill(x, y)
+    for y in range(h):
+        for x in (0, w - 1):
+            if a[x, y] < 128 and not seen[y][x]:
+                fill(x, y)
+    out = []
+    for y in range(h):
+        for x in range(w):
+            if a[x, y] < 128 and not seen[y][x]:
+                cells = fill(x, y)
+                if len(cells) >= min_area:
+                    out.append((len(cells), sum(c[0] for c in cells) / len(cells), sum(c[1] for c in cells) / len(cells)))
+    return out
+
+
+# ---- sheet 4
+def hud_text(sheet, xy, s, size, fnt=None):
+    """src/scenes/Play.js TEXT_STYLE: bold sans-serif, white, '#5a2a44' stroke. Phaser's 12 px stroke straddles the glyph edge,
+    so 6 px of it shows outside the fill (Pillow's stroke_width draws outside only)."""
+    ImageDraw.Draw(sheet).text(xy, s, font=fnt or font(size, True), fill=(255, 255, 255), anchor="mm",
+                               stroke_width=HUD_STROKE_PX // 2, stroke_fill=HUD_STROKE_RGB)
+
+
+def gif_save(frames, out_dir, name, inputs, manifest, failures):
+    path = Path(out_dir) / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pal = [f.quantize(256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE) for f in frames]
+    durs = [70, 70, 60] * (len(frames) // 3 + 1)  # 15 fps on average (GIF delays are whole centiseconds)
+    pal[0].save(path, save_all=True, append_images=pal[1:], duration=durs[: len(frames)], loop=0, disposal=1)
+    with Image.open(path) as g:
+        size, n, loop = g.size, g.n_frames, g.info.get("loop")
+    if size != GIF_SIZE or n != GIF_FRAMES or loop != 0:
+        failures.append(f"{name}: {size[0]} x {size[1]}, {n} frames, loop {loop}; expected {GIF_SIZE[0]} x {GIF_SIZE[1]}, {GIF_FRAMES} frames, loop 0")
+    manifest.append({"sheet": name, "inputs": inputs, "size": size, "path": path, "expect": GIF_SIZE, "frames": n})
+
+
+def banner_sheet(inp, level, out, manifest, failures):
+    spec = STORM_OPTIONS["light"]
+    st = simulate(spec)
+    img = storm_base(inp, level).copy()
+    flake, _ = flake_layers(st, STORM_T, False)
+    img.alpha_composite(flake)
+    img.alpha_composite(top_panel([
+        "Banner one pair ahead: (a) text only, (b) on a dark band; the popup rows (dashed) stay clear",
+        f"Light snow at t = 1.2 s, level {level} ({LEVEL_NAMES[level - 1]}); score 12 at y {HUD_SCORE_Y}, popup rows at y {POPUP_ROWS[0]} and {POPUP_ROWS[1]} ({POPUP_FONT} px text)",
+    ]))
+    hud_text(img, (W_PX // 2, HUD_SCORE_Y), "12", 80)
+    for y in POPUP_ROWS:
+        dashed_rect(img, (W_PX // 2 - 120, y - POPUP_FONT // 2, W_PX // 2 + 120, y + POPUP_FONT // 2), HUD_STROKE_RGB)
+        text(img, (W_PX // 2 + 130, y), f"popup row, y {y}", 12, HUD_STROKE_RGB, False, "lm")
+    band = Image.new("RGBA", (W_PX, 84), BAR_TRACK + (int(round(0.55 * 255)),))
+    hud_text(img, (W_PX // 2, 320), "Snowstorm ahead!", 48)
+    img.alpha_composite(band, (0, 420 - 42))
+    hud_text(img, (W_PX // 2, 420), "Snowstorm ahead!", 48)
+    zh = None
+    for idx in (2, 0):  # Hiragino Sans GB W6 (bold) first, else W3
+        try:
+            zh = ImageFont.truetype("/System/Library/Fonts/Hiragino Sans GB.ttc", 48, index=idx)
+            break
+        except Exception:
+            continue
+    if zh is not None:
+        img.alpha_composite(band, (0, 520 - 42))
+        hud_text(img, (W_PX // 2, 520), "前方有暴风雪！", 48, zh)
+    else:
+        print("note: Hiragino Sans GB.ttc could not be loaded; the zh-Hans banner line is skipped")
+    for y, lab in ((320, "a"), (420, "b")) + (((520, "b zh"),) if zh is not None else ()):
+        text(img, (14, y), lab, 22, (255, 255, 255), True, "lm", halo=HUD_STROKE_RGB)
+    dashed_vline(img, 700, 96, 1150, HUD_STROKE_RGB, 12, 6, 4)
+    dashed_vline(img, 700, 96, 1150, (255, 255, 255), 12, 6, 2)
+    text(img, (690, 640), "the storm starts at the next pair", 13, (255, 255, 255), True, "rm", halo=HUD_STROKE_RGB)
+    failures += check_still_size(img, f"sheet4b-banner-L{level}")
+    sheet_save(img, out, f"sheet4b-banner-L{level}.png", ["src/config.js (hudScoreY, popup, barTrackColor)", "run frame as sheet 3", "Light snow at t = 1.2 s"] + ([] if zh else ["(zh line skipped)"]), manifest)
+
+
+def sheet4(inp, out, manifest, failures):
+    sims = {k: simulate(s) for k, s in STORM_OPTIONS.items()}
+    print("sheet 4 checks:")
+    for k, spec in STORM_OPTIONS.items():
+        st = sims[k]
+        fs = check_counts(st, k) + check_gusts(st, spec)
+        sw, info = check_swirls(st, spec)
+        fs += sw
+        head = f"; heading {st.heading:+.1f} deg" if hasattr(st, "heading") else ""
+        print(f"  {k:<5} flakes {st.count} (spec {EXPECTED_COUNTS[k]}); wind {min(st.wind):+.1f} to {max(st.wind):+.1f} px/s{head}; {info}")
+        failures += fs
+    lf = check_light_control(sims["light"])
+    print(f"  light control vs snowfall.js: {'ok' if not lf else 'FAIL'} ({int(SNOW['count'])} flakes: vy in [{SNOW['minSpeed']:g}, {SNOW['maxSpeed']:g}], drawn x within {SNOW['driftPx']:g} px)")
+    failures += lf
+    rows = []
+    ins = ["src/config.js snow line", "src/ui/snowfall.js rules", "run frame as sheet 3 (villi, ceiling, ground, pipe, pipe-snow, poop-santa)"]
+    for k, spec in STORM_OPTIONS.items():
+        for lvl in (1, 5):
+            img, cov, _ = render_storm_still(inp, spec, lvl, sim=sims[k])
+            failures += check_still_size(img, sheet_name(k, lvl, "png"))
+            rows.append((spec["name"], lvl, cov))
+            sheet_save(img, out, sheet_name(k, lvl, "png"), ins, manifest)
+    a = render_storm_still(inp, STORM_OPTIONS["B"], 1)[0].tobytes()
+    b = render_storm_still(inp, STORM_OPTIONS["B"], 1)[0].tobytes()
+    print(f"  determinism: option B level 1 rendered twice in memory: {'byte-identical' if a == b else 'DIFFERENT'}")
+    if a != b:
+        failures.append("option B's level-1 still differs between two renders (an unseeded RNG?)")
+    for lvl in (1, 5):
+        banner_sheet(inp, lvl, out, manifest, failures)
+    for k, spec in STORM_OPTIONS.items():
+        st = sims[k]
+        cov = next(c for n, l, c in rows if n == spec["name"] and l == 1)
+        base = storm_base(inp, 1, spec.get("poop", "poop-santa"))
+        head = storm_header(spec, 1, cov, False)
+        frames = []
+        for f in range(GIF_FRAMES):
+            fl, _ = flake_layers(st, f * GIF_EVERY * STORM_DT, False)
+            im = base.copy()
+            im.alpha_composite(fl)
+            im.alpha_composite(head)
+            frames.append(im.convert("RGB").resize(GIF_SIZE, Image.Resampling.LANCZOS))
+        gif_save(frames, out, sheet_name(k, 1, "gif"), ins + ["level 1, no trails, 15 fps, 36 frames"], manifest, failures)
+    print("\nCOVERAGE (flakes only at t = 1.2 s, alpha >= 128; the flakes do not depend on the level colour):")
+    print(f"  {'option':<8} {'level':<14} {'pipe gaps':>10} {'poop hitbox':>12}")
+    for name, lvl, cov in rows:
+        print(f"  {name:<8} L{lvl} {LEVEL_NAMES[lvl - 1]:<10} {cov[0]:>9.2f} % {cov[1]:>10.2f} %")
+
+
+# ---- sheet 5a
+def sheet5a(inp, out, manifest, failures):
+    icon = inp.twin("advent")
+    f, share = check_piece_icon(icon)
+    failures += f
+    holes = bow_holes(icon)
+    print(f"sheet 5a: advent.png {icon.size[0]} x {icon.size[1]}, opaque near-white {share:.1f} % ({'ok' if not f else 'FAIL'}); enclosed transparent regions "
+          f"(alpha < 128, >= 20 px): {[(a, round(x), round(y)) for a, x, y in holes]}")
+    mys = inp.stock("mystery")
+    coin = inp.stock("coin")
+    if mys.width % 192 or mys.height != 192:
+        raise SystemExit(f"FAIL: assets/mystery.png is {mys.size}, not 8 frames of 192 x 192")
+    if coin.width % 106 or coin.height != 106:
+        raise SystemExit(f"FAIL: assets/coin.png is {coin.size}, not frames of 106 x 106")
+    mys0, coin0 = mys.crop((0, 0, 192, 192)), coin.crop((0, 0, 106, 106))
+    items = [("advent (piece)", icon, SPRITE_SCALE), ("candy-cane", inp.twin("candy-cane"), SPRITE_SCALE), ("gingerbread", inp.twin("gingerbread"), SPRITE_SCALE),
+             ("bacteria-santa", inp.twin("bacteria-santa"), SPRITE_SCALE), ("bean", inp.stock("bean"), SPRITE_SCALE), ("postbiotic", inp.stock("postbiotic"), SPRITE_SCALE),
+             ("mystery (frame 0)", mys0, SPRITE_SCALE), (f"coin (frame 0, {COIN_PX:g} px)", coin0, COIN_PX / 106)]
+    lab = (40, 30, 20)
+    for lvl in (1, 5):
+        sheet = new_sheet(level_rgb(lvl))
+        lines = ["Sheet 5a: the Advent piece at 96 px among December's pickups; does it read apart from the mystery box?",
+                 f"level {lvl} ({LEVEL_NAMES[lvl - 1]}); white ring = hitbox circle (itemRadius {ITEM_RADIUS:g}); the kernel has no ring"]
+        if len(holes) >= 2:
+            lines.append("the two holes inside the bow loops are transparent (alpha 0), so the level colour shows through")
+        sheet.alpha_composite(top_panel(lines))
+        for n, (name, im, sc) in enumerate(items):
+            cx, cy = 90 + (n % 4) * 180, 230 + (n // 4) * 220
+            cell = Cell(name, im, ITEM_RADIUS, scale=sc)
+            paste_at(sheet, cell.img, int(round(cx - cell.img.width / 2)), int(round(cy - cell.img.height / 2)))
+            if "coin" not in name:
+                ring(sheet, cx, cy, ITEM_RADIUS)
+            text(sheet, (cx, cy + 62), name, 12, lab, False, "ma")
+        text(sheet, (W_PX // 2, 700), "confusion check: the piece beside the stock mystery box", 14, lab, True, "ma")
+        for yc, k, tag in ((900, 0.5, None), (1080, 0.25, "at half size (48 px)")):
+            for cx, im, name in ((260, icon, "advent piece (new)"), (460, mys0, "mystery box (stock)")):
+                s = half(im, k)
+                paste_at(sheet, s, int(round(cx - s.width / 2)), int(round(yc - s.height / 2)))
+                text(sheet, (cx, yc + s.height // 2 + 6), name, 12, lab, False, "ma")
+            if tag:
+                text(sheet, (W_PX // 2, yc + 24 + 30), tag, 12, lab, True, "ma")
+        failures += check_still_size(sheet, f"sheet5a-pickups-L{lvl}")
+        sheet_save(sheet, out, f"sheet5a-pickups-L{lvl}.png", ["art-fit/advent, candy-cane, gingerbread, bacteria-santa", "assets/bean, postbiotic, mystery (frame 0), coin (frame 0)"], manifest)
+
+
+# ---- sheet 5 (step 2.14): the Advent book mock-up on the real December shots
+BOOK_ORDER = [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6]  # TUNING.advent.puzzle.order (asserted)
+BOOK_COLS, BOOK_ROWS, BOOK_SLOT, BOOK_X0, BOOK_Y0 = 4, 6, 166, 28, 180
+B_FILL, B_STROKE, B_GOLD = (26, 11, 20), (232, 94, 150), (255, 214, 0)
+B_LOCK, B_LOCK_LINE = (42, 20, 32), (74, 42, 58)
+B_LATE = {3, 7, 10, 12}  # found after their day (no star)
+B_OWNED_B = set(range(1, 15)) - {6, 9, 13}
+STAR_BOX = (133, 3, 163, 33)  # slot-relative box the tile check ignores (the on-the-day star)
+BOOK_TILE_TOL = 3.0  # mean absolute difference per channel
+
+
+def book_order():
+    """TUNING.advent.puzzle.order from src/config.js (cfg() reads numbers only, so a small regex), asserted equal to the hard-coded copy."""
+    m = re.search(r"puzzle:\s*\{[^}]*?order:\s*\[([0-9,\s]+)\]", _config)
+    if not m:
+        raise SystemExit("FAIL: TUNING.advent.puzzle.order not found in src/config.js")
+    got = [int(v) for v in m.group(1).replace(",", " ").split()]
+    if got != BOOK_ORDER:
+        raise SystemExit(f"FAIL: src/config.js puzzle order {got} differs from advent_preview.py's copy {BOOK_ORDER}")
+    return got
+
+
+def slot_xy(cell):
+    return BOOK_X0 + BOOK_SLOT * (cell % BOOK_COLS), BOOK_Y0 + BOOK_SLOT * (cell // BOOK_COLS)
+
+
+def emoji_img(ch, size):
+    """An Apple Color Emoji (only its 160 px bitmap strike exists) resized to size x size."""
+    im = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
+    ImageDraw.Draw(im).text((0, 0), ch, font=ImageFont.truetype("/System/Library/Fonts/Apple Color Emoji.ttc", 160), embedded_color=True)
+    return im.resize((size, size), Image.Resampling.LANCZOS)
+
+
+def _mask(size, fn, k=4):
+    m = Image.new("L", (size[0] * k, size[1] * k), 0)
+    fn(ImageDraw.Draw(m), k)
+    return m.resize(size, Image.Resampling.LANCZOS)
+
+
+def paint(sheet, xy, colour, mask, alpha=1.0):
+    if alpha != 1.0:
+        mask = mask.point(lambda v: int(round(v * alpha)))
+    sheet.paste(tuple(colour) + (255,), (int(xy[0]), int(xy[1]), int(xy[0]) + mask.width, int(xy[1]) + mask.height), mask)
+
+
+def rrect(sheet, box, radius, fill=None, alpha=1.0, stroke=None, sw=0):
+    """A rounded rectangle on its edge box (x0, y0, x1, y1), anti-aliased; the stroke is centred on the edge (sw px wide)."""
+    x0, y0, x1, y1 = box
+    pad = sw // 2 + 2
+    ox, oy, size = x0 - pad, y0 - pad, (x1 - x0 + 2 * pad, y1 - y0 + 2 * pad)
+    if fill is not None:
+        paint(sheet, (ox, oy), fill, _mask(size, lambda d, k: d.rounded_rectangle(((x0 - ox) * k, (y0 - oy) * k, (x1 - ox) * k - 1, (y1 - oy) * k - 1), radius * k, fill=255)), alpha)
+    if stroke is not None and sw:
+        h = sw / 2
+
+        def ring_fn(d, k):
+            d.rounded_rectangle((round((x0 - ox - h) * k), round((y0 - oy - h) * k), round((x1 - ox + h) * k) - 1, round((y1 - oy + h) * k) - 1), round((radius + h) * k), fill=255)
+            d.rounded_rectangle((round((x0 - ox + h) * k), round((y0 - oy + h) * k), round((x1 - ox - h) * k) - 1, round((y1 - oy - h) * k) - 1), max(0, round((radius - h) * k)), fill=0)
+        paint(sheet, (ox, oy), stroke, _mask(size, ring_fn))
+
+
+def dim_box(sheet, box, a):
+    reg = sheet.crop(box)
+    sheet.paste(Image.blend(reg, Image.new("RGBA", reg.size, (0, 0, 0, 255)), a), box[:2])
+
+
+def glow_box(sheet, box, grow, blur, alpha):
+    """A white glow: the box grown by `grow` px each side, Gaussian-blurred, at `alpha`."""
+    m = Image.new("L", sheet.size, 0)
+    ImageDraw.Draw(m).rectangle((box[0] - grow, box[1] - grow, box[2] - 1 + grow, box[3] - 1 + grow), fill=255)
+    paint(sheet, (0, 0), (255, 255, 255), m.filter(ImageFilter.GaussianBlur(blur)), alpha)
+
+
+def star_tile(cx, cy):
+    """The on-the-day star: 5 points, outer radius 13, inner 5.5, one point up, gold with a 2 px dark outline centred on its edge.
+    Returns (tile, top-left x, y) for a 40 x 40 RGBA tile."""
+    k, n = 4, 40
+    big = Image.new("RGBA", (n * k, n * k), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    pts = [((n / 2 + (13 if i % 2 == 0 else 5.5) * math.cos(math.radians(-90 + 36 * i))) * k,
+            (n / 2 + (13 if i % 2 == 0 else 5.5) * math.sin(math.radians(-90 + 36 * i))) * k) for i in range(10)]
+    d.polygon(pts, fill=B_GOLD + (255,))
+    d.line(pts + [pts[0]], fill=B_FILL + (255,), width=2 * k, joint="curve")
+    return big.resize((n, n), Image.Resampling.LANCZOS), int(round(cx - n / 2)), int(round(cy - n / 2))
+
+
+class BookRes:
+    """The Advent book's inputs (loaded once): the puzzle frames at 332 and 166, the shots, the piece icon."""
+
+    def __init__(self):
+        mc = main_checkout()
+        self.order = book_order()
+        sheet = load(mc / "meta/advent-previews/puzzle/out/advent-puzzle.png").convert("RGB")
+        if sheet.size != (BOOK_COLS * 332, BOOK_ROWS * 332):
+            raise SystemExit(f"FAIL: advent-puzzle.png is {sheet.size}, not {BOOK_COLS * 332} x {BOOK_ROWS * 332}")
+        self.frames = [sheet.crop((332 * (c % BOOK_COLS), 332 * (c // BOOK_COLS), 332 * (c % BOOK_COLS + 1), 332 * (c // BOOK_COLS + 1))) for c in range(24)]
+        self.tiles = [f.resize((BOOK_SLOT, BOOK_SLOT), Image.Resampling.LANCZOS) for f in self.frames]
+        self.shots = mc / ".claude/plans/17-previews/D/shots"
+        self.icon = load(ROOT / "assets/advent/advent.png")
+        self._shot = {}
+
+    def shot(self, name):
+        if name not in self._shot:
+            im = load(self.shots / name)
+            if im.size != (W_PX, H_PX):
+                raise SystemExit(f"FAIL: {name} is {im.size}, not 720 x 1280")
+            self._shot[name] = im
+        return self._shot[name].copy()
+
+    def home(self):
+        """D1a with its Advent chip covered by the same box of D0 (x 180..540, y 192..238)."""
+        im = self.shot("D1a-home-1205-none-en.png")
+        im.paste(self.shot("D0-home-1115-none-en.png").crop((180, 192, 540, 238)), (180, 192))
+        return im
+
+
+_BOOK_RES = []
+
+
+def book_res():
+    if not _BOOK_RES:
+        _BOOK_RES.append(BookRes())
+    return _BOOK_RES[0]
+
+
+def book_sheet(res, owned, stars, count=None, draw_pieces=True):
+    """The Advent book: D1a home darkened to 0.45, the panel, the count line, 24 slots (owned pieces at their cell, locked ones plain)."""
+    sheet = res.home()
+    sheet.paste(sheet.convert("RGB").point(lambda v: int(round(v * 0.45))).convert("RGBA"))
+    sheet.alpha_composite(Image.new("RGBA", (696, 1112), B_FILL + (int(round(0.95 * 255)),)), (12, 84))
+    rrect(sheet, (12, 84, 708, 1196), 0, stroke=B_STROKE, sw=8)
+    x = res.shot("D2a-popup-1205-p1-5-en.png").convert("RGB").crop((588, 216, 644, 272))
+    bg = x.getpixel((2, 2))
+    lum = x.convert("L").point(lambda v: max(0, min(255, int(round((v - sum(bg) / 3) / (255 - sum(bg) / 3) * 255)))))
+    paint(sheet, (636, 100), (255, 255, 255), lum)  # the Daily window's white X, same size, as a mask so its background does not show
+    text(sheet, (360, 132), f"{len(owned) if count is None else count} of 24 found", 36, B_GOLD, True, "mm")
+    cell_piece = {res.order[k - 1]: k for k in owned}
+    d = ImageDraw.Draw(sheet)
+    for c in range(24):
+        sx, sy = slot_xy(c)
+        if c in cell_piece:
+            sheet.paste(res.tiles[c], (sx, sy))
+            if cell_piece[c] in stars:
+                tile, tx, ty = star_tile(sx + 148, sy + 18)
+                sheet.alpha_composite(tile, (tx, ty))
+        else:
+            d.rectangle((sx, sy, sx + BOOK_SLOT - 1, sy + BOOK_SLOT - 1), fill=B_LOCK + (255,), outline=B_LOCK_LINE + (255,), width=1)
+    return sheet
+
+
+def check_book_tiles(sheet_img, owned, tiles, order=BOOK_ORDER):
+    """Failure strings: every owned piece's slot must hold its frame (mean absolute difference per channel below 3, the star's corner box
+    ignored) and every other slot's centre pixel must be the locked fill."""
+    fails = []
+    im = sheet_img.convert("RGB")
+    if im.size != (W_PX, H_PX):
+        return [f"book sheet is {im.size}, not 720 x 1280"]
+    cells = {order[k - 1]: k for k in owned}
+    ignored = (STAR_BOX[2] - STAR_BOX[0]) * (STAR_BOX[3] - STAR_BOX[1])
+    n = BOOK_SLOT * BOOK_SLOT - ignored
+    for c in range(24):
+        sx, sy = slot_xy(c)
+        if c in cells:
+            reg = im.crop((sx, sy, sx + BOOK_SLOT, sy + BOOK_SLOT))
+            diff = ImageChops.difference(reg, tiles[c])
+            ImageDraw.Draw(diff).rectangle((STAR_BOX[0], STAR_BOX[1], STAR_BOX[2] - 1, STAR_BOX[3] - 1), fill=(0, 0, 0))
+            means = [s / n for s in ImageStat.Stat(diff).sum]
+            if max(means) >= BOOK_TILE_TOL:
+                fails.append(f"piece {cells[c]} (cell {c}): slot at ({sx}, {sy}) differs from its frame by {max(means):.2f} per channel (limit {BOOK_TILE_TOL:g})")
+        else:
+            px = im.getpixel((sx + BOOK_SLOT // 2, sy + BOOK_SLOT // 2))
+            if px != B_LOCK:
+                fails.append(f"locked slot {c} at ({sx}, {sy}): centre pixel {px}, not {B_LOCK}")
+    return fails
+
+
+def _fit_pencil():
+    """U+270E 22 px tall, white with a 3 px dark outline, as a tile (from Arial Unicode; a drawn polygon if the font is missing)."""
+    k = 4
+    try:
+        f100 = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 100)
+        h100 = f100.getmask("✎").getbbox()
+        size = int(round(100 * 22 * k / (h100[3] - h100[1])))
+        f = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", size)
+        pad = 3 * k + 4
+        bb = f.getmask("✎").getbbox()
+        w, h = bb[2] - bb[0], bb[3] - bb[1]
+        big = Image.new("RGBA", (w + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
+        d = ImageDraw.Draw(big)
+        d.text((pad - bb[0], pad - bb[1]), "✎", font=f, fill=B_FILL + (255,), stroke_width=3 * k, stroke_fill=B_FILL + (255,))
+        d.text((pad - bb[0], pad - bb[1]), "✎", font=f, fill=(255, 255, 255, 255))
+        ink = (pad, pad, pad + w, pad + h)
+    except Exception:
+        w, h = 31 * k, 22 * k
+        pad = 3 * k + 4
+        big = Image.new("RGBA", (w + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
+        d = ImageDraw.Draw(big)
+        poly = [(pad + 4, pad + h), (pad, pad + h - 10 * k // 2), (pad + w - 10, pad), (pad + w, pad + 8), (pad + 14, pad + h)]
+        d.polygon(poly, fill=B_FILL + (255,), outline=B_FILL + (255,), width=3 * k)
+        d.polygon(poly, fill=(255, 255, 255, 255))
+        ink = (pad, pad, pad + w, pad + h)
+    small = big.resize((big.width // k, big.height // k), Image.Resampling.LANCZOS)
+    return small, ((ink[0] + ink[2]) / 2 / k, (ink[1] + ink[3]) / 2 / k)
+
+
+def dominant(im, box, light=True):
+    """The most common colour in a box among the light (or dark) pixels: a shot's text colour without hard-coding it."""
+    from collections import Counter
+    raw = im.convert("RGB").crop(box).tobytes()
+    px = [p for p in zip(raw[0::3], raw[1::3], raw[2::3]) if (sum(p) > 400) == light]
+    return Counter(px).most_common(1)[0][0]
+
+
+def sheet5(inp, out, manifest, failures):
+    res = book_res()
+    order = res.order
+    srcs_book = ["puzzle/out/advent-puzzle.png", "D shots: D1a (home), D0 (chip patch), D2a (the X)", "src/config.js advent.puzzle.order"]
+    saved = []
+
+    def save(sheet, name, inputs):
+        failures.extend(check_still_size(sheet, name[:-4]))
+        sheet_save(sheet, out, name, inputs, manifest)
+        saved.append(name)
+        return manifest[-1]["path"]
+
+    print("sheet 5: the Advent book")
+    all_p = set(range(1, 25))
+    states = [("sheet5-book-a-none.png", set(), set()),
+              ("sheet5-book-b-mix.png", B_OWNED_B, B_OWNED_B - B_LATE),
+              ("sheet5-book-c-all.png", all_p, all_p - B_LATE),
+              ("sheet5-book-c2-all-nomarks.png", all_p, set())]
+    for name, owned, stars in states:
+        path = save(book_sheet(res, owned, stars), name, srcs_book)
+        bad = check_book_tiles(Image.open(path), owned, res.tiles, order)
+        print(f"  {name}: {len(owned)} owned, {len(stars)} starred, tile check {'ok' if not bad else 'FAIL'}")
+        failures.extend(f"{name}: {b}" for b in bad)
+    # the add-piece animation: state b without piece 14 in its slot
+    owned10 = B_OWNED_B - {14}
+    stars10 = owned10 - B_LATE
+    cell14 = order[13]
+    sx, sy = slot_xy(cell14)
+    assert (sx, sy) == (194, 678), (sx, sy)
+    f14 = res.frames[cell14]
+    panel_box = (8, 80, 712, 1200)
+    caps = ["Frame 1 of 3 · 0 to 1.0 s · chimes build", "Frame 2 of 3 · 1.0 to 2.3 s · chimes peak", "Frame 3 of 3 · 2.3 s lock click · glow fades to 3.3 s"]
+    # frame 1: dim 0.45, glow (grown 28, blur 14, 0.9), the piece at 332 centred at (360, 678)
+    s = book_sheet(res, owned10, stars10)
+    dim_box(s, panel_box, 0.45)
+    glow_box(s, (194, 512, 526, 844), 28, 14, 0.9)
+    s.paste(f14, (194, 512))
+    text(s, (360, 1238), caps[0], 22, (255, 255, 255), False, "mm", halo=B_FILL)
+    save(s, "sheet5-anim-1.png", srcs_book + ["frame of piece 14 (cell %d)" % cell14])
+    # frame 2: dim 0.25, glow scaled to the piece (grown 21, blur 10.5, 0.75), the piece at 249 centred at (318.5, 719.5)
+    s = book_sheet(res, owned10, stars10)
+    dim_box(s, panel_box, 0.25)
+    glow_box(s, (194, 595, 443, 844), 21, 10.5, 0.75)
+    s.paste(f14.resize((249, 249), Image.Resampling.LANCZOS), (194, 595))
+    text(s, (360, 1238), caps[1], 22, (255, 255, 255), False, "mm", halo=B_FILL)
+    save(s, "sheet5-anim-2.png", srcs_book + ["frame of piece 14 (cell %d)" % cell14])
+    # frame 3: no dim, the piece in its slot at 166, glow under it (grown 14, blur 8, 0.45), 11 found
+    s = book_sheet(res, owned10, stars10, count=11)
+    glow_box(s, (sx, sy, sx + BOOK_SLOT, sy + BOOK_SLOT), 14, 8, 0.45)
+    s.paste(res.tiles[cell14], (sx, sy))
+    tile, tx, ty = star_tile(sx + 148, sy + 18)
+    s.alpha_composite(tile, (tx, ty))
+    text(s, (360, 1238), caps[2], 22, (255, 255, 255), False, "mm", halo=B_FILL)
+    save(s, "sheet5-anim-3.png", srcs_book + ["frame of piece 14 (cell %d)" % cell14])
+    # the home screen with the Advent button
+    srcs_home = ["D shots: D1a (home), D0 (chip patch)", "assets/advent/advent.png"]
+    for name, haloed in (("sheet5-home-a-normal.png", False), ("sheet5-home-b-glow.png", True)):
+        s = res.home()
+        if haloed:  # white radial halo: alpha 0.9 up to the rim (r 44), fading linearly to 0 at r 84
+            g = Image.new("L", (168, 168))
+            g.putdata([int(round(255 * 0.9 * max(0.0, min(1.0, 1 - (math.hypot(x + 0.5 - 84, y + 0.5 - 84) - 44) / 40)))) for y in range(168) for x in range(168)])
+            paint(s, (100 - 84, 124 - 84), (255, 255, 255), g)
+        rrect(s, (56, 80, 144, 168), 44, fill=B_FILL, alpha=0.55, stroke=B_STROKE, sw=4)
+        icon = res.icon.resize((60, 60), Image.Resampling.LANCZOS)
+        s.alpha_composite(icon, (70, 94))
+        ImageDraw.Draw(s).text((140, 164), "5/24", font=font(24, True), fill=B_GOLD, anchor="mm", stroke_width=2, stroke_fill=B_FILL)
+        save(s, name, srcs_home)
+    # the Daily window with the (?) and the pencil
+    s = res.shot("D2a-popup-1205-p1-5-en.png")
+    ring(s, 104, 244, 24, (255, 255, 255), 3, halo=False)
+    ImageDraw.Draw(s).text((104, 244), "?", font=font(30, True), fill=(255, 255, 255), anchor="mm")
+    pen, (pcx, pcy) = _fit_pencil()
+    s.alpha_composite(pen, (int(round(222 - pcx)), int(round(292 - pcy))))
+    save(s, "sheet5-daily.png", ["D shots: D2a (the Daily window)", "U+270E from Arial Unicode"])
+    # the board with a fifth tab (Advent)
+    src = res.shot("D5-board-1205-gifts-en.png")
+    s = src.copy()
+    panel = src.getpixel((100, 208))[:3]
+    track, stroke, pill = src.getpixel((190, 208))[:3], src.getpixel((360, 181))[:3], src.getpixel((290, 208))[:3]
+    title_pink, sub_col = dominant(src, (190, 110, 530, 170)), dominant(src, (270, 245, 450, 276))
+    glyphs = {x: src.crop((x - 26, 180, x + 26, 232)) for x in (216, 312, 408, 504)}
+    d = ImageDraw.Draw(s)
+    d.rectangle((162, 176, 558, 240), fill=panel + (255,))  # the old 384 px track
+    rrect(s, (120, 180, 600, 236), 28, fill=track, stroke=stroke, sw=4)
+    rrect(s, (508, 185, 596, 231), 23, fill=pill)
+    # The 🎅 was cropped from under the shot's selected pill: its pill-coloured pixels take the track's colour.
+    g = glyphs[312].convert("RGB")
+    g.putdata([track if sum(abs(a - b) for a, b in zip(px, pill)) < 40 else px for px in g.getdata()])
+    glyphs[312] = g
+    for old, new in zip((216, 312, 408, 504), (168, 264, 360, 456)):
+        s.paste(glyphs[old], (new - 26, 206 - 26))
+    s.alpha_composite(emoji_img("\U0001f9e9", 40), (552 - 20, 206 - 20))
+    d.rectangle((190, 108, 530, 172), fill=panel + (255,))  # title
+    d.rectangle((262, 244, 458, 276), fill=panel + (255,))  # sub-line
+    d.text((360, 159), "ADVENT", font=font(51, True), fill=title_pink, anchor="ms")
+    d.text((360, 267), "Dec 2026 · pieces found", font=font(22), fill=sub_col, anchor="ms")
+    d.rectangle((48, 270, 672, 530), fill=panel + (255,))  # rows 1 to 5
+    rows = [(1, "Gerty", "\U0001f384", 24), (2, "Bean", "\U0001f332", 24), (3, "Plop", None, 17), (4, "Michael", None, 11), (5, "Zed", None, 6)]
+    for (rank, name, tree, n), y in zip(rows, (296, 348, 400, 452, 504)):
+        mine = rank == 4
+        d.text((96, y + 12), f"{rank}.", font=font(34, True), fill=title_pink, anchor="ls")
+        d.text((164, y + 12), name, font=font(34, True), fill=title_pink if mine else (255, 255, 255), anchor="ls")
+        if tree:
+            ex = 164 + font(34, True).getlength(name) + 8
+            s.alpha_composite(emoji_img(tree, 28), (int(round(ex)), y - 1 - 14))
+        d.text((624, y + 12), str(n), font=font(34, True), fill=title_pink if mine else (255, 255, 255), anchor="rs")
+    foot = dominant(src, (260, 1074, 460, 1100))
+    d.rectangle((200, 1070, 520, 1104), fill=panel + (255,))  # "You: #4 of 5 · 42" (the Daily's score)
+    d.text((360, 1096), "You: #4 of 5 · 11", font=font(24), fill=foot, anchor="ms")
+    save(s, "sheet5-board-tabs.png", ["D shots: D5 (the board)", "Apple Color Emoji (puzzle, trees)"])
+    if len(saved) != 11:
+        failures.append(f"sheet 5 wrote {len(saved)} sheets, expected 11")
+    return res
+
+
+def book_selftest(missed):
+    """Step 2.14's negative control: a state-b book with one owned tile pasted 6 px right of its slot must be rejected by check_book_tiles."""
+    res = book_res()
+    good = book_sheet(res, B_OWNED_B, B_OWNED_B - B_LATE)
+    if check_book_tiles(good, B_OWNED_B, res.tiles, res.order):
+        print("selftest: the real state-b book already fails its own tile check")
+        missed.append("real book fails")
+    bad = good.copy()
+    cell = res.order[1]  # piece 2
+    sx, sy = slot_xy(cell)
+    ImageDraw.Draw(bad).rectangle((sx, sy, sx + BOOK_SLOT - 1, sy + BOOK_SLOT - 1), fill=B_LOCK + (255,))
+    bad.paste(res.tiles[cell], (sx + 6, sy))
+    fails = check_book_tiles(bad, B_OWNED_B, res.tiles, res.order)
+    print(f"selftest: a book tile pasted 6 px right of its slot: {'REJECTED' if fails else 'ACCEPTED (check is blind!)'}" + (f" ({fails[0]})" if fails else ""))
+    if not fails:
+        missed.append("a book tile 6 px off")
+
+
 # ---------------------------------------------------------------- the manifest and the driver
 def print_manifest(manifest):
     print("\nMANIFEST (sheet, size, inputs):")
     for m in manifest:
-        print(f"  {m['sheet']:<42} {m['size'][0]} x {m['size'][1]}   {'; '.join(m['inputs'])}")
+        print(f"  {m['sheet']:<42} {m['size'][0]} x {m['size'][1]}" + (f" x {m['frames']} frames" if "frames" in m else "") + f"   {'; '.join(m['inputs'])}")
+
+
+def storm_selftest(inp, missed):
+    """Step 2.6a's negative controls: each broken input must be rejected by the check that guards it."""
+    opt = STORM_OPTIONS
+    good = {k: simulate(s) for k, s in opt.items()}
+    for k, s in opt.items():
+        bad = check_counts(good[k], k) + check_gusts(good[k], s) + check_swirls(good[k], s)[0]
+        if bad:  # a real finding of the model (the build run reports it too), not a blind check: note it and go on
+            print(f"selftest: NOTE the real {k} storm fails its own check: {bad[0]}")
+    if check_light_control(good["light"]):
+        print("selftest: the real Light control already fails the snowfall.js check")
+        missed.append("real light control fails")
+    icon = inp.twin("advent")
+    if check_piece_icon(icon)[0]:
+        print(f"selftest: the real advent.png already fails: {check_piece_icon(icon)[0][0]}")
+        missed.append("real icon fails")
+
+    def report(what, fails):
+        print(f"selftest: {what}: {'REJECTED' if fails else 'ACCEPTED (check is blind!)'}" + (f" ({fails[0]})" if fails else ""))
+        if not fails:
+            missed.append(what)
+
+    report("a still of 720 x 1279", check_still_size(Image.new("RGB", (W_PX, H_PX - 1)), "still"))
+    a = render_storm_still(inp, opt["B"], 1, make_rng=lambda seed: random.Random())[0].tobytes()
+    b = render_storm_still(inp, opt["B"], 1, make_rng=lambda seed: random.Random())[0].tobytes()
+    report("an unseeded RNG for option B (two renders compared)", [] if a == b else ["the two renders differ"])
+    report("option B with 179 flakes", check_counts(simulate(opt["B"], extra=opt["B"]["extra"] - 1), "B"))
+    report("option A with G = 0", check_gusts(simulate(dict(opt["A"], G=0.0)), opt["A"]))
+    report("option B with gusts that reverse the wind (gust 1.6)", check_gusts(simulate(dict(opt["B"], gust=1.6)), opt["B"]))
+    report("option A with twice the wind (too flat for a diagonal)", check_gusts(simulate(dict(opt["A"], G=2 * opt["A"]["G"])), opt["A"]))
+    report("a fart wind blowing left to right", check_gusts(simulate(dict(opt["fart"], F=-opt["fart"]["F"])), opt["fart"]))
+    report("a fart wind of 60 px/s (not horizontal)", check_gusts(simulate(dict(opt["fart"], F=60.0)), dict(opt["fart"], F=60.0)))
+    report("option B with K = 0", check_swirls(simulate(dict(opt["B"], K=0)), opt["B"])[0])
+    report("option C with K = 0 (C passes the swirl check as it is)", check_swirls(simulate(dict(opt["C"], K=0)), opt["C"])[0])
+    w = icon.copy()
+    w.putalpha(ImageChops.subtract(icon.getchannel("A"), near_white_mask(icon)))  # every opaque near-white pixel made transparent
+    report("a piece icon with its opaque near-white pixels made transparent", check_piece_icon(w)[0])
+    sq = Image.new("RGBA", icon.size, (255, 255, 255, 255))
+    sq.alpha_composite(icon)
+    report("a piece icon pasted on an opaque white 192 x 192 square", check_piece_icon(sq)[0])
 
 
 def selftest(inp):
@@ -1010,6 +2044,8 @@ def selftest(inp):
     print(f"selftest: a wrong pipe fill in the distance table: {'REJECTED' if fails else 'ACCEPTED (check is blind!)'}")
     if not fails:
         missed.append("wrong pipe fill")
+    storm_selftest(inp, missed)
+    book_selftest(missed)
     if missed:
         print("selftest: FAILED to catch:", ", ".join(missed))
         return 2
@@ -1019,8 +2055,8 @@ def selftest(inp):
 
 def main():
     main_co = main_checkout()
-    ap = argparse.ArgumentParser(description="Gate A mock-up sheets for the December art (plan 17, 1.4 and 1.5)")
-    ap.add_argument("--sheets", default="all", help="comma list of 1, 2, 3, 7, 9, pipes or all")
+    ap = argparse.ArgumentParser(description="Gate A mock-up sheets for the December art (plan 17, 1.4, 1.5, 2.6a, 2.14 and 1b.1)")
+    ap.add_argument("--sheets", default="all", help="comma list of 1, 2, 3, 7, pipes, 4, 5a, 5, 9 or all (all = 1, 2, 3, 7, pipes)")
     ap.add_argument("--art", default=str(main_co / "meta/advent-previews/art-fit"))
     ap.add_argument("--guides", default=str(main_co / "meta/advent-previews/art-guides"))
     ap.add_argument("--out", default=str(main_co / ".claude/plans/17-previews/gateA"))
@@ -1031,8 +2067,8 @@ def main():
     inp = Inputs(args.art, args.guides, backdrop)
     if args.selftest:
         sys.exit(selftest(inp))
-    wanted = {"1", "2", "3", "7", "9", "pipes"} if args.sheets == "all" else set(args.sheets.split(","))
-    unknown = wanted - {"1", "2", "3", "7", "9", "pipes"}
+    wanted = {"1", "2", "3", "7", "pipes"} if args.sheets == "all" else set(args.sheets.split(","))
+    unknown = wanted - {"1", "2", "3", "7", "pipes", "4", "5a", "5", "9"}
     if unknown:
         raise SystemExit(f"unknown sheet(s): {', '.join(sorted(unknown))}")
     manifest, failures = [], []
@@ -1048,16 +2084,22 @@ def main():
         sheet9(inp, args.out, manifest, failures)
     if "pipes" in wanted:
         pipes_sheets(inp, args.out, manifest, failures)
+    if "4" in wanted:
+        sheet4(inp, args.out, manifest, failures)
+    if "5a" in wanted:
+        sheet5a(inp, args.out, manifest, failures)
+    if "5" in wanted:
+        sheet5(inp, args.out, manifest, failures)
     for m in manifest:
-        if m["size"] != (W_PX, H_PX):
-            failures.append(f"{m['sheet']} is {m['size']}, not 720 x 1280")
+        if m["size"] != m.get("expect", (W_PX, H_PX)):
+            failures.append(f"{m['sheet']} is {m['size']}, not {m.get('expect', (W_PX, H_PX))}")
     print_manifest(manifest)
     if failures:
         print("\nFAIL:")
         for f in failures:
             print("  -", f)
         sys.exit(1)
-    print(f"\nOK: {len(manifest)} sheets, every one 720 x 1280; every check passed")
+    print(f"\nOK: {len(manifest)} files, every one at its size (sheets 720 x 1280, GIFs 360 x 640); every check passed")
 
 
 if __name__ == "__main__":

@@ -6,14 +6,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { freshDb, asAnon, id, SCHEMA } from './support/postgrest.js';
+import { freshDb, asAnon, id, SCHEMA, pinServerDay, OFF_SEASON_DAY } from './support/postgrest.js';
 import { TUNING } from '../src/config.js';
 import { levelEnd } from '../src/logic.js';
 
 const VOID = ''; // PGlite reads a void answer as ''
 /** A pair a point, kept inside the level the run ended on (run_limits()). */
 const pairsFor = (score, level) => Math.max(levelEnd(level - 1, TUNING), Math.min(score, levelEnd(level, TUNING)));
-const today = () => new Date().toISOString().slice(0, 10); // the server's UTC day
+const today = () => OFF_SEASON_DAY; // the server's day, pinned in the Daily test (pinServerDay): the off-season rule on any real clock (plan 17)
 
 let runSeq = 0;
 /** Store one run for `pid` (owner path through submit_runs, then the 5 s pacing cleared). */
@@ -155,6 +155,7 @@ test('holding a run whose best the board does not show changes no row; a held ru
 
 test("a held Daily post stays off the 🌞 board for others: 'ok', then 'duplicate'; a backed one shows; holding it later moves it out; release brings it back", async () => {
   const db = await freshDb();
+  await pinServerDay(db);
   const lv = await dailyLevel(db);
   const P = id('HF');
   const Q = id('HG');

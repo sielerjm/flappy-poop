@@ -8,6 +8,36 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.35.0',
+    date: '26 Nov 2026',
+    notes: {
+      en: [
+        '🧩 The Advent puzzle: tap the 🧩 button at the top left of the home screen to watch your December pieces come together into one picture. A new piece flies into its place the first time you open the puzzle after finding it, and the button glows until you do. It also opens from the 🧩 line in the Daily Dump window and from YOUR PLAYER.',
+        '🏆 A new 🧩 tab on the leaderboard ranks everyone by pieces found, with a 🎄 or 🌲 beside each player who has earned a tree.',
+      ],
+      'zh-Hans': [
+        '🧩 圣诞拼图：点主页左上角的🧩按钮，看你十二月找到的拼图拼成一幅画。找到新拼图后第一次打开圣诞拼图时，它会飞到自己的位置上；在那之前按钮会一直发光。也可以从每日一拉窗口里的🧩那一行或“你的玩家”打开。',
+        '🏆 排行榜新增🧩标签，按找到的拼图数给所有人排名，获得圣诞树的玩家名字旁会显示🎄或🌲。',
+      ],
+    },
+  },
+  {
+    version: '0.34.0',
+    date: '26 Nov 2026',
+    notes: {
+      en: [
+        '🧩 Advent, all December: every Daily Dump run hides a wrapped gift. Catch the day’s gift, or one from a day you missed, and collect all 24: by 24 Dec for the 🎄 Christmas Tree badge, or by 31 Dec for the 🌲 Evergreen.',
+        '🌞 In December the Daily Dump stays open all day: play it as often as you like, and your best score of the day goes on the board. A 🎁 beside a name means that player found the day’s gift.',
+        '❄️ Snowstorms blow through December Daily Dump runs: the snow whips across the screen, each tap lifts you a little less and the pipes come a little faster. Watch for "Snowstorm ahead!". And a fart now blows the snow the other way.',
+      ],
+      'zh-Hans': [
+        '🧩 整个十二月的降临活动：每局每日一拉都藏着一份包好的礼物。找到当天的礼物，或补上错过那天的礼物，集齐全部24份：12月24日前集齐得🎄“2026 圣诞树”徽章，12月31日前集齐得🌲“2026 常青树”。',
+        '🌞 十二月里每日一拉全天开放：想玩几次都行，当天的最好成绩记到排行榜上。名字旁边的🎁表示这位玩家找到了当天的礼物。',
+        '❄️ 十二月的每日一拉会刮暴风雪：雪花横扫屏幕，每次点击飞得低一点，管道也来得快一点。留意“前方有暴风雪！”。另外，放屁时雪会被吹往另一边。',
+      ],
+    },
+  },
+  {
     version: '0.32.0',
     date: '26 Nov 2026',
     notes: {

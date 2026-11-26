@@ -29,6 +29,7 @@ export const ADVENT_ART = {
   },
   fartFrames: ['poop-fart-santa1', 'poop-fart-santa2'],
   snowCap: 'pipe-snow', // on each bottom pipe's cap, at TUNING.advent.snowCap from the cap's top-left (Play.addSnowCap)
+  piece: 'advent', // the Advent piece's texture and pickup kind (Stage 2, 2.6): a December Daily run's one gift, never a twin
   files: {
     'poop-santa': 'assets/advent/poop-santa.png',
     'poop-scared-santa': 'assets/advent/poop-scared-santa.png',
@@ -49,5 +50,6 @@ export const ADVENT_ART = {
     'bean-holly': 'assets/advent/bean-holly.png',
     'pipe-snow': 'assets/advent/pipe-snow.png',
     bowelidays: 'assets/advent/bowelidays.png', // all December over the title (countdownLine's image)
+    advent: 'assets/advent/advent.png', // the Advent piece (Play.spawnPipePair, only in a December Daily run)
   },
 };

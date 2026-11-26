@@ -101,6 +101,7 @@ Inspired by Flappy Bird`,
     itemTournamentDetail: 'Every two-player session is a tournament for 2 to 8 players: two race one Final, more play a knockout bracket you can arrange before the first race. The winners take the podium (🥉 from 3 players); with 3 or more players, those who joined with their user code keep their medals on the 🏅 board.',
     itemDailyName: 'Daily Dump',
     itemDailyDetail: "Tap the {daily} at the top of the home screen: one try a day on a course everyone shares, endless at the day's level, with no kernels. Your score goes on the {daily} board; a new course every day at 00:00 UTC.",
+    itemDailyDetailDec: "Tap the {daily} at the top of the home screen: a course everyone shares, endless at the day's level, with no kernels. All December, play it as often as you like: your best score of the day goes on the {daily} board. A new course every day at 00:00 UTC.",
     itemInfoName: 'About',
     itemInfoDetail: "The i button opens About: the credits, this guide and What's new (the update notes). Key: I.",
     itemLanguageName: 'Language',
@@ -252,6 +253,7 @@ Inspired by Flappy Bird`,
     reviveFree: "No questions left: you're back in.",
     eduNotSaved: 'Education runs are not on the 🏆 boards',
     saveEduData: '📚 Education data',
+    saveAdvent: '\u{1F9E9} Advent',
     eduIntroTitle: '📚 Education mode',
     eduIntroBeta: 'Beta: the cards are still being checked. If one looks wrong, tap the 🚩 by its code to tell us.',
     eduWordRetired: "📚 Education mode is on the home screen for everyone now.",
@@ -448,6 +450,7 @@ Inspired by Flappy Bird`,
     dailyTitle: '{daily} DAILY DUMP',
     dailyToday: "Today's course: {level}",
     dailyBody: 'One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the {daily} leaderboard; a new course starts every day at midnight UTC.',
+    dailyBodyDec: 'All December, play as often as you like: your best score of the day counts. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the {daily} leaderboard; a new course starts every day at midnight UTC.',
     dailyCreateUser: 'Create user',
     dailyPlay: 'Play',
     dailyChecking: 'Checking…',
@@ -464,7 +467,31 @@ Inspired by Flappy Bird`,
     dailyRankRejected: 'Not saved',
     dailyRankUnavailable: 'Rank unavailable',
     dailyNotCounted: 'No pipe crossed: not counted.\nYou can start it again today.',
+    dailyTodaysBest: "Today's best: {n}",
+    dailyNewBest: 'New best today!',
+    adventFoundToday: "Found today's gift!",
+    stormAhead: 'Snowstorm ahead!',
+    adventFoundLate: "Found a previous day's puzzle!",
+    adventFoundLeft: '\u{1F9E9} {n} of {total} found \u00b7 {left} left',
+    adventTodayFound: "Today's piece: found",
+    adventTodayMissing: "Today's piece: not found yet",
+    adventTreeOnTrack: '\u{1F384} on track',
+    adventTreePlainOpen: '\u{1F332} by 31 Dec',
+    adventTreeDecorated: '\u{1F384}',
+    adventTreePlain: '\u{1F332}',
+    adventNoGift: 'No gift this run, play again',
+    adventCount: '\u{1F9E9} {n}/{total}',
+    adventBookCount: '{n} of {total} found',
+    adventOnTrack: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384} on track',
+    adventPlainOpen: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332} by 31 Dec',
+    adventDecorated: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384}',
+    adventPlain: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332}',
     dailyBoardTitle: 'DAILY DUMP',
+    adventBoardTitle: 'ADVENT',
+    adventBoardHeader: 'Dec {year} \u00b7 pieces found',
+    adventBoardYou: 'You: #{rank} of {total} \u00b7 {pieces}',
+    adventBoardEmpty: 'No one has found a piece yet',
+    adventBoardJoin: 'Find the \u{1F381} in a December {daily} Daily Dump to join',
     dailyBoardEmpty: "No one has played today's Daily Dump yet",
     dailyBoardJoin: "Play today's Daily Dump from the {daily} on the home screen",
     dailyBoardYou: 'You: #{rank} of {total} · {score}',
@@ -796,6 +823,10 @@ Inspired by Flappy Bird`,
     achDescCeiling: 'Hit the ceiling {n} times',
     achDescFourOfAKind: 'Open four mystery boxes in a row with the same reward',
     achDescBoxesBought: 'Buy {n} mystery boxes in the shop',
+    achAdventTree: 'Christmas Tree 2026',
+    achDescAdventTree: 'Find all 24 Advent gifts by 24 Dec 2026 (catch-ups count)',
+    achAdventPine: 'Evergreen 2026',
+    achDescAdventPine: 'Find all 24 Advent gifts by 31 Dec 2026',
     achEduNerd: 'Nerd Alert',
     achEduPerfect: 'Full Marks',
     achEduA: 'A Student',
@@ -921,6 +952,7 @@ Inspired by Flappy Bird`,
     itemTournamentDetail: '双人模式总是锦标赛，支持2到8名玩家：两人只比一场决赛，更多玩家进行淘汰赛，第一场比赛前可以调整对阵。胜者登上领奖台（3名或以上玩家时才有🥉）；3名或以上玩家时，用用户码加入的玩家奖牌会记到🏅榜上。',
     itemDailyName: '每日一拉',
     itemDailyDetail: '点首页顶部的{daily}：每天一次机会，所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。分数记到{daily}榜上；每天UTC 00:00换新赛道。',
+    itemDailyDetailDec: '点首页顶部的{daily}：所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。整个十二月不限次数，当天的最好成绩记到{daily}榜上；每天UTC 00:00换新赛道。',
     itemInfoName: '关于',
     itemInfoDetail: 'i按钮打开“关于”：制作名单、本玩法说明和更新说明。按键：I。',
     itemLanguageName: '语言',
@@ -1069,6 +1101,7 @@ Inspired by Flappy Bird`,
     reviveFree: '没有题了：可以继续飞了。',
     eduNotSaved: '教育模式的成绩不上 🏆 排行榜',
     saveEduData: '📚 教育数据',
+    saveAdvent: '\u{1F9E9} 圣诞拼图',
     eduIntroTitle: '📚 教育模式',
     eduIntroBeta: '测试版：卡片仍在核对中。如果发现有误，请点卡片编号旁的 🚩 告诉我们。',
     eduWordRetired: "📚 教育模式现在对所有人开放，就在主屏幕上。",
@@ -1265,6 +1298,7 @@ Inspired by Flappy Bird`,
     dailyTitle: '{daily} 每日一拉',
     dailyToday: '今日赛道：{level}',
     dailyBody: '每天只有一次机会。\n今天所有人飞同一条赛道，\n而且没有尽头：能飞多远就飞多远。\n没有玉米粒，也没有商店。\n在{daily}排行榜上比分数；\n每天UTC午夜换一条新赛道。',
+    dailyBodyDec: '十二月不限次数，只记当天最好成绩。\n今天所有人飞同一条赛道，\n而且没有尽头：能飞多远就飞多远。\n没有玉米粒，也没有商店。\n在{daily}排行榜上比分数；\n每天UTC午夜换一条新赛道。',
     dailyCreateUser: '创建用户',
     dailyPlay: '开始',
     dailyChecking: '检查中…',
@@ -1281,7 +1315,31 @@ Inspired by Flappy Bird`,
     dailyRankRejected: '未保存',
     dailyRankUnavailable: '暂无排名',
     dailyNotCounted: '一根管道都没穿过：本局不计入\n今天还可以重新开始',
+    dailyTodaysBest: '今日最佳：{n}',
+    dailyNewBest: '今日新纪录！',
+    adventFoundToday: '找到了今天的礼物！',
+    stormAhead: '前方有暴风雪！',
+    adventFoundLate: '找到了往日的拼图！',
+    adventFoundLeft: '\u{1F9E9} 已找到 {n}/{total} \u00b7 还剩 {left}',
+    adventTodayFound: '今天的拼图：已找到',
+    adventTodayMissing: '今天的拼图：还没找到',
+    adventTreeOnTrack: '\u{1F384} 进度正好',
+    adventTreePlainOpen: '\u{1F332} 12月31日前',
+    adventTreeDecorated: '\u{1F384}',
+    adventTreePlain: '\u{1F332}',
+    adventNoGift: '这局没有礼物，再来一局',
+    adventCount: '\u{1F9E9} {n}/{total}',
+    adventBookCount: '已找到 {n}/{total}',
+    adventOnTrack: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384} 进度正好',
+    adventPlainOpen: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332} 12月31日前',
+    adventDecorated: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384}',
+    adventPlain: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332}',
     dailyBoardTitle: '每日一拉',
+    adventBoardTitle: '圣诞拼图',
+    adventBoardHeader: '{year}年12月 \u00b7 已找到的拼图',
+    adventBoardYou: '你：第{rank}名 / 共{total}人 \u00b7 {pieces}',
+    adventBoardEmpty: '还没有人找到拼图',
+    adventBoardJoin: '在12月的{daily}每日一拉里找到\u{1F381}即可上榜',
     dailyBoardEmpty: '今天还没有人玩每日一拉',
     dailyBoardJoin: '在首页点{daily}玩今天的每日一拉',
     dailyBoardYou: '你：第{rank}名 / 共{total}人 · {score}',
@@ -1612,6 +1670,10 @@ Inspired by Flappy Bird`,
     achDescCeiling: '撞到顶部 {n} 次',
     achDescFourOfAKind: '连续 4 个神秘盒子开出同样的奖励',
     achDescBoxesBought: '在商店买 {n} 个神秘盒子',
+    achAdventTree: '2026 圣诞树',
+    achDescAdventTree: '2026年12月24日前找齐全部24份降临礼物（补领也算）',
+    achAdventPine: '2026 常青树',
+    achDescAdventPine: '2026年12月31日前找齐全部24份降临礼物',
     achEduNerd: '学霸警报',
     achEduPerfect: '满分',
     achEduA: '优等生',
@@ -1678,7 +1740,7 @@ export function t(locale, key) {
  * `education: false` leaves out the 📚 row (the off switch; HowTo passes Play.educationAvailable(): plan 28, AUD-044).
  * `daily` is the Daily Dump's glyph for the {daily} placeholders (the 🌞, or December's 🎅: plan 17, 1.7).
  */
-export function howToItems(locale, { education = true, daily = '\u{1F31E}' } = {}) {
+export function howToItems(locale, { education = true, daily = '\u{1F31E}', dailyReplay = false } = {}) {
   const rows = [
     { key: 'pipe', name: t(locale, 'itemPipeName'), detail: t(locale, 'itemPipeDetail') },
     { key: 'fiber', name: t(locale, 'itemFiberName'), detail: t(locale, 'itemFiberDetail') },
@@ -1693,7 +1755,7 @@ export function howToItems(locale, { education = true, daily = '\u{1F31E}' } = {
     { key: 'toilet', name: t(locale, 'itemToiletName'), detail: t(locale, 'itemToiletDetail') },
     { key: 'twoPlayer', name: t(locale, 'itemTwoPlayerName'), detail: t(locale, 'itemTwoPlayerDetail') },
     { key: 'tournament', name: t(locale, 'itemTournamentName'), detail: t(locale, 'itemTournamentDetail') },
-    { key: 'daily', name: t(locale, 'itemDailyName'), detail: fillDaily(t(locale, 'itemDailyDetail'), daily) },
+    { key: 'daily', name: t(locale, 'itemDailyName'), detail: fillDaily(t(locale, dailyReplay ? 'itemDailyDetailDec' : 'itemDailyDetail'), daily) }, // dailyReplay: December's (plan 17, 2.3)
     { key: 'education', name: t(locale, 'itemEducationName'), detail: t(locale, 'itemEducationDetail') },
     { key: 'superQ', name: t(locale, 'itemSuperQName'), detail: t(locale, 'itemSuperQDetail') }, // plan 34: an education row, left out with it
     { key: 'info', name: t(locale, 'itemInfoName'), detail: t(locale, 'itemInfoDetail') },
@@ -1874,6 +1936,32 @@ export function dailyDayText(locale, day) {
 /** The 🌞 board's footer for the player's own row: "You: #3 of 12 · 87". */
 export function dailyYouText(locale, { rank, total, score }) {
   return t(locale, 'dailyBoardYou').replace('{rank}', String(rank)).replace('{total}', String(total)).replace('{score}', String(score));
+}
+
+/**
+ * The Advent line (plan 17, 2.6): "🧩 3/24 · 🎄 on track" and its kin, from adventStatus' { n, tree } and the
+ * piece count (TUNING.advent.piece.count).
+ */
+export function adventLineText(locale, { n, tree }, total) {
+  const key = { onTrack: 'adventOnTrack', plainOpen: 'adventPlainOpen', decorated: 'adventDecorated', plain: 'adventPlain' }[tree] ?? 'adventCount';
+  return t(locale, key).replace('{n}', String(n)).replace('{total}', String(total));
+}
+
+/** The game-over line for a December Daily's piece: today's, a previous day's (Michael, 26 Nov), or none this run. */
+export function adventFoundText(locale, { found, late }) {
+  if (!found) return t(locale, 'adventNoGift');
+  return late ? t(locale, 'adventFoundLate') : t(locale, 'adventFoundToday');
+}
+
+/**
+ * The Daily window's two December lines (S14, Michael 26 Nov): ["🧩 5 of 24 found · 19 left", "Today's piece: found ·
+ * 🎄 on track"]; the second drops today's piece on 25–31 Dec (none comes out) and the tree when there is none to show.
+ */
+export function adventDailyLines(locale, { status, today }, total) {
+  const first = t(locale, 'adventFoundLeft').replace('{n}', String(status.n)).replace('{total}', String(total)).replace('{left}', String(total - status.n));
+  const tree = { onTrack: 'adventTreeOnTrack', plainOpen: 'adventTreePlainOpen', decorated: 'adventTreeDecorated', plain: 'adventTreePlain' }[status.tree];
+  const parts = [today === 'found' ? t(locale, 'adventTodayFound') : today === 'missing' ? t(locale, 'adventTodayMissing') : null, tree ? t(locale, tree) : null].filter(Boolean);
+  return [first, parts.join(' \u00b7 ')];
 }
 
 /** The 📚 board's footer for the player's own row: "You: #3 of 12 · 92.5 %". */

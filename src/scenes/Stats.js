@@ -175,7 +175,7 @@ export class Stats extends Phaser.Scene {
       .filter((b) => b.entry)
       .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
     const day = utcDayKey();
-    const locked = ACHIEVEMENTS.filter((e) => !(e.id in unlocked) && (!e.from || openQuests(day).includes(e)));
+    const locked = ACHIEVEMENTS.filter((e) => !(e.id in unlocked) && !(e.hiddenBy && e.hiddenBy in unlocked) && (!e.from || openQuests(day).includes(e))); // hiddenBy: one Advent tree a player (plan 17, 2.6b)
     return {
       state: 'ok',
       own: true,
@@ -259,7 +259,7 @@ export class Stats extends Phaser.Scene {
       tournament: server.tournament,
       counters: server.counters,
       earned: server.achievements.map((a) => ({ entry: achievementById(a.id), at: a.at })).filter((b) => b.entry),
-      locked: openQuests(utcDayKey()).filter((e) => !earnedIds.has(e.id)),
+      locked: openQuests(utcDayKey()).filter((e) => !earnedIds.has(e.id) && !earnedIds.has(e.hiddenBy)),
       tags: server.tags ?? [],
       // Their day streaks, as the server counts them (plan 34, 34.14); none from a server before 34.14.
       streaks: server.streaks ?? null,

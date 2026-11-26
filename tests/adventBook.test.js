@@ -1,0 +1,164 @@
+// Plan 17, Stage 2c (2.15): the Advent book. Its layout (Gate A sheet 5), the pieces it draws, the season it shows
+// and how it opens and closes (chromeIntent, the overlay stack).
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
+import { adventBookLayout, adventBookPieces, adventBookSeason, chromeIntent } from '../src/logic.js';
+import { OVERLAY_SCENES } from '../src/ui/overlayStack.js';
+
+const root = new URL('..', import.meta.url).pathname;
+
+test('adventBookLayout: Gate A sheet 5\'s numbers on the 720 x 1280 field', () => {
+  const L = adventBookLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  assert.deepEqual(L.panel, { x: 360, y: 640, width: 696, height: 1112 });
+  assert.equal(L.slot, 166, 'half the 332 px cell');
+  assert.deepEqual(L.count, { x: 360, y: 132 });
+  assert.deepEqual(L.close, { x: 664, y: 128 });
+  assert.equal(L.slots.length, 24);
+  assert.deepEqual(L.slots[0], { x: 28, y: 180 });
+  assert.deepEqual(L.slots[5], { x: 194, y: 346 }, 'cell 5: column 1, row 1');
+  assert.deepEqual(L.slots[23], { x: 526, y: 1010 });
+  assert.deepEqual(L.centre, { x: 360, y: 678 });
+  // The grid sits inside the panel's inner edge (the 8 px stroke straddles it), with room at every side.
+  const inner = { left: 12 + 4, right: 708 - 4, top: 84 + 4, bottom: 1196 - 4 };
+  assert.ok(L.slots[0].x > inner.left && L.slots[23].x + L.slot < inner.right && L.slots[23].y + L.slot < inner.bottom);
+  assert.ok(L.count.y + T.advent.book.countPx / 2 < L.slots[0].y, 'the count line clears the grid');
+});
+
+test('adventBookLayout keeps the book centred on a wide field', () => {
+  const L = adventBookLayout(1000, GAME_HEIGHT, T);
+  assert.equal(L.panel.x, 500);
+  assert.equal(L.slots[0].x, 500 - 2 * 166);
+});
+
+test('adventBookPieces: piece k in cell order[k − 1], on-the-day marked, other seasons and junk ignored', () => {
+  const found = { 1: '2026-12-01', 3: '2026-12-05', 14: '2026-12-14', 2: '2025-12-02', 30: '2026-12-30', 5: 'soon' };
+  assert.deepEqual(adventBookPieces(found, 2026, T), [
+    { piece: 1, cell: 7, onDay: true },
+    { piece: 3, cell: 4, onDay: false },
+    { piece: 14, cell: 13, onDay: true },
+  ]);
+  assert.deepEqual(adventBookPieces({}, 2026, T), []);
+  assert.deepEqual(adventBookPieces(null, 2026, T), []);
+});
+
+test('adventBookSeason: December shows its own season; after it, last December while it holds a piece', () => {
+  const none = () => false;
+  const some = (y) => y === 2026;
+  assert.equal(adventBookSeason('2026-12-01', T, none), 2026);
+  assert.equal(adventBookSeason('2026-12-31', T, none), 2026);
+  assert.equal(adventBookSeason('2027-01-03', T, some), 2026, 'read-only for owners after the season');
+  assert.equal(adventBookSeason('2027-11-30', T, some), 2026);
+  assert.equal(adventBookSeason('2027-01-03', T, none), null, 'nothing owned: no book');
+  assert.equal(adventBookSeason('2026-11-30', T, some), null, 'November 2026 has no last season');
+});
+
+test('chromeIntent: the book opens from the home screen and over the Daily window, and closes back to what is under it', () => {
+  assert.deepEqual(chromeIntent({ state: 'ready', input: 'advent' }), { do: 'openAdvent', pause: false });
+  assert.deepEqual(chromeIntent({ state: 'playing', input: 'advent' }), { do: 'ignore' }, 'never mid-run');
+  assert.deepEqual(chromeIntent({ state: 'paused', input: 'advent' }), { do: 'ignore' });
+  assert.deepEqual(chromeIntent({ state: 'ready', overlay: 'daily', input: 'advent' }), { do: 'openAdvent', pause: false });
+  assert.deepEqual(chromeIntent({ state: 'ready', overlay: 'leaderboard', input: 'advent' }), { do: 'ignore' });
+  assert.deepEqual(chromeIntent({ state: 'ready', overlay: 'advent', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
+  assert.deepEqual(chromeIntent({ state: 'ready', overlay: 'advent', input: 'close', stackedUnder: true }), { do: 'closeTop', armResumeLockout: false }, 'back to the Daily window');
+  assert.deepEqual(chromeIntent({ state: 'ready', overlay: 'advent', input: 'changelog' }), { do: 'openChangelog', pause: false });
+});
+
+test('the book is an overlay: on the stack, in main.js, and in the smoke\'s overlay list', () => {
+  assert.equal(OVERLAY_SCENES.advent, 'Advent');
+  assert.match(readFileSync(`${root}src/main.js`, 'utf8'), /scene: \[[^\]]*\bAdvent\b/);
+  assert.match(readFileSync(`${root}tools/headless_check.mjs`, 'utf8'), /advent: 'Advent'/);
+});
+
+test('the book loads its sheet in its own preload, from the constant (the assets test checks the call)', () => {
+  const src = readFileSync(`${root}src/scenes/Advent.js`, 'utf8');
+  assert.match(src, /preload\(\)\s*\{[\s\S]*?this\.load\.spritesheet\('advent-puzzle', 'assets\/advent\/advent-puzzle\.png' \+ V/);
+  assert.doesNotMatch(readFileSync(`${root}src/scenes/Boot.js`, 'utf8'), /advent-puzzle/, 'never in Boot');
+});
+
+test('the Daily window\'s 🧩 line and the save panel open the book', () => {
+  assert.match(readFileSync(`${root}src/scenes/Daily.js`, 'utf8'), /handleChrome\('advent'\)/);
+  const panel = readFileSync(`${root}src/ui/savePanel.js`, 'utf8');
+  assert.match(panel, /id: 'save-advent-btn'/);
+  assert.match(panel, /openAdvent\?\.\(\{ onClose: \(\) => play\.openSavePanel\?\.\(\) \}\)/);
+});
+
+test('the found-day store\'s seen flag (S14): unseen pieces by day found, markSeen keeps only found pieces, junk reads as unseen', async () => {
+  const { createAdventStore } = await import('../src/leaderboard.js');
+  const { fakeStorage } = await import('./support/scenes.js');
+  const storage = fakeStorage();
+  const s = createAdventStore(storage, 2026);
+  assert.deepEqual(s.unseen(), []);
+  s.add(5, '2026-12-05');
+  s.add(2, '2026-12-05');
+  s.add(3, '2026-12-03');
+  assert.deepEqual(s.unseen(), [3, 2, 5], 'by day found, then piece');
+  s.markSeen([2, 9]);
+  assert.deepEqual(s.unseen(), [3, 5], 'a piece not found is never marked');
+  s.merge([{ piece: 7, day: '2026-12-07' }]);
+  assert.deepEqual(s.unseen(), [3, 5, 7], 'a piece from another device arrives unseen');
+  s.markSeen([3, 5, 7]);
+  assert.deepEqual(s.unseen(), []);
+  assert.equal(s.count(), 4, 'seen changes no count');
+  assert.deepEqual(createAdventStore(storage, 2026).unseen(), [], 'kept in storage');
+  storage.setItem(`flappyPoop.advent.2026`, JSON.stringify({ found: { 1: '2026-12-01' }, seen: 'all' }));
+  assert.deepEqual(s.unseen(), [1]);
+  const sandbox = createAdventStore(null, 2026);
+  sandbox.add(1, '2026-12-01');
+  sandbox.markSeen([1]);
+  assert.deepEqual(sandbox.unseen(), [], 'the practice sandbox keeps its own');
+});
+
+// 2.16: the 🧩 board (advent_board) and the trees' badge in the save panel.
+const BCONFIG = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
+function boardFetch({ status = 200, body = '' } = {}) {
+  const calls = [];
+  const fetch = async (url, init) => {
+    calls.push({ url, body: init?.body === undefined ? undefined : JSON.parse(init.body) });
+    const text = typeof body === 'string' ? body : JSON.stringify(body);
+    return { ok: status >= 200 && status < 300, status, text: async () => text };
+  };
+  fetch.calls = calls;
+  return fetch;
+}
+
+test('fetchAdventBoard: advent_board\'s rows in rank order (pieces, on-day count, the tree, me, total), or null on junk / failure', async () => {
+  const { fetchAdventBoard } = await import('../src/leaderboard.js');
+  const PID = 'PPPPPPPPPPPPPPPPPPPPPP';
+  const row = (rank, over = {}) => ({ rank, name: `N${rank}`, pieces: 25 - rank, on_day: 20 - rank, award: null, me: false, total: 7, ...over });
+  const fetch = boardFetch({ body: [row(2, { award: 'plain' }), row(1, { award: 'decorated' }), row(7, { me: true })] });
+  const rows = await fetchAdventBoard(PID, 2026, { fetch, config: BCONFIG });
+  assert.deepEqual(rows.map((r) => [r.rank, r.pieces, r.onDay, r.award, r.me, r.total]), [[1, 24, 19, 'decorated', false, 7], [2, 23, 18, 'plain', false, 7], [7, 18, 13, null, true, 7]]);
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/advent_board');
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: PID, p_season: 2026, p_limit: BCONFIG.limit });
+  const paged = boardFetch({ body: [] });
+  assert.deepEqual(await fetchAdventBoard('nope', 'x', { fetch: paged, config: BCONFIG, offset: 10 }), []);
+  assert.deepEqual(paged.calls[0].body, { p_player_id: null, p_season: null, p_limit: BCONFIG.limit, p_offset: 10 }, 'a bad id or season is sent as null');
+  for (const bad of [{ name: '' }, { pieces: 30 }, { on_day: -1 }, { award: 'gold' }, { rank: 0 }]) {
+    assert.equal(await fetchAdventBoard(PID, 2026, { fetch: boardFetch({ body: [row(1, bad)] }), config: BCONFIG }), null, JSON.stringify(bad));
+  }
+  assert.equal(await fetchAdventBoard(PID, 2026, { fetch: boardFetch({ status: 500, body: 'x' }), config: BCONFIG }), null);
+});
+
+test('the board\'s 🧩 tab (2.16): fifth, after 📚, while the book has a season; its title, glyph and rows', () => {
+  const src = readFileSync(`${root}src/scenes/Leaderboard.js`, 'utf8');
+  assert.match(src, /advent: '\\u\{1F9E9\}'/, 'the 🧩 glyph');
+  assert.match(src, /advent: 'adventBoardTitle'/);
+  assert.match(src, /play\?\.adventBook\?\.\(\)/, 'shown while the book has a season');
+  assert.match(src, /fetchAdventBoard\(/);
+  assert.match(src, /showAdvent\(/);
+});
+
+test('adventTreeGlyph: 🎄 for the decorated tree, 🌲 for the plain one, nothing else', async () => {
+  const { adventTreeGlyph } = await import('../src/logic.js');
+  assert.equal(adventTreeGlyph('decorated'), '\u{1F384}');
+  assert.equal(adventTreeGlyph('plain'), '\u{1F332}');
+  assert.equal(adventTreeGlyph(null), '');
+  assert.equal(adventTreeGlyph('gold'), '');
+});
+
+test('the save panel\'s 🧩 Advent button wears the tree once earned (2.16)', () => {
+  const panel = readFileSync(`${root}src/ui/savePanel.js`, 'utf8');
+  assert.match(panel, /adventTreeGlyph\(/);
+});

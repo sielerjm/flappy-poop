@@ -40,8 +40,35 @@ test('every this.load.image() / load.spritesheet() in src/ points at an existing
   }
 });
 
+// Plan 17, 2.13: grid sheets (several rows of square frames) take their frame size and grid from a TUNING
+// constant, not literals, so the strip rule below skips them and this table checks them. `pending` names a sheet
+// whose loader is not built yet (with the step that builds it); a pending entry whose loader exists fails, so the
+// entry is dropped when the loader lands (the orphans test's allowlist rule).
+const gridSheets = {
+  'advent-puzzle': { path: 'assets/advent/advent-puzzle.png', grid: TUNING.advent.puzzle, knob: 'puzzle.cellPx' }, // the Advent book's preload (plan 17, 2.15)
+};
+
+test('every grid sheet is cols x rows frames of its constant, loaded with that constant (plan 17, 2.13)', () => {
+  for (const [key, g] of Object.entries(gridSheets)) {
+    const { cols, rows, cellPx } = g.grid;
+    assert.ok(cols > 0 && rows > 0 && cellPx > 0, `${key}: cols, rows, cellPx`);
+    assert.ok(cols * cellPx <= 4096 && rows * cellPx <= 4096, `${key}: each side at most 4096 px`);
+    const load = loads.find((l) => l.key === key);
+    if (g.pending) assert.equal(load, undefined, `${key}: its loader is in (${load?.file}); drop its \`pending\` entry`);
+    else {
+      assert.equal(load?.type, 'spritesheet', `${key}: loaded as a spritesheet`);
+      assert.equal(load.path, g.path, `${key}: loaded from ${g.path}`);
+      const call = readFileSync(load.file, 'utf8').match(new RegExp(`load\\.spritesheet\\(\\s*['"]${key}['"][^)]*\\)`))[0];
+      for (const side of ['frameWidth', 'frameHeight']) assert.match(call, new RegExp(`${side}:\\s*[\\w.]*${g.knob.replace('.', '\\.')}`), `${key}: ${side} from ${g.knob}`);
+    }
+    const file = join(root, g.path);
+    if (!existsSync(file)) continue; // the placeholder or Michael's cut arrives with its loader
+    assert.deepEqual(pngSize(file), { w: cols * cellPx, h: rows * cellPx }, `${g.path}: ${cols} x ${rows} frames of ${cellPx} px`);
+  }
+});
+
 test('every spritesheet is a whole number of its frames', () => {
-  const sheets = loads.filter((l) => l.type === 'spritesheet');
+  const sheets = loads.filter((l) => l.type === 'spritesheet' && !(l.key in gridSheets));
   assert.ok(sheets.length > 0, 'no load.spritesheet calls found in src/');
   for (const l of sheets) {
     assert.ok(l.frameWidth > 0 && l.frameHeight > 0, `${l.file}: ${l.key} needs literal frameWidth / frameHeight`);
@@ -93,6 +120,7 @@ const adventSquares = {
   'poop-speech-santa.png': 510,
   'bacteria-santa.png': 196, // built at 1.11 (plan 17)
   'bean-holly.png': 346, // the bean with holly: the bean at the stock size, the canvas grown for the leaves
+  'advent.png': 192, // the Advent piece (plan 17, 2.6)
 };
 
 test('the assets/advent/ art named in the size table has the listed square (plan 17, 1.3)', () => {

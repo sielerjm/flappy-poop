@@ -6,7 +6,7 @@ import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 import { createJsonStore } from './store.js';
 import { TUNING, LEADERBOARD } from './config.js';
 
-export const VERSION = '0.32.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
+export const VERSION = '0.35.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 /** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
 export function versionText(locale, version = VERSION) {
   return t(locale, 'versionLine').replace('{version}', version);
@@ -1240,7 +1240,7 @@ export function mixSeed(seed, n, salt = 0) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14, reward: 15, superQ: 16 };
+const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14, reward: 15, superQ: 16, storm: 17 };
 
 /**
  * The run's course: the pair the first mystery box rides after, and per pair
@@ -1308,6 +1308,13 @@ export function createCourse(seed, t, { shared = false } = {}) {
      */
     coin(n) {
       return createRng(mixSeed(seed, n, COURSE_SALT.coin))() < t.coin.chance;
+    },
+    /**
+     * Pair `n`'s storm draw in [0, 1) (plan 17, 2.7: stormStartsHere compares it with advent.storm.chance), from its
+     * own stream, so no other roll moves. A shared course only (the Daily Dump's); null on a single run's.
+     */
+    storm(n) {
+      return shared ? createRng(mixSeed(seed, n, COURSE_SALT.storm))() : null;
     },
     kernelPair(level) {
       const lv = Math.max(1, Math.floor(level) || 1);
@@ -1876,7 +1883,10 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   // The Bowelidays image (plan 17, 1.14; D16 (b)): above the title, under the top row's halos. Drawn only.
   const bw = width * t.advent.bowelidays.widthFrac;
   const bowelidays = { id: 'bowelidays', x: cx, y: t.advent.bowelidays.y, width: bw, height: bw * t.advent.bowelidays.aspect };
-  return { title, poop, toilet, howto, daily, profile, countdown, bowelidays, ...switches };
+  // The Advent button (plan 17, 2.15a; S14, Gate A sheet 5): the same round button in the top-left corner, on the ? row,
+  // mirroring the ? (its halo inside the field), with "N/24" on its lower right. It replaced 2.6's chip under the 🎅.
+  const advent = { id: 'advent', x: x0 + 16 + haloR, y: howto.y, width: boxH, height: boxH, round: true };
+  return { title, poop, toilet, howto, daily, profile, countdown, bowelidays, advent, ...switches };
 }
 
 function inBox(x, y, box) {
@@ -2029,13 +2039,14 @@ export function shareCardLayout(t) {
 
 /**
  * Which ready-screen box contains (x, y): 'toilet' | 'versus' | 'educationInfo' | 'education' |
- * 'howto' | 'daily' | 'profile' | null (null = start the run). A switch not offered has no box, so it is never hit. The profile (user) button is always
+ * 'howto' | 'daily' | 'advent' | 'profile' | null (null = start the run; Play starts it too on 'advent' while the
+ * Advent button is hidden: off season with no piece owned). A switch not offered has no box, so it is never hit. The profile (user) button is always
  * there: it reads "Load user" until a name is set; either way it opens the save panel. The 📚
  * glyph's box (educationInfo) lies inside the 📚 switch's, so it is looked at first.
  */
 export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.versus, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.profile]) {
+  for (const box of [layout.toilet, layout.versus, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.advent, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;
@@ -2092,11 +2103,11 @@ export function chromeShown({ state, launching = false, quizOpen = false, shopOp
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'respawn'|'dead'} state ('respawn': a match half between a crash and its restart; pauses like 'playing', ignores taps)
- * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'|'stats'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'|'stats'|'advent'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
  * @param {boolean} stackedUnder true when Feedback, What's new or a profile sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'shop'|'quiz'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break; 'quiz': the 📚 pill in an education run's level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'advent'|'shop'|'quiz'|'tap'|'esc'|'close'} input ('advent': the Advent book, ready screen or over the 🌞 popup; 'shop': the 💰 button in a level break; 'quiz': the 📚 pill in an education run's level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @param {boolean} shop true while this half's level-break shop panel is open
  * @param {boolean} breaking true while this half is in its own level break (the only place the shop opens)
@@ -2131,6 +2142,9 @@ export function chromeIntent({
       if (overlay === 'stats') {
         return { do: 'closeTop', armResumeLockout: !stackedUnder }; // back to the board or the 🌞 popup underneath
       }
+      if (overlay === 'advent') {
+        return { do: 'closeTop', armResumeLockout: !stackedUnder }; // back to the 🌞 popup when it opened from its 🧩 line
+      }
       return { do: 'closeTop', armResumeLockout: !(overlay === 'about' && stackedSettings) };
     }
     if (input === 'feedback') return { do: 'openFeedback', pause: false };
@@ -2138,6 +2152,8 @@ export function chromeIntent({
     if (input === 'howto' && overlay === 'about') return { do: 'openHowTo', pause: false };
     // A profile (plan 08) opens over the board (a tapped name) or the 🌞 popup (the save panel over it).
     if (input === 'stats' && (overlay === 'leaderboard' || overlay === 'daily')) return { do: 'openStats', pause: false };
+    // The Advent book (plan 17, 2.15) opens over the 🌞 popup from its 🧩 line.
+    if (input === 'advent' && overlay === 'daily') return { do: 'openAdvent', pause: false };
     // A version line: What's new opens over any overlay (its own version links restart it instead).
     if (input === 'changelog' && overlay !== 'changelog') return { do: 'openChangelog', pause: false };
     return { do: 'ignore' };
@@ -2168,6 +2184,8 @@ export function chromeIntent({
   if (input === 'howto') return { do: 'openHowTo', pause: live };
   // The 🌞 popup starts a run, so it opens from the ready screen only.
   if (input === 'daily') return state === 'ready' ? { do: 'openDaily', pause: false } : { do: 'ignore' };
+  // The Advent book (plan 17, 2.15): from the home screen's Advent button (or the save panel), never mid-run.
+  if (input === 'advent') return state === 'ready' ? { do: 'openAdvent', pause: false } : { do: 'ignore' };
   if (input === 'changelog') return { do: 'openChangelog', pause: live };
   if (input === 'lang') return { do: 'openLanguage', pause: live };
   if (input === 'feedback') return { do: 'openFeedback', pause: live };
@@ -2436,6 +2454,218 @@ export function twinKey(stock, skin, fartFrame = 0, has = () => true) {
   const frames = skin.fartFrames;
   const twin = stock === 'poop-fart' && frames.length ? frames[fartFrame % frames.length] : skin.twins[stock];
   return twin && has(twin) ? twin : stock;
+}
+
+// Advent pieces (plan 17, 2.6). `found` is the found-day store's map { piece: 'YYYY-MM-DD' } (createAdventStore).
+
+/** The highest piece out on `day` (piece k on k Dec): 0 off season, else the date, at most advent.piece.count. */
+export function adventReleased(day, t) {
+  if (!adventSeason(day, t)) return 0;
+  return Math.min(Number(day.slice(8, 10)), t.advent.piece.count);
+}
+
+/** The pieces out on `day` that `found` lacks, in order (the backlog a run's piece is rolled from). */
+export function adventBacklog(found, day, t) {
+  const out = [];
+  for (let k = 1; k <= adventReleased(day, t); k += 1) if (!found?.[k]) out.push(k);
+  return out;
+}
+
+/**
+ * A run's piece from `backlog`, drawn with `rng` (per attempt, never the shared course): the day's own piece
+ * (piece k on k Dec) weighs advent.piece.todayWeight, every other piece 1. Null for an empty backlog.
+ */
+export function rollAdventTarget(backlog, day, rng, t) {
+  if (!backlog?.length) return null;
+  const today = Number(String(day).slice(8, 10));
+  const weights = backlog.map((k) => (k === today ? t.advent.piece.todayWeight : 1));
+  let r = rng() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < backlog.length; i += 1) {
+    r -= weights[i];
+    if (r < 0) return backlog[i];
+  }
+  return backlog[backlog.length - 1];
+}
+
+/**
+ * The pair, counted from the run's first, from which a run's piece may show: in [minPair, top], where top is
+ * maxPair less pityStep for each of the day's runs that ended without the piece, never under floorPair.
+ */
+export function adventSpawnPair(misses, rng, t) {
+  const p = t.advent.piece;
+  const hi = Math.max(p.floorPair, p.maxPair - Math.max(0, misses) * p.pityStep);
+  const lo = Math.min(p.minPair, hi);
+  return lo + Math.floor(rng() * (hi - lo + 1));
+}
+
+/**
+ * Does the run's piece `advent` ({ startN, pair, spawned, found }) show at pair `n`? Once a run, from its
+ * pair on, only in a band slot nothing else took (`slotTaken`), and only once its texture has loaded (`ready`).
+ */
+export function adventSpawnHere(advent, n, slotTaken, ready) {
+  return Boolean(advent && !advent.spawned && !advent.found && ready && !slotTaken && n - advent.startN >= advent.pair);
+}
+
+// Snow storms (plan 17, 2.7): December Daily runs only. The pairs are the course's (pipesSpawned), so every run of a
+// day meets the same storms; Play walks them in spawn order (stormStartsHere) and keeps the starts.
+
+/** Does pair `n` start a storm? Its course draw under advent.storm.chance, firstPair pairs or more into the run (from `startN`), pairs + gapPairs or more after the last start. */
+export function stormStartsHere(draw, n, lastStart, startN, t) {
+  const s = t.advent.storm;
+  return typeof draw === 'number' && draw < s.chance && n - startN >= s.firstPair && (lastStart === null || n - lastStart >= s.pairs + s.gapPairs);
+}
+
+/**
+ * The storm at `passed` pairs flown (Play.pipesPassed) for storm `starts`: { phase: 'banner' (one pair before the
+ * storm's first pair: passed = start − 2), 'storm' (while its pairs come: passed in [start − 1, start − 1 + pairs)),
+ * or null, start }.
+ */
+export function stormPhase(passed, starts, t) {
+  const p = t.advent.storm.pairs;
+  for (const n of starts) {
+    if (passed >= n - 1 && passed < n - 1 + p) return { phase: 'storm', start: n };
+    if (passed === n - 2) return { phase: 'banner', start: n };
+  }
+  return { phase: null, start: null };
+}
+
+/**
+ * Is pair `n`'s band slot flown inside a storm? (No Advent piece shows there.) A band item rides half a spacing after
+ * its pair, so pair n's slot is flown at n pairs passed: inside storm s for n in [s − 1, s − 1 + pairs), as stormPhase.
+ */
+export function stormCovers(starts, n, t) {
+  return starts.some((s) => n >= s - 1 && n < s - 1 + t.advent.storm.pairs);
+}
+
+/** The flap's share at storm level 0 (calm) to 1 (full): 1 down to advent.storm.flapMul, linearly. */
+export function stormFlapMul(level, t) {
+  return 1 + (t.advent.storm.flapMul - 1) * level;
+}
+
+/** The scroll's share at storm level 0 to 1: 1 up to advent.storm.scrollMul, linearly. */
+export function stormScrollMul(level, t) {
+  return 1 + (t.advent.storm.scrollMul - 1) * level;
+}
+
+/**
+ * px/s of wind on the snow at storm level 0 to 1, `tSec` into the storm: left to right (positive) at the storm flakes'
+ * mean fall (a 45° slant), times 1 + gust × a wobble of two sines in [−1, 1], so the gusts never turn it back.
+ */
+export function stormWind(level, tSec, t) {
+  if (!level) return 0;
+  const s = t.advent.storm;
+  const mean = ((t.advent.snow.minSpeed + t.advent.snow.maxSpeed) / 2) * s.fallMul;
+  const wobble = s.gustWaves.reduce((sum, w) => sum + w.share * Math.sin((2 * Math.PI * tSec) / w.periodS + w.phase), 0);
+  return level * mean * (1 + s.gust * wobble);
+}
+
+/** px/s of wind on the snow `elapsedMs` into a fart of `durationMs` (null: none): right to left at advent.storm.fartWind, eased in and out over fartRampMs. */
+export function fartWind(elapsedMs, durationMs, t) {
+  if (typeof elapsedMs !== 'number' || !(durationMs > 0) || elapsedMs <= 0 || elapsedMs >= durationMs) return 0;
+  const r = t.advent.storm.fartRampMs;
+  return -t.advent.storm.fartWind * Math.min(1, elapsedMs / r, (durationMs - elapsedMs) / r);
+}
+
+/**
+ * advent.storm.swirls whirl centres in `area` from `rng` (decoration: Math.random in the game), each at least
+ * 2 × swirlR from the others (two that overlap, one turning each way, cancel out: Gate A, 26 Nov), turning
+ * counter-clockwise (dir 1) and clockwise (dir −1) in turn: [{ x, y, R, S, dir }].
+ */
+export function swirlCentres(rng, area, t) {
+  const s = t.advent.storm;
+  const m = s.swirlMargin;
+  const box = { x0: area.x + m.x, x1: area.x + area.width - m.x, y0: area.y + m.top, y1: area.y + area.height - m.bottom };
+  const out = [];
+  for (let tries = 0; out.length < s.swirls && tries < 400; tries += 1) {
+    const c = { x: box.x0 + rng() * (box.x1 - box.x0), y: box.y0 + rng() * (box.y1 - box.y0) };
+    if (out.every((o) => Math.hypot(o.x - c.x, o.y - c.y) >= 2 * s.swirlR) || tries >= 399) out.push({ ...c, R: s.swirlR, S: s.swirlS, dir: out.length % 2 ? -1 : 1 });
+  }
+  return out;
+}
+
+/**
+ * A season's tree from its pieces (S1, Michael 26 Nov; db/schema.sql advent_award's mirror): 'decorated' (🎄) for
+ * all `count` pieces with the last found by Christmas Eve (late finds count), 'plain' (🌲) with the last after,
+ * else null. Only the season's own days count. The 🎄 / 🌲 badges read it (Play.adventTrees, 2.6b).
+ */
+export function adventAward(found, season, t) {
+  const count = t.advent.piece.count;
+  const days = [];
+  for (let k = 1; k <= count; k += 1) if (isDayKey(found?.[k]) && found[k].startsWith(`${season}-`)) days.push(found[k]);
+  if (days.length < count) return null;
+  const eve = `${season}-${String(t.advent.seasonMonth).padStart(2, '0')}-${String(count).padStart(2, '0')}`;
+  return days.sort().at(-1) <= eve ? 'decorated' : 'plain';
+}
+
+/**
+ * The 🧩 line's state on `day`: { n (pieces found), tree }. tree (S1, Michael 26 Nov: 🎄 for all 24 by the end of
+ * 24 Dec, late finds included, else 🌲 for all 24 by 31 Dec): 'decorated' / 'plain' once all are found, by the
+ * last one's day; before that, through 24 Dec, 'onTrack' with nothing left to catch up, else null; 'plainOpen' after.
+ */
+export function adventStatus(found, day, t) {
+  const count = t.advent.piece.count;
+  const days = [];
+  for (let k = 1; k <= count; k += 1) if (isDayKey(found?.[k])) days.push(found[k]);
+  const n = days.length;
+  const eve = `${String(day).slice(0, 4)}-${String(t.advent.seasonMonth).padStart(2, '0')}-${String(count).padStart(2, '0')}`;
+  if (n === count) return { n, tree: adventAward(found, Number(String(day).slice(0, 4)), t) ?? (days.sort().at(-1) <= eve ? 'decorated' : 'plain') };
+  if (!adventSeason(day, t)) return { n, tree: null };
+  if (day <= eve) return { n, tree: adventBacklog(found, day, t).length === 0 ? 'onTrack' : null };
+  return { n, tree: 'plainOpen' };
+}
+
+/** A season's tree as its glyph (2.16: the 🧩 board's rows, the save panel's Advent button): 🎄 decorated, 🌲 plain, else ''. */
+export function adventTreeGlyph(award) {
+  return award === 'decorated' ? '\u{1F384}' : award === 'plain' ? '\u{1F332}' : '';
+}
+
+/**
+ * The Advent book's layout (plan 17, 2.15; Gate A sheet 5) on a `width` x `height` field: the panel centred, the ✕ in its
+ * top-right corner, "N of 24 found" above the grid, and the 24 slots (top-left corners, reading order) of `slot` px
+ * (a cell at spriteDisplayScale) with no gaps, so the full set reads as one picture; `centre` is the grid's.
+ */
+export function adventBookLayout(width, height, t) {
+  const b = t.advent.book;
+  const p = t.advent.puzzle;
+  const cx = width / 2;
+  const cy = height / 2;
+  const slot = p.cellPx * t.spriteDisplayScale;
+  const left = cx - (p.cols * slot) / 2;
+  const top = cy + b.gridDy;
+  const slots = Array.from({ length: p.cols * p.rows }, (_, c) => ({ x: left + slot * (c % p.cols), y: top + slot * Math.floor(c / p.cols) }));
+  return {
+    panel: { x: cx, y: cy, width: b.width, height: b.height },
+    close: { x: cx + b.width / 2 - 44, y: cy - b.height / 2 + 44 },
+    count: { x: cx, y: cy + b.countDy },
+    slot,
+    slots,
+    centre: { x: cx, y: top + (p.rows * slot) / 2 },
+  };
+}
+
+/**
+ * The pieces the book draws for `season` from a found-day record ({ piece: day }): [{ piece, cell (order[piece − 1]),
+ * onDay (found on its own release day) }] by piece. Days of other seasons and junk are left out.
+ */
+export function adventBookPieces(found, season, t) {
+  const out = [];
+  const month = String(t.advent.seasonMonth).padStart(2, '0');
+  for (let k = 1; k <= t.advent.piece.count; k += 1) {
+    const day = found?.[k];
+    if (!isDayKey(day) || !day.startsWith(`${season}-`)) continue;
+    out.push({ piece: k, cell: t.advent.puzzle.order[k - 1], onDay: day === `${season}-${month}-${String(k).padStart(2, '0')}` });
+  }
+  return out;
+}
+
+/**
+ * The season the book shows on `day`: December's own; after it (January to November), last December's while
+ * `hasPieces(year)` says this device holds a piece of it (read-only for owners, 2.16); else null (no book).
+ */
+export function adventBookSeason(day, t, hasPieces) {
+  if (adventSeason(day, t)) return Number(day.slice(0, 4));
+  const last = Number(String(day).slice(0, 4)) - 1;
+  return isDayKey(day) && hasPieces(last) ? last : null;
 }
 
 /**

@@ -63,6 +63,13 @@ export const ACHIEVEMENTS = [
   total('icarus', '☀️', 'achIcarus', 'achDescCeiling', ['ceilingHits'], 100),
   { id: 'four_of_a_kind', kind: 'run', modes: ['single', 'daily'], glyph: '🃏', title: 'achFourOfAKind', desc: 'achDescFourOfAKind', check: (f) => Boolean(f.fourOfAKind) },
   total('lets_go_gambling', '🎰', 'achGambling', 'achDescBoxesBought', ['boxesBought'], 1000),
+  // Christmas 2026 (plan 17, 2.6b; S1, Michael 26 Nov): one tree a player, from the Advent pieces this device holds
+  // (another device's merged in through advent_progress): 🎄 all 24 found by the end of 24 Dec (late finds count),
+  // else 🌲 all 24 by 31 Dec. facts.adventTrees ({ season: 'decorated' | 'plain' | null }, Play.adventTrees). The game
+  // claims them (S11 (a)); achievement_defs closes the claims on 2 Jan. hiddenBy: the Profile stops listing the
+  // other tree as a quest once one is earned.
+  { id: 'advent_tree_2026', kind: 'seasonal', glyph: '🎄', title: 'achAdventTree', desc: 'achDescAdventTree', from: '2026-12-01', to: '2026-12-31', hiddenBy: 'advent_pine_2026', check: (f) => f?.adventTrees?.[2026] === 'decorated' },
+  { id: 'advent_pine_2026', kind: 'seasonal', glyph: '🌲', title: 'achAdventPine', desc: 'achDescAdventPine', from: '2026-12-01', to: '2026-12-31', hiddenBy: 'advent_tree_2026', check: (f) => f?.adventTrees?.[2026] === 'plain' },
 ];
 
 /**

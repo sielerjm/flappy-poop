@@ -85,6 +85,7 @@ export const OVERLAYS = {
   daily: 'Daily',
   stats: 'Stats',
   quiz: 'Quiz',
+  advent: 'Advent',
 };
 
 /** Overlays that open only inside a run (the 📚 quiz: a level break or a crash), so the ready-screen loops skip them; their own sections cover them. */
@@ -144,6 +145,7 @@ export const SECTIONS = [
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
   { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
   { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the hatted dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
+  { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the Advent button's count, the Daily popup's two lines, the day's piece shown, caught, stored and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run that misses its piece and queues nothing better; the book (2.18): the glowing button opens it, the piece flies into its cell, the glow is off after it closes, the Daily window's 🧩 line opens it and closes back, the 🧩 board tab on a stubbed advent_board); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after); test mode on a Pretend 5 Dec (the piece in the sandbox only)" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -3988,7 +3990,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       const own = await evaluate(`(() => { const s = ${ST}; const p = ${P}; return JSON.stringify({ own: s.view.own, fiber: s.view.counters.fiber, want: p.careerStore.totals(p.save?.id ?? null).fiber, detail: s.detail.text, badges: s.badgeItems.length, locked: s.badgeItems.filter((b) => !b.done).length }); })()`).then(JSON.parse);
       const ownTexts = await texts();
       ok((await evaluate(`${ST}.careerItems.map((c) => c.key).join()`)) === 'dethroned,pipes,farts,superFarts,fiber,probiotic,postbiotic,bacteria,bean,mystery,coin,falls,closeCalls,deaths', 'the career grid: 14 counters, 👑 first, ‼️ long falls and 😢 close calls before 💀');
-      ok(own.own && own.fiber === own.want && own.fiber >= 7 && ownTexts.includes(String(own.want)) && own.badges === (await evaluate(`import('./src/achievements.js').then((m) => m.ACHIEVEMENTS.length)`)) && own.locked > 0 && ownTexts.some((x) => /^\d+ \/ 1000$/.test(x)), `the own profile lists every badge (${own.locked} still locked, lifetime ones with their progress) and this device's career (${own.fiber} fiber)`);
+      ok(own.own && own.fiber === own.want && own.fiber >= 7 && ownTexts.includes(String(own.want)) && own.badges === (await evaluate(`Promise.all([import('./src/achievements.js'), import('./src/logic.js')]).then(([m, l]) => m.ACHIEVEMENTS.filter((e) => !e.from || m.openQuests(l.utcDayKey()).includes(e)).length)`)) /* every badge but a quest outside its window (plan 17, 2.6b: the Advent trees list in December only) */ && own.locked > 0 && ownTexts.some((x) => /^\d+ \/ 1000$/.test(x)), `the own profile lists every badge (${own.locked} still locked, lifetime ones with their progress) and this device's career (${own.fiber} fiber)`);
       ok(ownTexts.includes(await t('statsSingle')) && ownTexts.includes(await t('statsCareer')) && (own.detail === (await t('statsTapBadge')) || own.detail === (await t('leaderboardJoin')) || own.detail === (await t('statsOfflineOwn'))), `its sections and the strip under them ("${own.detail}")`);
       ok((await shut()) && (await evaluate(`${P}.state`)) === 'ready', '✕ closes it back to the home screen');
 
@@ -5956,7 +5958,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         };
         const mine = await openProfile();
         const [eduHead, gradeRow, runsRow] = await Promise.all(['statsEducation', 'statsEduGrade', 'statsEduRuns'].map(tx));
-        const careerTotal = await evaluate(`import('./src/achievements.js').then((m) => m.ACHIEVEMENTS.length)`);
+        // Every badge the profile lists today: all but a quest outside its window (plan 17, 2.6b: the Advent trees list in December only).
+        const careerTotal = await evaluate(`Promise.all([import('./src/achievements.js'), import('./src/logic.js')]).then(([m, l]) => m.ACHIEVEMENTS.filter((e) => !e.from || m.openQuests(l.utcDayKey()).includes(e)).length)`);
         ok(!mine.gated && mine.edu?.grade === 100 && mine.edu.runs === 1 && mine.edu.earned.join() === 'edu_drop_out,edu_perfect,edu_grade_a' && mine.texts.includes(eduHead.replace('{n}', '3').replace('{total}', '8')) && mine.texts.includes(gradeRow) && mine.texts.includes('100.0 %') && mine.texts.includes(runsRow), `your own profile ends with "${eduHead.replace('{n}', '3').replace('{total}', '8')}": ${gradeRow} 100.0 %, ${runsRow} 1`);
         ok(mine.cells.length === 8 && mine.cells.filter((c) => c[1]).length === 3 && mine.career === careerTotal && !mine.texts.includes('1 / 10') && mine.texts.includes('0 / 100') && mine.texts.includes('0 / 1000'), `its grid holds the eight education badges, three earned (🤓 is one run since plan 34, with no progress count), with progress for 👼 (0 / 100) and 🐦‍🔥 (0 / 1000); the Achievements grid still holds its ${mine.career}`);
         await evaluate(`(() => { const c = ${ST}.eduBadgeItems.find((b) => b.id === 'edu_nerd_alert'); c.zone.emit('pointerup'); return true; })()`);
@@ -8372,6 +8375,211 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       // Home again on a plain page, for the closing checks.
       await evaluate(`${play}.scene.restart(), true`);
       for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+    });
+
+    await section('advent', async () => {
+      // December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page with the live board blocked:
+      // (1) on a 5 Dec pin, a real (not test-mode) Daily: the home chip ("🧩 0/24", the 🎅 glowing) and the Daily popup's
+      // two lines; the run's piece (the day's own, from pair 3) shows in a band slot, is caught, and lands in the store
+      // and the advent queue with the day's 🌞 post; Over says "Found today's gift!" and "New best today!"; a second,
+      // lower run queues nothing better, misses its piece and says neither; (2) on a 7 Dec pin a Daily meets its storm:
+      // the banner one pair ahead, then the pull (flap 0.92, scroll 1.08) and the storm's 144 flakes over the light 36,
+      // calm again after; (3) test mode on a Pretend 5 Dec: the piece goes to the session's sandbox, nothing is queued
+      // and the real record stays as it was.
+      if (date) {
+        console.log(`note: --date=${date}: the advent section runs on its own pins only; skipped`);
+        return;
+      }
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const ex0 = exceptions.length;
+      const T17 = TT.advent;
+      const until = async (expr, tries = 60, ms = 100) => {
+        for (let i = 0; i < tries; i += 1) {
+          if (await evaluate(expr).catch(() => false)) return true;
+          await sleep(ms);
+        }
+        return false;
+      };
+      const KEYS = ['flappyPoop.advent.2026', 'flappyPoop.adventQueue', 'flappyPoop.daily', 'flappyPoop.dailyQueue', 'flappyPoop.runQueue'];
+      const load = async ({ clear = false } = {}) => {
+        if (clear) await evaluate(`(${JSON.stringify(KEYS)}.forEach((k) => localStorage.removeItem(k)), true)`);
+        await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+        let sp = null;
+        for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+          await sleep(500);
+          sp = await splashNow().catch(() => null);
+        }
+        if (sp?.enabled) {
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(250);
+        await until(`(() => { const p = ${play}; return p.state === 'ready' && !__flappy.registry.get('lazyAudio') && __flappy.textures.exists('advent'); })()`, 100);
+      };
+      const stored = () => evaluate(`JSON.stringify({ advent: JSON.parse(localStorage.getItem('flappyPoop.advent.2026') || 'null'), queue: JSON.parse(localStorage.getItem('flappyPoop.adventQueue') || '[]'), daily: JSON.parse(localStorage.getItem('flappyPoop.dailyQueue') || '[]') })`).then(JSON.parse);
+      const overTexts = () => evaluate(`JSON.stringify(__flappy.scene.isActive('Over') ? __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text' && c.text).map((c) => c.text) : null)`).then(JSON.parse);
+      // A Daily run held mid-field on grace (through the pipes), the poop moved to the piece once it shows.
+      const flyDaily = async ({ rng, until: stop, maxMs = 20000 }) => {
+        await evaluate(`(() => { const p = ${play}; let i = 0; const seq = ${JSON.stringify(rng)}; p.adventRng = () => seq[i++ % seq.length]; return p.startDaily(); })()`);
+        for (let i = 0; i < 60 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        await evaluate(`${play}.graceLeftMs = ${maxMs + 5000}, true`);
+        const t0 = Date.now();
+        let last = null;
+        while (Date.now() - t0 < maxMs) {
+          await sleep(100);
+          last = await evaluate(`(() => { const p = ${play}; const it = p.items.getChildren().find((c) => c.getData('kind') === 'advent'); if (p.poop?.body) { p.poop.y = it && ${stop === 'found'} ? it.y : 640; p.poop.body.setVelocityY(0); } return JSON.stringify({ state: p.state, passed: p.pipesPassed - (p.advent?.startN ?? p.stormRun?.startN ?? 0), advent: p.advent, seen: it ? { key: it.texture.key, scale: it.scaleX, radius: it.getData('radius') } : null, level: p.stormRun?.level ?? 0, starts: p.stormRun?.starts ?? [], startN: p.stormRun?.startN ?? 0, banner: p.stormBanner.visible, flap: p.stormFlap, scroll: p.stormScroll, flakes: p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length, blizzard: Boolean(p.blizzard) }); })()`).then(JSON.parse);
+          if (last.state !== 'playing') break;
+          if (typeof stop === 'function' ? stop(last) : stop === 'found' ? last.advent?.found : false) break;
+        }
+        return last;
+      };
+      const crash = async () => {
+        await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
+        await until(`__flappy.scene.isActive('Over')`, 100);
+        await sleep(900);
+      };
+      // Phaser runs a scene.restart() on its next step, so wait for the restarted scene's 'create' before reading it:
+      // the old scene still reads 'ready', and a run started on it is wiped by the queued restart.
+      const restartPlay = async () => {
+        await evaluate(`(() => { const p = ${play}; globalThis.__adventCreated = false; p.events.once('create', () => { globalThis.__adventCreated = true; }); __flappy.scene.stop('Over'); p.scene.restart(); return true; })()`);
+        await until(`globalThis.__adventCreated === true && ${play}.state === 'ready' && !${play}.launching`, 80);
+      };
+      const homeAgain = restartPlay;
+
+      // --- (1) 5 Dec, a real Daily ---
+      await pinClock('2026-12-05');
+      await load({ clear: true });
+      const home0 = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ day: new Date().toISOString().slice(0, 10), test: p.isTestMode(), chip: p.adventShown ? p.adventCount.text : null, glow: Boolean(p.adventHalo?.visible), halo: Boolean(p.dailyHalo?.visible) }); })()`).then(JSON.parse);
+      ok(home0.day === '2026-12-05' && !home0.test && home0.chip === '0/24' && !home0.glow && home0.halo, `5 Dec home: the Advent button reads the count alone (${home0.chip}), not glowing (${home0.glow}), and the 🎅 glows while a piece is to find (${home0.halo})`);
+      await evaluate(`(${play}.scene.launch('Daily'), true)`);
+      await until(`__flappy.scene.isActive('Daily')`, 40);
+      await sleep(400);
+      const popup = await evaluate(`JSON.stringify(__flappy.scene.getScene('Daily').children.list.filter((c) => c.type === 'Text' && c.text).map((c) => c.text))`).then(JSON.parse);
+      await evaluate(`(__flappy.scene.getScene('Daily').close(), true)`);
+      await until(`!__flappy.scene.isActive('Daily')`, 40);
+      ok(popup.includes('\u{1F9E9} 0 of 24 found · 24 left') && popup.includes("Today's piece: not found yet"), `the Daily popup's two December lines ("${popup.find((x) => x.startsWith('\u{1F9E9}'))}", "${popup.find((x) => x.startsWith("Today's piece"))}")`);
+      const run1 = await flyDaily({ rng: [0.99, 0], until: 'found' });
+      ok(run1.advent?.piece === 5 && run1.advent.pair === T17.piece.minPair && run1.advent.found && run1.passed >= run1.advent.pair - 1, `the day's own piece (5) from pair ${run1.advent?.pair}: shown in a band slot and caught ${run1.passed} pairs in`);
+      const s1 = await stored();
+      ok(JSON.stringify(s1.advent?.found) === JSON.stringify({ 5: '2026-12-05' }) && s1.queue.length === 1 && s1.queue[0].piece === 5 && s1.queue[0].day === '2026-12-05', `the piece in the found-day store and one advent queue entry (${JSON.stringify(s1.queue)})`);
+      await crash();
+      const o1 = await overTexts();
+      const s1b = await stored();
+      ok(Boolean(o1?.includes("Found today's gift!  \u{1F9E9} 1/24")) && o1.includes('New best today!') && s1b.daily.length === 1, `Over: "Found today's gift!  🧩 1/24" and "New best today!"; one 🌞 post queued (score ${s1b.daily[0]?.score})`);
+      await homeAgain();
+      const chip1 = await evaluate(`${play}.adventCount.text + (${play}.adventHalo.visible ? ' glow' : '')`); // the caught piece waits to be shown added: the button glows (S14)
+      // A second, lower run: one pipe, then the crash; its piece from the last pair of the window, never reached.
+      const run2 = await flyDaily({ rng: [0.99, 0.999999], until: (s) => s.passed >= 1, maxMs: 15000 });
+      await crash();
+      const o2 = await overTexts();
+      const s2 = await stored();
+      ok(chip1 === '1/24 glow' && run2.passed >= 1 && !run2.advent?.found && Boolean(o2?.includes('No gift this run, play again  \u{1F9E9} 1/24')) && !o2.includes('New best today!') && s2.daily.length === 1 && s2.daily[0].score === s1b.daily[0].score && s2.queue.length === 1, `a second, lower run: "No gift this run, play again", no new best; the queued best stays ${s2.daily[0]?.score}, nothing more queued`);
+
+      // --- (1b) the Advent book (plan 17, 2.18): the glowing button opens it, the caught piece flies into its slot
+      // (cell order[4]) and the glow is off once it closes; the Daily window's 🧩 line opens it and closing goes back
+      // to the Daily window; the 🧩 board tab reads advent_board (stubbed) with the trees beside the names ---
+      await homeAgain();
+      const B = `__flappy.scene.getScene('Advent')`;
+      const bookNow = () => evaluate(`JSON.stringify((() => { const b = ${B}; const s = JSON.parse(localStorage.getItem('flappyPoop.advent.2026') || 'null'); return { active: __flappy.scene.isActive('Advent'), arrivals: (b.arrivals ?? []).map((p) => p.piece), flight: Boolean(b.flight), locks: b.locks?.size ?? null, count: b.countText?.text ?? null, art: b.children.list.filter((c) => c.texture?.key === 'advent-puzzle').map((c) => c.frame.name), seen: s?.seen ?? null, glow: Boolean(${play}.adventHalo?.visible), chip: ${play}.adventShown ? ${play}.adventCount.text : null }; })())`).then(JSON.parse);
+      // The sounds the book asks Play for (a flight's chimes, a landing's click), whether or not their files have landed.
+      await evaluate(`(() => { const p = ${play}; globalThis.__adSounds = []; const ps = p.playSample.bind(p); p.playSample = (key, ...rest) => (globalThis.__adSounds.push(key), ps(key, ...rest)); return true; })()`);
+      await evaluate(`(${play}.handleChrome('advent'), true)`);
+      await until(`__flappy.scene.isActive('Advent') && __flappy.textures.exists('advent-puzzle')`, 60);
+      await sleep(200);
+      const b0 = await bookNow();
+      const cell5 = T17.puzzle.order[4];
+      await until(`!${B}.flight`, 80);
+      await sleep(300);
+      const b1 = await bookNow();
+      const sounds = await evaluate(`JSON.stringify(globalThis.__adSounds)`).then(JSON.parse);
+      ok(!b0.flight || JSON.stringify(sounds) === '["advent-add","advent-lock"]', `the flight asks for its chimes and the landing for its click (${JSON.stringify(sounds)})`);
+      ok(b0.active && JSON.stringify(b0.arrivals) === '[5]' && b0.locks === 24 && b0.count === '0 of 24 found' && JSON.stringify(b0.seen) === '[5]' && b1.locks === 23 && b1.count === '1 of 24 found' && JSON.stringify(b1.art) === JSON.stringify([cell5]), `the glowing button opens the book: piece 5 arrives${b0.flight ? ' in flight' : ' (reduced motion: no flight)'} into cell ${cell5} (${b0.count} → ${b1.count}, locks ${b0.locks} → ${b1.locks}), marked seen on open (${JSON.stringify(b0.seen)})`);
+      await evaluate(`(${B}.close(), true)`);
+      await until(`!__flappy.scene.isActive('Advent')`, 40);
+      const h1b = await bookNow();
+      ok(h1b.chip === '1/24' && !h1b.glow, `after the book closes the button reads ${h1b.chip} and no longer glows`);
+      await evaluate(`(${play}.scene.launch('Daily'), true)`);
+      await until(`__flappy.scene.isActive('Daily') && Boolean(__flappy.scene.getScene('Daily').adventLine)`, 40);
+      await sleep(300);
+      await evaluate(`(__flappy.scene.getScene('Daily').adventLine.emit('pointerdown'), true)`);
+      await until(`__flappy.scene.isActive('Advent')`, 40);
+      await sleep(200);
+      const b2 = await bookNow();
+      const under = await evaluate(`__flappy.scene.isActive('Daily')`);
+      await evaluate(`(${B}.close(), true)`);
+      await until(`!__flappy.scene.isActive('Advent')`, 40);
+      const back = await evaluate(`JSON.stringify({ daily: __flappy.scene.isActive('Daily') })`).then(JSON.parse);
+      ok(b2.active && under && b2.arrivals.length === 0 && !b2.flight && b2.locks === 23 && JSON.stringify(b2.art) === JSON.stringify([cell5]) && back.daily, `the Daily window's 🧩 line opens the book over it (the piece in place at once, nothing flies) and closing goes back to the Daily window (${JSON.stringify(back)})`);
+      await evaluate(`(__flappy.scene.getScene('Daily').close(), true)`);
+      await until(`!__flappy.scene.isActive('Daily')`, 40);
+      await evaluate(`(() => { globalThis.__fetchAd = globalThis.fetch; globalThis.__adAsks = []; const rows = [{ rank: 1, name: 'ElfOne', pieces: 24, on_day: 20, award: 'decorated', me: false, total: 3 }, { rank: 2, name: 'RudiTwo', pieces: 12, on_day: 9, award: 'plain', me: false, total: 3 }, { rank: 3, name: 'AdventTester', pieces: 1, on_day: 1, award: null, me: true, total: 3 }]; globalThis.fetch = async (url, init) => { const u = String(url); if (u.endsWith('/rpc/advent_board')) { globalThis.__adAsks.push(JSON.parse(init.body)); return new Response(JSON.stringify(rows), { status: 200 }); } return new Response('{"message":"stub"}', { status: 503 }); }; return import('./src/config.js').then((m) => { globalThis.__apiAd = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; __flappy.registry.set('leaderboardTab', 'advent'); ${play}.handleChrome('leaderboard'); return true; }); })()`);
+      const LBA = `__flappy.scene.getScene('Leaderboard')`;
+      await until(`__flappy.scene.isActive('Leaderboard') && ${LBA}.children.list.some((c) => c.type === 'Text' && c.text === 'ElfOne')`, 80);
+      const board = await evaluate(`JSON.stringify((() => { const lb = ${LBA}; const texts = lb.children.list.filter((c) => c.type === 'Text' && c.visible && c.text).map((c) => c.text); return { tab: lb.tab, tabs: lb.tabList, title: lb.title?.text ?? null, footer: lb.footer?.text ?? null, texts, asks: globalThis.__adAsks }; })())`).then(JSON.parse);
+      await evaluate(`(${LBA}.close(), true)`);
+      await until(`!__flappy.scene.isActive('Leaderboard')`, 40);
+      await evaluate(`(globalThis.fetch = globalThis.__fetchAd, __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__apiAd; return true; }))`);
+      const tx = (s) => board.texts.includes(s);
+      ok(board.tab === 'advent' && board.tabs?.at(-1) === 'advent' && board.title === (await evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'adventBoardTitle'))`)) && tx('ElfOne') && tx('RudiTwo') && tx('\u{1F384}') && tx('\u{1F332}') && tx('24') && board.footer === 'You: #3 of 3 · 1' && board.asks.some((b) => b.p_season === 2026), `the 🧩 board tab (last of ${board.tabs?.length}): "${board.title}", 🎄 and 🌲 by the names, footer "${board.footer}", asked advent_board for ${board.asks[0]?.p_season}`);
+      // A book closed mid-flight leaves nothing behind (the 2.19 review): a second unseen piece (3, found 3 Dec) flies,
+      // the book closes during it, and on the next open the piece is in place and a tap inside the panel lands nothing twice.
+      await evaluate(`(() => { const k = 'flappyPoop.advent.2026'; const s = JSON.parse(localStorage.getItem(k)); s.found[3] = '2026-12-03'; localStorage.setItem(k, JSON.stringify(s)); return true; })()`);
+      await evaluate(`(${play}.handleChrome('advent'), true)`);
+      await until(`__flappy.scene.isActive('Advent') && Boolean(${B}.flight)`, 60);
+      await sleep(300);
+      await evaluate(`(${B}.close(), true)`);
+      await until(`!__flappy.scene.isActive('Advent')`, 40);
+      await evaluate(`(${play}.handleChrome('advent'), true)`);
+      await until(`__flappy.scene.isActive('Advent')`, 60);
+      await sleep(300);
+      const b3 = await bookNow();
+      await evaluate(`(() => { const L = ${B}.layout; ${B}.input.emit('pointerdown', { x: L.centre.x, y: L.centre.y }); return true; })()`);
+      await sleep(1500);
+      const b4 = await bookNow();
+      await evaluate(`(${B}.close(), true)`);
+      await until(`!__flappy.scene.isActive('Advent')`, 40);
+      const cell3 = T17.puzzle.order[2];
+      const cells = (b) => JSON.stringify([...b.art].sort((x, y) => x - y));
+      const want2 = JSON.stringify([cell3, cell5].sort((x, y) => x - y));
+      ok(!b3.flight && b3.arrivals.length === 0 && b3.count === '2 of 24 found' && cells(b3) === want2 && b4.count === '2 of 24 found' && cells(b4) === want2 && b4.locks === 22 && !b4.glow, `closed mid-flight, the book reopens with piece 3 in place (${b3.count}, cells ${cells(b3)}); a tap inside lands nothing twice (${b4.count}, cells ${cells(b4)}, locks ${b4.locks})`);
+      await evaluate(`(delete ${play}.playSample, true)`);
+
+      // --- (2) 7 Dec, a storm ---
+      await pinClock('2026-12-07');
+      await load({ clear: true });
+      let banner = null;
+      let full = null;
+      const run3 = await flyDaily({ rng: [0.99, 0.999999], maxMs: 30000, until: (s) => {
+        if (s.banner && !banner) banner = s;
+        if (s.level >= 1 && !full) full = s;
+        return Boolean(full && s.level === 0 && s.passed > s.starts[0] - s.startN - 1 + T17.storm.pairs);
+      } });
+      const first = run3.starts[0] - run3.startN;
+      ok(Boolean(banner) && banner.passed === first - 2, `7 Dec: "Snowstorm ahead!" one pair before the storm (pairs flown ${banner?.passed}, the storm at +${first})`);
+      ok(Boolean(full) && full.flap === T17.storm.flapMul && full.scroll === T17.storm.scrollMul && full.flakes === T17.snow.count + T17.storm.extra, `in the storm: flap ${full?.flap}, scroll ${full?.scroll}, ${full?.flakes} flakes (${T17.snow.count} + ${T17.storm.extra})${full?.blizzard ? ', the blizzard looping' : ''}`);
+      ok(run3.level === 0 && run3.flap === 1 && run3.scroll === 1 && run3.flakes === T17.snow.count, `calm again after it: flap ${run3.flap}, scroll ${run3.scroll}, ${run3.flakes} flakes`);
+      await crash();
+      await homeAgain();
+
+      // --- (3) test mode on a Pretend 5 Dec: the sandbox only ---
+      await pinClock(SMOKE_PIN_DAY);
+      await load();
+      const before = await stored();
+      // The Pretend date re-skins Play and starts the December flight: let it land before the restart (a cut flight
+      // finishes into the next one and Phaser warns that the keys are in use).
+      await evaluate(`(() => { const p = ${play}; p.setTestMode(true); p.setTestSettings({ invincible: true, pretendDay: '2026-12-05' }); return true; })()`);
+      await until(`!__flappy.registry.get('lazyAudio') && __flappy.textures.exists('poop-santa')`, 100);
+      await restartPlay();
+      await until(`__flappy.textures.exists('advent')`, 60);
+      const run4 = await flyDaily({ rng: [0.99, 0], until: 'found' });
+      const sandbox = await evaluate(`JSON.stringify(__flappy.registry.get('adventSandbox')?.get(2026)?.found() ?? null)`).then(JSON.parse);
+      const after = await stored();
+      ok(run4.advent?.found && JSON.stringify(sandbox) === JSON.stringify({ 5: '2026-12-05' }) && JSON.stringify(after) === JSON.stringify(before), `a practice Daily on a Pretend 5 Dec: the piece in the sandbox (${JSON.stringify(sandbox)}), nothing queued, the real record as it was (run ${JSON.stringify({ state: run4.state, passed: run4.passed, advent: run4.advent, seen: Boolean(run4.seen) })})`);
+      await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.setTestMode(false); __flappy.scene.stop('Over'); p.scene.restart(); return true; })()`);
+      await until(`${play}.state === 'ready' && !${play}.launching`, 60);
+      await evaluate(`(${JSON.stringify(KEYS)}.forEach((k) => localStorage.removeItem(k)), true)`);
       ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
     });
 

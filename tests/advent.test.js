@@ -61,13 +61,13 @@ test('settingsLayout in test mode: the Pretend date row sits under Start at, its
   assert.ok(L.test.dayDown.x === L.test.levelDown.x && L.test.dayUp.x === L.test.levelUp.x, 'the arrows line up with Start at');
 });
 
-test('Stage 1 keeps the Daily Dump on the real day: only decorations read dailyDay (Settings\' row, Play\'s 🎅 pick)', () => {
+test('The Daily Dump stays on the real day: dailyDay is read by decorations (Settings\' row, Play\'s 🎅 pick) and the practice Daily (2.2: its start, the popup\'s day; 2.3: the How to play\'s December copy)', () => {
   const dir = new URL('../src/', import.meta.url).pathname;
   const files = [...readdirSync(dir).map((f) => join(dir, f)), ...readdirSync(join(dir, 'scenes')).map((f) => join(dir, 'scenes', f)), ...readdirSync(join(dir, 'ui')).map((f) => join(dir, 'ui', f))].filter((f) => f.endsWith('.js'));
   const readers = files.filter((f) => !f.endsWith('/logic.js') && /\bdailyDay\(|\bdailyNow\(/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(dir.length));
-  assert.deepEqual(readers, ['scenes/Play.js', 'scenes/Settings.js']);
-  // The Daily's own call sites still read the real UTC day (2.2 moves them, Stage 2).
-  for (const f of ['scenes/Daily.js', 'scenes/Leaderboard.js', 'scenes/Stats.js']) assert.match(readFileSync(join(dir, f), 'utf8'), /utcDayKey\(\)/, f);
+  assert.deepEqual(readers, ['scenes/Daily.js', 'scenes/HowTo.js', 'scenes/Play.js', 'scenes/Settings.js']);
+  // What stores, posts or reads the board keeps the real UTC day (2.2; tests/adventDaily.test.js checks Play's).
+  for (const f of ['scenes/Leaderboard.js', 'scenes/Stats.js']) assert.match(readFileSync(join(dir, f), 'utf8'), /utcDayKey\(\)/, f);
   assert.equal(utcDayKey(NOW), '2026-11-25');
 });
 
@@ -82,6 +82,16 @@ test('adventSeason: all of December, by the window edges', () => {
   assert.equal(adventSeason('2027-12-01', T), true, 'every year');
   assert.equal(adventSeason('not a day', T), false);
   assert.equal(adventSeason(undefined, T), false);
+});
+
+test('TUNING.advent.puzzle: 4 x 6 cells, one per piece, and the release order a fixed permutation of the cells (plan 17, 2.13; S7)', () => {
+  const p = T.advent.puzzle;
+  assert.deepEqual({ cols: p.cols, rows: p.rows, cellPx: p.cellPx }, { cols: 4, rows: 6, cellPx: 332 });
+  assert.equal(p.cols * p.rows, T.advent.piece.count, 'one cell per piece');
+  assert.equal(p.cellPx % 2, 0, 'cellPx is even, so a cell draws on whole logical px at half size');
+  assert.deepEqual([...p.order].sort((a, b) => a - b), [...Array(p.cols * p.rows).keys()], 'order is a permutation of the cells');
+  // Pinned: every player's book puts piece k in the same cell, all season (Michael's S7: one plain shuffle).
+  assert.deepEqual(p.order, [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6]);
 });
 
 test('TUNING.advent.santas: the 18 variants, each once, the plain 🎅 first', () => {
@@ -133,7 +143,7 @@ test('supportedSantas drops what a device draws as two glyphs, keeps the plain �
 });
 
 test('{daily}: every string that names the Daily Dump\'s glyph takes it in both locales; the splash keeps its 🌞', () => {
-  const keys = ['itemDailyDetail', 'itemLeaderboardDetail', 'dailyTitle', 'dailyBody', 'dailyNeedName', 'dailyBoardJoin', 'statsDaily'];
+  const keys = ['itemDailyDetail', 'itemDailyDetailDec', 'itemLeaderboardDetail', 'dailyTitle', 'dailyBody', 'dailyBodyDec', 'dailyNeedName', 'dailyBoardJoin', 'adventBoardJoin', 'statsDaily'];
   for (const locale of ['en', 'zh-Hans']) {
     const cat = catalogFor(locale);
     for (const k of keys) {

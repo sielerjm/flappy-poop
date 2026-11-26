@@ -200,7 +200,8 @@ test('finishAbandonedDaily (call G): a record cut off at 0 pipes is released, no
 
 test('Play.startAgain (call H): Over\'s Play again after a Daily Dump that crossed no pipe starts today\'s Daily Dump while the day is open; a plain Play again starts a run; never in a match', () => {
   const launched = [];
-  const scene = (fields = {}) => overScene({ state: 'ready', save: { id: P, name: 'Tester', top: [] }, launch: (o) => launched.push(o), startDaily: () => (launched.push('daily'), true), ...fields }).scene;
+  // Off season (plan 17: all December the Daily stays open, tests/adventDaily.test.js), on any real clock.
+  const scene = (fields = {}) => overScene({ state: 'ready', save: { id: P, name: 'Tester', top: [] }, launch: (o) => launched.push(o), startDaily: () => (launched.push('daily'), true), dailyReplay: () => false, isTestMode: () => false, ...fields }).scene;
   assert.equal(scene().startAgain('daily'), true, 'the day is open: today\'s Daily Dump');
   assert.deepEqual(launched.splice(0), ['daily']);
   const spent = scene();

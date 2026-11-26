@@ -1,6 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { EDUCATION, GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, dailyGlyphNow } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, dailyGlyphNow, dailyDay, adventSeason } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { t, howToItems, metaFontSize } from '../i18n.js';
@@ -68,7 +68,7 @@ export class HowTo extends Phaser.Scene {
     let nextY = cy - 190;
     let lastBottom = nextY;
     // The off switch (plan 28) hides the 📚 row: asked of Play, as the 📚 tab, Stats and the save panel ask (AUD-044).
-    howToItems(locale, { education: this.scene.get('Play')?.educationAvailable?.() ?? EDUCATION.enabled !== false, daily: dailyGlyphNow(this.registry, T) }).forEach((item) => {
+    howToItems(locale, { education: this.scene.get('Play')?.educationAvailable?.() ?? EDUCATION.enabled !== false, daily: dailyGlyphNow(this.registry, T), dailyReplay: adventSeason(dailyDay(this.registry), T) }).forEach((item) => {
       const y = nextY;
       if (item.key === 'pipe') {
         // pipe.png is 128x1280 with the cap at the top: show a 64x80 cap slice.

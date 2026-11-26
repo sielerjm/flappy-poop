@@ -542,8 +542,52 @@ export const TUNING = {
     bowelidays: { widthFrac: 0.6, y: 290, aspect: 170 / 947 },
     countdownPx: 30, // px font of the countdown line under the title (1–25 Dec; readyLayout's countdown box)
     // Home snowfall (src/ui/snowfall.js): white dots drifting down the ready screen; none under reduced motion (D6).
-    snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9 },
+    snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9, windMin: 0.7, windMax: 1.3 }, // windMin / windMax: each flake's share of a wind (2.7), drawn once
     snowCap: { ox: -6.5, oy: -14.5 }, // px from a bottom pipe's cap top-left to the snow layer's top-left (process_art's --anchor report)
+    // Advent pieces (Stage 2, 2.6): piece k comes out on k Dec, up to `count` (submit_advent_piece's 24); a December Daily run
+    // offers one, rolled from the pieces out that the device has not found (today's weighs todayWeight, each other 1), in the
+    // first band slot nothing else took from a pair in [minPair, maxPair] pairs into the run (per-attempt RNG, never the
+    // course). Each run of the day that ends without it takes pityStep pairs off maxPair, down to floorPair.
+    piece: { count: 24, minPair: 3, maxPair: 20, pityStep: 3, floorPair: 6, todayWeight: 3 },
+    // The home screen's Advent button (2.15a; S14, Gate A sheet 5): the piece's box at iconPx in the round button, and
+    // "N/24" (countPx, gold) centred countDx / countDy from the button's centre, on its lower right as the 📚's count.
+    button: { iconPx: 60, countPx: 24, countDx: 40, countDy: 40 },
+    // The Advent book's picture (Stage 2c, 2.13): Michael's picture cut by tools/advent_puzzle.py into cols x rows square
+    // cells of cellPx texture px (2x, drawn at half: 166 logical px), frames in reading order (cell c at column c mod cols,
+    // row floor(c / cols)). Piece k (out on k Dec) fills cell order[k − 1]: one plain shuffle shared by every player
+    // (Michael, S7, 26 Nov), made once with createRng(20261201) and Fisher-Yates and fixed here as data.
+    puzzle: { cols: 4, rows: 6, cellPx: 332, order: [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6] },
+    // The Advent book (2.15, Gate A sheet 5, Michael 26 Nov): a width x height panel centred on the field, "N of 24 found"
+    // (countPx) countDy from its centre, the grid's top gridDy from it; slots of cellPx x spriteDisplayScale (166) with no gaps.
+    // A locked slot is a flat lockFill square with a 1 px lockLine; a piece found on its own day wears a gold star of
+    // radius starR, starInset px in from its slot's top-right corner.
+    book: { width: 696, height: 1112, countPx: 36, countDy: -508, gridDy: -460, lockFill: 0x2a1420, lockLine: 0x4a2a3a, starR: 13, starInset: 18 },
+    // The add-piece animation (2.15a; S14): a piece the book has not shown yet appears at the grid's centre at 1:1 (its
+    // 332 px frame) over a white glow (glowPad px) with the book dimmed by `dim` (appearMs, the chimes building), flies to
+    // its slot (flyMs), lands with the lock click while its glow fades (fadeMs). At most `flights` pieces fly when the
+    // book opens (the latest ones); older ones land in place at once. Under reduced motion none flies.
+    bookAnim: { appearMs: 1000, flyMs: 1300, fadeMs: 1000, popMs: 300, glowPad: 28, dim: 0.45, flights: 3 },
+    // Snow storms (Stage 2, 2.7): December Daily runs only, from the day's shared course (course.storm), so every run of a
+    // day meets the same storms at the same pairs. A pair at least firstPair pairs into the run, and pairs + gapPairs after
+    // the last storm's first pair, starts one when its draw is under `chance`; a banner shows one pair ahead; the storm
+    // lasts `pairs` pairs, its pull eased in and out over rampMs (none during a fart). While it blows the flap is flapMul
+    // as strong and the scroll scrollMul as fast (tests/adventStorm.test.js keeps the climb per pair at 85 % or more).
+    // The look is Gate A's option B (Michael, 26 Nov): `extra` storm flakes over the light snow, falling fallMul times as
+    // fast, minPx to maxPx, blown left to right at their mean fall (a 45° slant) with gusts of ±gust that never reverse,
+    // and `swirls` whirls of radius swirlR (tangential speed up to swirlS) whose centres sit 2 × swirlR apart. A fart
+    // blows the snow right to left at fartWind px/s, eased over fartRampMs, in every December run (Michael, 26 Nov).
+    storm: {
+      firstPair: 6, chance: 0.15, pairs: 4, gapPairs: 8, rampMs: 600, flapMul: 0.92, scrollMul: 1.08,
+      extra: 144, fallMul: 2, minPx: 5, maxPx: 14, gust: 0.35, swirls: 2, swirlR: 160, swirlS: 180,
+      fartWind: 420, fartRampMs: 250, bannerPx: 48, bannerY: 320,
+      // The gusts' wobble: two sines in [−1, 1] (share, period in s, phase), and how far from the field's edges a swirl's
+      // centre may sit (px) and how fast it drifts (a share of the wind). Gate A's model (tools/advent_preview.py).
+      gustWaves: [{ share: 0.65, periodS: 2.6, phase: 0 }, { share: 0.35, periodS: 1.1, phase: 1.3 }],
+      swirlMargin: { x: 100, top: 300, bottom: 280 }, swirlDrift: 0.5,
+    },
+    // December's sounds (2.7a; Michael's Pixabay clips, CREDITS.md): the twinkle when a piece is caught, and the blizzard
+    // looped under a storm, faded in from the banner (blizzardFadeMs) and out as the storm ends. Levels for his listen check.
+    sound: { foundVolume: 0.6, blizzardVolume: 0.35, blizzardFadeMs: 1200, addVolume: 0.7, lockVolume: 0.8 }, // addVolume / lockVolume: the book's chimes and click (2.15a)
     // The 🎅 that stands in for the 🌞 all December, a new one each time the home screen shows (pickSanta):
     // Santa, Mrs. Claus and Mx Claus in the five skin tones and plain. The first is the fallback; variants a
     // device cannot draw as one glyph are dropped at the first pick (supportedSantas). Drop the plain three here.
@@ -632,6 +676,9 @@ export const LEADERBOARD = {
   dailyKey: 'flappyPoop.daily', // localStorage key for this device's Daily Dump (🌞) attempt: claimed at the start, rewritten as the score grows
   dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
   dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full
+  adventKey: 'flappyPoop.advent', // localStorage key prefix for this device's Advent pieces (plan 17, 2.6): '<prefix>.<season>' holds { found: { piece: day }, miss: { day, n } }; the book is the device's own record
+  adventQueueKey: 'flappyPoop.adventQueue', // localStorage key for Advent pieces the board has not stored yet (submit_advent_piece), one per player, season and piece
+  adventQueueMax: 48, // pieces kept for a later post: a season's 24 for two players on one device; the oldest go first when full
   runQueueKey: 'flappyPoop.runQueue', // localStorage key for run summaries not yet sent (submit_runs; plan 30)
   runQueueMax: 50, // run summaries kept for a later send; the oldest go first when full (never the run behind a best not yet posted)
   runBatchMax: 20, // run summaries a sync sends in one submit_runs call (the server takes at most 20)
