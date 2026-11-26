@@ -589,6 +589,14 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | dailyNotCounted | No pipe crossed: not counted. / You can start it again today. (two lines; on Over after a Daily Dump that crossed no pipe, in the countdown's place: the day is still open, plan 48) | 一根管道都没穿过：本局不计入 / 今天还可以重新开始 |
 | dailyTodaysBest | Today's best: {n} (December, plan 17: on the Daily popup and on Over after a December Daily, in the countdown's place; {n} is the score) | 今日最佳：{n} |
 | dailyNewBest | New best today! (December, plan 17: on Over when a December Daily beats the day's best on this device) | 今日新纪录！ |
+| adventFoundToday | Found today's gift! (December, plan 17, 2.6: on Over after a Daily Dump run that caught the day's Advent piece) | 找到了今天的礼物！ |
+| adventFoundLate | Found a catch-up gift (Dec {d})! (2.6: on Over when the run caught an earlier day's piece; {d} is its day of December, 1 to 24) | 补到一份礼物（12月{d}日）！ |
+| adventNoGift | No gift this run, play again (2.6: on Over after a December Daily run that offered a piece and ended without it) | 这局没有礼物，再来一局 |
+| adventCount | 🧩 {n}/{total} (2.6: the pieces found so far; on the home screen under the 🎅, the Daily popup and Over; {total} is 24) | 🧩 {n}/{total} |
+| adventOnTrack | 🧩 {n}/{total} · 🎄 on track (2.6: every piece out so far found, through 24 Dec: the decorated tree is in reach) | 🧩 {n}/{total} · 🎄 进度正好 |
+| adventPlainOpen | 🧩 {n}/{total} · 🌲 by 31 Dec (2.6: 25 to 31 Dec, not all found: the plain tree is still open) | 🧩 {n}/{total} · 🌲 12月31日前 |
+| adventDecorated | 🧩 {n}/{total} · 🎄 (2.6: all 24 found by 24 Dec) | 🧩 {n}/{total} · 🎄 |
+| adventPlain | 🧩 {n}/{total} · 🌲 (2.6: all 24 found, the last after 24 Dec) | 🧩 {n}/{total} · 🌲 |
 | dailyBodyDec | All December, play as often as you like: your best score of the day counts. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the {daily} leaderboard; a new course starts every day at midnight UTC. (dailyBody's December version, plan 17; the zh-Hans keeps dailyBody's six lines) | 十二月不限次数，只记当天最好成绩。 / 今天所有人飞同一条赛道， / 而且没有尽头：能飞多远就飞多远。 / 没有玉米粒，也没有商店。 / 在{daily}排行榜上比分数； / 每天UTC午夜换一条新赛道。 |
 | itemDailyDetailDec | Tap the {daily} at the top of the home screen: a course everyone shares, endless at the day's level, with no kernels. All December, play it as often as you like: your best score of the day goes on the {daily} board. A new course every day at 00:00 UTC. (itemDailyDetail's December version, plan 17) | 点首页顶部的{daily}：所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。整个十二月不限次数，当天的最好成绩记到{daily}榜上；每天UTC 00:00换新赛道。 |
 | dailyBoardTitle | DAILY DUMP | 每日一拉 |

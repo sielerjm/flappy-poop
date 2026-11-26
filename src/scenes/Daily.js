@@ -4,7 +4,7 @@ import { versionText, chromeIntent, overlayOutsideHit, dailyDay, dailyLevel, msU
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createButton } from '../ui/button.js';
-import { t, metaFontSize, levelLabel, fillDaily } from '../i18n.js';
+import { t, metaFontSize, levelLabel, fillDaily, adventLineText } from '../i18n.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
@@ -46,8 +46,11 @@ export class Daily extends Phaser.Scene {
       .setOrigin(0.5);
     // December (plan 17, 2.3): play as often as you like, the day's best counts (on the decorations' clock, so a Pretend date shows it).
     this.add.text(cx, cy - 130, fillDaily(t(locale, adventSeason(this.day, T) ? 'dailyBodyDec' : 'dailyBody'), this.glyph), { ...MUTED, fontSize: '28px', wordWrap: wrap, lineSpacing: 6 }).setOrigin(0.5);
-    // The day in four pictures (no words, so nothing to translate): sun up, poop, sleep, repeat.
-    this.add.text(cx, cy + 30, `${this.glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`, { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
+    // The day in four pictures (no words, so nothing to translate): sun up, poop, sleep, repeat. In December
+    // (plan 17, 2.6) the Advent pieces found and the tree in reach take their place ("🧩 5/24 · 🎄 on track").
+    const advent = this.scene.get('Play')?.adventNow?.(this.day) ?? null;
+    if (advent) this.add.text(cx, cy + 30, adventLineText(locale, advent.status, T.advent.piece.count), { ...STYLE, fontSize: '34px', color: '#ffd700' }).setOrigin(0.5);
+    else this.add.text(cx, cy + 30, `${this.glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`, { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
     // Under the button's row: why a name is needed, or that practice is not saved.
     this.note = this.add.text(cx, cy + 105, '', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5);
     // Or, when there is no note, the Daily Dump streak (plan 34, round 2: Michael), in the 🌞 subscript's orange.
@@ -138,7 +141,8 @@ export class Daily extends Phaser.Scene {
     const best = mode === 'play' && play?.dailyReplay?.() ? play.dailyBest?.() : null;
     this.countdown.setVisible(played || Boolean(best));
     if (played) this.countdown.setText(t(this.locale, 'dailyNext').replace('{time}', countdownText(msUntilUtcMidnight(new Date()))));
-    else if (best) this.countdown.setText(t(this.locale, 'dailyTodaysBest').replace('{n}', String(best.score)));
+    // The 🎁 beside it once the day's own Advent piece was found that day (plan 17, 2.6), as the board's row shows it.
+    else if (best) this.countdown.setText(t(this.locale, 'dailyTodaysBest').replace('{n}', String(best.score)) + (play?.adventNow?.(this.day)?.giftToday ? ' \u{1F381}' : ''));
   }
 
   press() {

@@ -125,8 +125,13 @@ import {
   storedLocale,
   PERF_TAGS,
   createResync,
+  adventBacklog,
+  rollAdventTarget,
+  adventSpawnPair,
+  adventSpawnHere,
+  adventStatus,
 } from '../logic.js';
-import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines } from '../i18n.js';
+import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines, adventLineText } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
 import { createRunStats, stubRow } from '../runStats.js';
 import { VERSION as APP_VERSION } from '../logic.js';
@@ -146,7 +151,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchBoardName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, createDailyStore, createDailyQueue, createAdventStore, createAdventQueue, submitAdventPiece, fetchAdventProgress, waitsForDailyRun, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchBoardName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -302,6 +307,8 @@ export class Play extends Phaser.Scene {
     this.racePostQueue = createRacePostQueue(); // split-screen race scores (🏆, plan 39 2.5) the board has not confirmed yet
     this.dailyStore = createDailyStore(); // this device's Daily Dump (🌞) attempt: claimed at the start, final at the crash
     this.dailyQueue = createDailyQueue(); // daily scores the board has not confirmed yet
+    this.adventQueue = createAdventQueue(); // December's Advent pieces the board has not stored yet (plan 17, 2.6)
+    this.adventStores = new Map(); // season → this device's found-day store (adventStoreFor)
     this.careerStore = createCareerStore(); // lifetime counters and achievements (plan 08): counted at endRun, sent by syncLeaderboard
     this.streakStore = createStreakStore(); // the Singleplayer and Daily Dump day streaks (plan 34): this device's only, never sent
     // Education mode (📚, plan 21; for everyone since plan 28): the 📚 switch on the ready screen
@@ -341,6 +348,7 @@ export class Play extends Phaser.Scene {
     this.pipesSpawned = 0;
     this.mysteryPair = null; // picked in start(): the pair the guaranteed first box (early level 3) rides after
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 }; // this run's pickups, for the game-over summary (a box's reward also counts as its own kind)
+    this.advent = null; // a December Daily run's Advent piece (rollAdvent), else null
     this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: levelGap(1, T) };
     // Finish line + break: the line spawns in the slot after a level's last pair
     // and nothing follows it; crossing it pauses the run (levelBreak) until a tap.
@@ -545,6 +553,9 @@ export class Play extends Phaser.Scene {
     {
       const b = this.readyBoxes.countdown;
       this.countdownText = this.add.text(b.x, b.y, '', { ...TEXT_STYLE, fontSize: `${T.advent.countdownPx}px`, strokeThickness: 8 }).setOrigin(0.5).setDepth(20);
+      // The Advent chip under the 🎅 (plan 17, 2.6): the pieces found and the tree in reach (refreshSeasonHome).
+      const c = this.readyBoxes.adventChip;
+      this.adventChip = this.add.text(c.x, c.y, '', { ...TEXT_STYLE, fontSize: `${T.advent.chipPx}px`, strokeThickness: 8 }).setOrigin(0.5).setDepth(20).setVisible(false);
     }
     this.snowfall = null;
     this.countdownImage = null; // the Bowelidays image (all December), made once its file has landed
@@ -1031,6 +1042,7 @@ export class Play extends Phaser.Scene {
     this.beanSpawned = begin.beanSpawned;
     this.refreshTestBadge();
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 };
+    this.advent = this.rollAdvent(daily, begin.pipes); // December: this Daily run's Advent piece, or null (plan 17, 2.6)
     this.runFarts = 0; // this run's farts and super farts, for the career counters
     this.runSuperFarts = 0;
     this.runFalls = 0; // ‼️ long falls this run (fallStarted)
@@ -1794,11 +1806,144 @@ export class Play extends Phaser.Scene {
     return true;
   }
 
+  // ---- December's Advent pieces (plan 17, 2.6)
+
+  /** The Advent season (its year) `day` falls in, or null off season. */
+  adventSeasonOf(day) {
+    return adventSeason(day, T) ? Number(day.slice(0, 4)) : null;
+  }
+
+  /**
+   * The found-day store of `day`'s season (null off season): this device's own record, or with `practice` (a test
+   * run, or test mode on the home screen and its popups: a Pretend date) the session's sandbox in memory, so
+   * practice never adds a real piece and queues nothing (finding 17). The sandbox lives in the registry, so it
+   * outlasts a scene restart.
+   */
+  adventStoreFor(day, practice) {
+    const season = this.adventSeasonOf(day);
+    if (!season) return null;
+    if (practice) {
+      const box = this.registry.get('adventSandbox') ?? new Map();
+      if (!box.has(season)) box.set(season, createAdventStore(null, season));
+      this.registry.set('adventSandbox', box);
+      return box.get(season);
+    }
+    this.adventStores ??= new Map();
+    if (!this.adventStores.has(season)) this.adventStores.set(season, createAdventStore(undefined, season));
+    return this.adventStores.get(season);
+  }
+
+  /**
+   * A Daily run's Advent piece (start): on a December day, one piece from those out that the store lacks (rolled
+   * with a per-attempt RNG, never the shared course, so two runs of a day offer different pieces at different
+   * pairs) and the pair from which it may show (the day's misses shrink the window). Null off season, outside a
+   * Daily, or with nothing left to find (finding 21). `this.adventRng` stands in for Math.random in tests.
+   */
+  rollAdvent(daily, startN) {
+    if (!daily || !adventSeason(daily.day, T)) return null;
+    const store = this.adventStoreFor(daily.day, this.runIsTest);
+    const rng = this.adventRng ?? Math.random;
+    const piece = rollAdventTarget(adventBacklog(store.found(), daily.day, T), daily.day, rng, T);
+    if (piece === null) return null;
+    return { piece, day: daily.day, season: this.adventSeasonOf(daily.day), startN, pair: adventSpawnPair(store.misses(daily.day), rng, T), spawned: false, found: false };
+  }
+
+  /** The run's piece caught: into the store (once, its first day), and for a real run queued for the board (S12). */
+  takeAdvent() {
+    const a = this.advent;
+    if (!a || a.found) return;
+    a.found = true;
+    const added = this.adventStoreFor(a.day, this.runIsTest)?.add(a.piece, a.day);
+    if (added && !this.runIsTest && this.daily) this.adventQueue.add({ playerId: this.daily.playerId, season: a.season, piece: a.piece, day: a.day });
+    sfx.pickup();
+  }
+
+  /**
+   * At a December Daily's end (endRun): a run that offered a piece and ended without it counts a miss for the day
+   * (the window's pity); for Over, { offered, found (the piece, or null), late (not the day's own piece), status }.
+   */
+  adventOutcome() {
+    const day = this.dailyRunDay;
+    const store = this.adventStoreFor(day, this.runIsTest);
+    if (!store) return null;
+    const a = this.advent;
+    if (a && !a.found) store.addMiss(day);
+    return { offered: Boolean(a), found: a?.found ? a.piece : null, late: Boolean(a?.found && a.piece !== Number(day.slice(8, 10))), status: adventStatus(store.found(), day, T) };
+  }
+
+  /**
+   * The Daily popup's and Over's December line (plan 17, 2.6): { status (adventStatus), giftToday (the day's own
+   * piece found on its day: the 🎁 beside the day's best) } on the decorations' clock, or null off season.
+   */
+  adventNow(day = dailyDay(this.registry)) {
+    const store = this.adventSeasonOf(day) ? this.adventStoreFor(day, this.isTestMode()) : null;
+    if (!store) return null;
+    const found = store.found();
+    const k = Number(day.slice(8, 10));
+    return { status: adventStatus(found, day, T), giftToday: k <= T.advent.piece.count && found[k] === day };
+  }
+
+  /** The home screen's Advent chip, on `day` (null hides it: off season, a match). */
+  refreshAdventChip(day) {
+    const now = day && this.adventChip ? this.adventNow(day) : null;
+    this.adventChip?.setText(now ? adventLineText(this.locale, now.status, T.advent.piece.count) : '').setVisible(Boolean(now) && this.readyUiShown);
+  }
+
+  /**
+   * Post the queued pieces (submit_advent_piece): one batch a player a sync; a piece waits while its day's run is
+   * still queued (plan 30, S12; a few syncs at most, postWaits). What the answer does is createAdventQueue's.
+   * Never rejects or throws: the posts after it in syncLeaderboard's chain always run.
+   */
+  drainAdvent() {
+    try {
+      if (!this.adventQueue) return Promise.resolve();
+      const runs = this.runQueue?.load?.() ?? [];
+      const asked = new Map();
+      const waits = (pid, day) => {
+        const key = `a:${pid}:${day}`;
+        if (!asked.has(key)) asked.set(key, this.postWaits(key, !this.runsUnsent?.has(pid) && waitsForDailyRun(runs, pid, day)));
+        return asked.get(key);
+      };
+      return this.adventQueue.drain((pid, list) => submitAdventPiece(pid, list), { today: utcDayKey(), waits }).catch(() => {});
+    } catch {
+      return Promise.resolve();
+    }
+  }
+
+  /**
+   * The pieces this player found on other devices (advent_progress), folded into the store (the earlier day wins):
+   * once a page load, player and season, in season, never for practice. Offline: the next sync asks again.
+   * Never rejects or throws, as drainAdvent.
+   */
+  pullAdventProgress() {
+    try {
+      const id = this.save?.id;
+      const day = utcDayKey();
+      const season = this.adventSeasonOf(day);
+      if (!id || !season || this.registry?.get?.('adventProgressFor') === `${id}:${season}`) return Promise.resolve();
+      return fetchAdventProgress(id, season)
+        .then((list) => {
+          if (!list || this.save?.id !== id) return;
+          this.registry?.set?.('adventProgressFor', `${id}:${season}`);
+          if (this.adventStoreFor(day, false).merge(list)) {
+            this.refreshSeasonHome?.();
+            this.refreshDailyPrompt?.();
+          }
+        })
+        .catch(() => {});
+    } catch {
+      return Promise.resolve();
+    }
+  }
+
   /** The 🌞 breathes under its halo on the ready screen until today's attempt is used. */
   refreshDailyPrompt() {
     if (!this.dailySun) return;
     const ready = this.state === 'ready' && !this.launching && !this.match && this.dailyBtn && this.dailySun.visible;
-    const due = Boolean(ready) && !this.dailyPlayedToday();
+    // December (plan 17, 2.6; finding 21): it glows while a piece is still to be found, not while today is unplayed.
+    const day = dailyDay(this.registry);
+    const store = this.adventSeasonOf(day) ? this.adventStoreFor(day, this.isTestMode()) : null;
+    const due = Boolean(ready) && (store ? adventBacklog(store.found(), day, T).length > 0 : !this.dailyPlayedToday());
     this.dailyHalo.setVisible(due);
     if (due) this.dailySunTween.resume();
     else {
@@ -1907,7 +2052,7 @@ export class Play extends Phaser.Scene {
     const research = tournaments.then(() => this.drainResearch());
     // Daily Dump scores carry their own id too; a device with no username sends them under the
     // name they were queued with (a named device sends after the name check below).
-    if (!this.save?.name) return research.then(() => this.drainRuns()).then(() => this.drainDaily()).catch(() => {});
+    if (!this.save?.name) return research.then(() => this.drainRuns()).then(() => this.drainDaily()).then(() => this.drainAdvent()).then(() => this.pullAdventProgress()).catch(() => {});
     if (!this.save.id) this.save = ensureId(this.save);
     const id = this.save.id;
     const renamedHere = () => {
@@ -1923,6 +2068,8 @@ export class Play extends Phaser.Scene {
       .then(() => this.creditCareer()) // bests from other devices earn their score and level badges here
       .then(() => this.drainRuns()) // run summaries first, so the run behind each post below is stored (plan 30)
       .then(() => this.drainDaily())
+      .then(() => this.drainAdvent()) // December's pieces after the Daily's scores and before the career's claims (plan 17, R6)
+      .then(() => this.pullAdventProgress()) // the pieces found on other devices, once a page load
       .then(() => this.pullPlayDays(id)) // the day streaks, with the days played on other devices (34.13)
       .then(() => this.drainCareer(id))
       .then(() => this.drainEduShare(id))
@@ -3895,6 +4042,13 @@ export class Play extends Phaser.Scene {
     // costs a fiber, a box, a bean or the guaranteed kernel its place.
     const slotTaken = boxHere || beanHere || band || kernelBand || kernelPast || superHere;
     if (!slotTaken && scripted === undefined && this.level >= 2 && !this.runIsDaily && this.course.coin(n)) this.spawnBandItem('coin', still ? stillY() : null, shift);
+    // December's Advent piece (plan 17, 2.6; finding 5): once a Daily run, only in a band slot nothing else took
+    // (a Daily rolls no extra coin), from its pair on, once its texture has landed. No pair spawns in a fart's
+    // held stretch (spawnHeldByFart), so it never shows there.
+    if (adventSpawnHere(this.advent, n, slotTaken, this.textures.exists(ADVENT_ART.piece))) {
+      this.advent.spawned = true;
+      this.spawnBandItem(ADVENT_ART.piece, still ? stillY() : null, shift);
+    }
     if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH, move ? top : null);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
@@ -4219,6 +4373,7 @@ export class Play extends Phaser.Scene {
       this.countdownImage = this.add.image(b.x, b.y, img).setDisplaySize(b.width, b.height).setDepth(20);
     }
     this.countdownImage?.setVisible(Boolean(img) && this.readyUiShown);
+    this.refreshAdventChip(home ? day : null);
     if (season && !this.snowfall) this.snowfall = createSnowfall(this, { x: 0, y: 0, width: this.fieldW, height: GAME_HEIGHT }, T.advent.snow);
     if (!season && this.snowfall) {
       this.snowfall.destroy();
@@ -4562,8 +4717,10 @@ export class Play extends Phaser.Scene {
   collectItem(item) {
     if (this.state !== 'playing' || !item.active) return;
     perfMark(PERF_TAGS.pickup);
-    if (this.effects.powerActive()) return; // farting: fiber, probiotic, bacteria and boxes scroll straight through
     const kind = item.getData('kind');
+    // Farting: fiber, probiotic, bacteria and boxes scroll straight through. The Advent piece is caught all the
+    // same (plan 17, finding 7): a fart would otherwise cost the run its only piece.
+    if (this.effects.powerActive() && kind !== ADVENT_ART.piece) return;
     const kernel = Boolean(item.getData('kernel')); // read before destroy() takes the item's data with it
     const itemPair = item.getData('pair'); // a box's pair (spawnBandItem)
     const { x, y } = item;
@@ -4577,7 +4734,9 @@ export class Play extends Phaser.Scene {
       onComplete: () => ghost.destroy(),
     });
     item.destroy();
-    if (kind === 'mystery') {
+    if (kind === ADVENT_ART.piece) {
+      this.takeAdvent();
+    } else if (kind === 'mystery') {
       this.collected.mystery += 1;
       // A draw that cannot do anything (a bean with a full bag) becomes fiber; pairsLeft matters only to test mode's
       // skip now (no box holds one since plan 28, 4.6). A match
@@ -5371,8 +5530,12 @@ export class Play extends Phaser.Scene {
       if (report) this.versusHost()?.onRunEnded?.(this.player, { score: this.score, level: this.level, pipesPassed: this.pipesPassed, won: this.won });
       return;
     }
-    // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync.
-    if (this.runIsTest) return;
+    // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync. A practice December
+    // Daily (a Pretend date) still tells Over what its Advent piece did, from the session's sandbox (plan 17, 2.6).
+    if (this.runIsTest) {
+      if (this.runIsDaily) this.dailyResult = { replay: this.dailyReplay(this.dailyRunDay), best: null, newBest: false, advent: this.adventOutcome() };
+      return;
+    }
     // Nor, before its public release, does an education run (plan 21): its cards were saved answer by
     // answer; no best, top list, career counters or career badges. Its own badges and average grade
     // (plan 22) stay on this device with the cards (recordEducation). A won run waits (plan 26): its
@@ -5408,7 +5571,7 @@ export class Play extends Phaser.Scene {
         const before = this.daily ? this.dailyStore.best(this.daily.day, this.daily.playerId) : null;
         const rec = this.saveDailyAttempt(true);
         if (rec) this.queueDaily(rec, this.save?.name ?? null, replay);
-        this.dailyResult = { replay, best: rec?.best?.score ?? rec?.score ?? null, newBest: Boolean(rec && (!before || rec.score > before.score)) };
+        this.dailyResult = { replay, best: rec?.best?.score ?? rec?.score ?? null, newBest: Boolean(rec && (!before || rec.score > before.score)), advent: this.adventOutcome() };
         this.recordCareer('daily');
       }
       this.dailySync = this.syncLeaderboard();
@@ -6021,7 +6184,7 @@ export class Play extends Phaser.Scene {
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
       // replay (plan 17, 2.3): a December Daily, open again; best / newBest: the day's best after this run (none for practice).
-      const daily = this.runIsDaily ? { day: this.dailyRunDay ?? null, level: this.level, playerId: this.save?.id ?? null, practice: this.runIsTest, sync: this.dailySync ?? null, replay: this.dailyReplay(this.dailyRunDay), best: this.dailyResult?.best ?? null, newBest: Boolean(this.dailyResult?.newBest) } : null;
+      const daily = this.runIsDaily ? { day: this.dailyRunDay ?? null, level: this.level, playerId: this.save?.id ?? null, practice: this.runIsTest, sync: this.dailySync ?? null, replay: this.dailyReplay(this.dailyRunDay), best: this.dailyResult?.best ?? null, newBest: Boolean(this.dailyResult?.newBest), advent: this.dailyResult?.advent ?? null } : null;
       const pipes = this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed;
       const personalBest = Boolean(this.personalBest && !this.runIsTest && !this.runIsDaily);
       const badges = this.runIsTest ? [] : [...(this.runBadges ?? [])];

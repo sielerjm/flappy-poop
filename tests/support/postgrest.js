@@ -75,6 +75,8 @@ const CASTS = {
   p_level: '::int',
   p_pipes: '::int',
   p_day: '::date',
+  p_pieces: '::jsonb', // submit_advent_piece's batch (plan 17, 2.6)
+  p_season: '::int', // advent_progress, advent_board
 };
 
 /**

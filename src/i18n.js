@@ -468,6 +468,14 @@ Inspired by Flappy Bird`,
     dailyNotCounted: 'No pipe crossed: not counted.\nYou can start it again today.',
     dailyTodaysBest: "Today's best: {n}",
     dailyNewBest: 'New best today!',
+    adventFoundToday: "Found today's gift!",
+    adventFoundLate: 'Found a catch-up gift (Dec {d})!',
+    adventNoGift: 'No gift this run, play again',
+    adventCount: '\u{1F9E9} {n}/{total}',
+    adventOnTrack: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384} on track',
+    adventPlainOpen: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332} by 31 Dec',
+    adventDecorated: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384}',
+    adventPlain: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332}',
     dailyBoardTitle: 'DAILY DUMP',
     dailyBoardEmpty: "No one has played today's Daily Dump yet",
     dailyBoardJoin: "Play today's Daily Dump from the {daily} on the home screen",
@@ -1289,6 +1297,14 @@ Inspired by Flappy Bird`,
     dailyNotCounted: '一根管道都没穿过：本局不计入\n今天还可以重新开始',
     dailyTodaysBest: '今日最佳：{n}',
     dailyNewBest: '今日新纪录！',
+    adventFoundToday: '找到了今天的礼物！',
+    adventFoundLate: '补到一份礼物（12月{d}日）！',
+    adventNoGift: '这局没有礼物，再来一局',
+    adventCount: '\u{1F9E9} {n}/{total}',
+    adventOnTrack: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384} 进度正好',
+    adventPlainOpen: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332} 12月31日前',
+    adventDecorated: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384}',
+    adventPlain: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332}',
     dailyBoardTitle: '每日一拉',
     dailyBoardEmpty: '今天还没有人玩每日一拉',
     dailyBoardJoin: '在首页点{daily}玩今天的每日一拉',
@@ -1882,6 +1898,21 @@ export function dailyDayText(locale, day) {
 /** The 🌞 board's footer for the player's own row: "You: #3 of 12 · 87". */
 export function dailyYouText(locale, { rank, total, score }) {
   return t(locale, 'dailyBoardYou').replace('{rank}', String(rank)).replace('{total}', String(total)).replace('{score}', String(score));
+}
+
+/**
+ * The Advent line (plan 17, 2.6): "🧩 3/24 · 🎄 on track" and its kin, from adventStatus' { n, tree } and the
+ * piece count (TUNING.advent.piece.count).
+ */
+export function adventLineText(locale, { n, tree }, total) {
+  const key = { onTrack: 'adventOnTrack', plainOpen: 'adventPlainOpen', decorated: 'adventDecorated', plain: 'adventPlain' }[tree] ?? 'adventCount';
+  return t(locale, key).replace('{n}', String(n)).replace('{total}', String(total));
+}
+
+/** The game-over line for a December Daily's piece: today's, a catch-up one (its day of December), or none this run. */
+export function adventFoundText(locale, { found, late }) {
+  if (!found) return t(locale, 'adventNoGift');
+  return late ? t(locale, 'adventFoundLate').replace('{d}', String(found)) : t(locale, 'adventFoundToday');
 }
 
 /** The 📚 board's footer for the player's own row: "You: #3 of 12 · 92.5 %". */

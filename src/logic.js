@@ -1876,7 +1876,10 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   // The Bowelidays image (plan 17, 1.14; D16 (b)): above the title, under the top row's halos. Drawn only.
   const bw = width * t.advent.bowelidays.widthFrac;
   const bowelidays = { id: 'bowelidays', x: cx, y: t.advent.bowelidays.y, width: bw, height: bw * t.advent.bowelidays.aspect };
-  return { title, poop, toilet, howto, daily, profile, countdown, bowelidays, ...switches };
+  // The Advent chip (plan 17, 2.6): "🧩 N/24 · 🎄 on track" under the 🎅, between its circle's halo and the Bowelidays
+  // image's top. Drawn only, never hit.
+  const adventChip = { id: 'adventChip', x: cx, y: daily.y + boxH / 2 + t.advent.chipGapPx, width: 320, height: t.advent.chipPx + 8 };
+  return { title, poop, toilet, howto, daily, profile, countdown, bowelidays, adventChip, ...switches };
 }
 
 function inBox(x, y, box) {
@@ -2436,6 +2439,73 @@ export function twinKey(stock, skin, fartFrame = 0, has = () => true) {
   const frames = skin.fartFrames;
   const twin = stock === 'poop-fart' && frames.length ? frames[fartFrame % frames.length] : skin.twins[stock];
   return twin && has(twin) ? twin : stock;
+}
+
+// Advent pieces (plan 17, 2.6). `found` is the found-day store's map { piece: 'YYYY-MM-DD' } (createAdventStore).
+
+/** The highest piece out on `day` (piece k on k Dec): 0 off season, else the date, at most advent.piece.count. */
+export function adventReleased(day, t) {
+  if (!adventSeason(day, t)) return 0;
+  return Math.min(Number(day.slice(8, 10)), t.advent.piece.count);
+}
+
+/** The pieces out on `day` that `found` lacks, in order (the backlog a run's piece is rolled from). */
+export function adventBacklog(found, day, t) {
+  const out = [];
+  for (let k = 1; k <= adventReleased(day, t); k += 1) if (!found?.[k]) out.push(k);
+  return out;
+}
+
+/**
+ * A run's piece from `backlog`, drawn with `rng` (per attempt, never the shared course): the day's own piece
+ * (piece k on k Dec) weighs advent.piece.todayWeight, every other piece 1. Null for an empty backlog.
+ */
+export function rollAdventTarget(backlog, day, rng, t) {
+  if (!backlog?.length) return null;
+  const today = Number(String(day).slice(8, 10));
+  const weights = backlog.map((k) => (k === today ? t.advent.piece.todayWeight : 1));
+  let r = rng() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < backlog.length; i += 1) {
+    r -= weights[i];
+    if (r < 0) return backlog[i];
+  }
+  return backlog[backlog.length - 1];
+}
+
+/**
+ * The pair, counted from the run's first, from which a run's piece may show: in [minPair, top], where top is
+ * maxPair less pityStep for each of the day's runs that ended without the piece, never under floorPair.
+ */
+export function adventSpawnPair(misses, rng, t) {
+  const p = t.advent.piece;
+  const hi = Math.max(p.floorPair, p.maxPair - Math.max(0, misses) * p.pityStep);
+  const lo = Math.min(p.minPair, hi);
+  return lo + Math.floor(rng() * (hi - lo + 1));
+}
+
+/**
+ * Does the run's piece `advent` ({ startN, pair, spawned, found }) show at pair `n`? Once a run, from its
+ * pair on, only in a band slot nothing else took (`slotTaken`), and only once its texture has loaded (`ready`).
+ */
+export function adventSpawnHere(advent, n, slotTaken, ready) {
+  return Boolean(advent && !advent.spawned && !advent.found && ready && !slotTaken && n - advent.startN >= advent.pair);
+}
+
+/**
+ * The 🧩 line's state on `day`: { n (pieces found), tree }. tree (S1, Michael 26 Nov: 🎄 for all 24 by the end of
+ * 24 Dec, late finds included, else 🌲 for all 24 by 31 Dec): 'decorated' / 'plain' once all are found, by the
+ * last one's day; before that, through 24 Dec, 'onTrack' with nothing left to catch up, else null; 'plainOpen' after.
+ */
+export function adventStatus(found, day, t) {
+  const count = t.advent.piece.count;
+  const days = [];
+  for (let k = 1; k <= count; k += 1) if (isDayKey(found?.[k])) days.push(found[k]);
+  const n = days.length;
+  const eve = `${String(day).slice(0, 4)}-${String(t.advent.seasonMonth).padStart(2, '0')}-${String(count).padStart(2, '0')}`;
+  if (n === count) return { n, tree: days.sort().at(-1) <= eve ? 'decorated' : 'plain' };
+  if (!adventSeason(day, t)) return { n, tree: null };
+  if (day <= eve) return { n, tree: adventBacklog(found, day, t).length === 0 ? 'onTrack' : null };
+  return { n, tree: 'plainOpen' };
 }
 
 /**

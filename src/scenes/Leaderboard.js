@@ -372,7 +372,10 @@ export class Leaderboard extends Phaser.Scene {
       sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : offset + i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
       sv.add(this.add.text(L.cols.right, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
       const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
-      name.setScale(fitScale(name.width, L.cols.level - name.x, 8)); // no 🚽 or LV columns here: the name gets the room up to the score
+      // December (plan 17, 2.6): a 🎁 after the name for a player who found that day's Advent piece on that day.
+      const gift = row?.gift ? sv.add(this.add.text(0, y, '\u{1F381}', { fontFamily: 'sans-serif', fontSize: '28px' }).setOrigin(0, 0.5)) : null;
+      name.setScale(fitScale(name.width, L.cols.level - name.x - (gift ? gift.width + 8 : 0), 8)); // no 🚽 or LV columns here: the name gets the room up to the score
+      gift?.setX(name.x + name.displayWidth + 8);
       if (row) this.linkName(sv, name, row.name);
     }
     sv.finish(y + L.pitch / 2 - 40);

@@ -1,7 +1,7 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS, LEVELS } from '../config.js';
 import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overBandLayout, overEduLines, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale, dailyGlyphNow } from '../logic.js';
-import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle, tallyLines } from '../i18n.js';
+import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle, tallyLines, adventFoundText, adventLineText } from '../i18n.js';
 import { achievementById, EDU_ACHIEVEMENTS } from '../achievements.js';
 import { EDUCATION_EMOJI } from '../education.js';
 import { fetchDailyBoard, dailyEntryId } from '../leaderboard.js';
@@ -199,6 +199,17 @@ export class Over extends Phaser.Scene {
       // On this screen only: the share card never carries it.
       line(this.add.text(cx, cy + 150, t(locale, 'newPersonalBest'), { ...style, fontSize: '34px', color: '#ffd700' }).setOrigin(0.5));
     }
+    // December's Advent piece (plan 17, 2.6): what this run found ("Found today's gift!", a catch-up gift, or "No gift
+    // this run, play again") and the 🧩 count, under the day's best (or the test note); with nothing left to find, the
+    // count alone. The badge line moves down a row under it.
+    const advent = daily?.advent?.status ? daily.advent : null;
+    if (advent) {
+      const count = adventLineText(locale, advent.status, T.advent.piece.count);
+      const text = advent.offered ? `${adventFoundText(locale, advent)}  ${count}` : count;
+      const obj = this.add.text(cx, cy + 186, text, { ...style, fontSize: '26px', color: advent.found ? '#ffd700' : '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5);
+      obj.setScale(fitScale(obj.width, 520, 0));
+      line(obj);
+    }
     // Achievements this run unlocked (plan 08): the first two by glyph and name, then "+n". Under the
     // personal-best or countdown line when there is one, else in its place; above the buttons.
     this.badgeLine = null; // the scene instance outlives a restart: never keep the last panel's line
@@ -206,7 +217,7 @@ export class Over extends Phaser.Scene {
       const named = badges.slice(0, 2).map((e) => `${e.glyph} ${badgeTitle(locale, e)}`).join(' · ');
       const more = badges.length > 2 ? ` ${t(locale, 'overBadgesMore').replace('{n}', String(badges.length - 2))}` : '';
       // An education panel: under the coins row, with the ❔ ✅ ❌ row and the note below it (overEduLines).
-      const lineY = cy + (education ? eduLines.badge : data?.personalBest || daily ? 186 : 150);
+      const lineY = cy + (education ? eduLines.badge : advent ? 222 : data?.personalBest || daily ? 186 : 150);
       const text = this.add.text(cx, lineY, t(locale, 'overBadges').replace('{badges}', named + more), { ...style, fontSize: '28px', color: '#ffd700' }).setOrigin(0.5);
       text.setScale(fitScale(text.width, 500, 0));
       this.badgeLine = line(text);

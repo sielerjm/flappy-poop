@@ -337,6 +337,20 @@ function createPostQueue(storage, { key, max, normalize, idOf }) {
       if (queue.load().some((q) => idOf(q) === id)) return last === 'nameTaken' ? 'nameTaken' : 'queued';
       return last === 'nameTaken' ? null : last;
     },
+    /** Keep only the entries `keep(entry)` accepts (a batch's answer: plan 17, 2.6). */
+    retain(keep) {
+      write(queue.load().filter(keep));
+    },
+    /** Run `fn` (a whole-batch post) unless one is running for this storage and key: then that one's promise. */
+    exclusive(fn) {
+      if (shared.inflight) return shared.inflight;
+      shared.inflight = Promise.resolve()
+        .then(fn)
+        .finally(() => {
+          shared.inflight = null;
+        });
+      return shared.inflight;
+    },
     /** Post the queue in order with `submit(entry)`; a drain already running is returned instead. Resolves with how many left. */
     drain(submit) {
       if (shared.inflight) return shared.inflight;
@@ -566,6 +580,159 @@ export function createDailyQueue(storage = browserStorage(), { key = LEADERBOARD
   /** December (plan 17, 2.3): queue a final score, in place of the one waiting for that player and day only when higher. */
   q.addBetter = (raw) => q.replace(raw, (queued, e) => e.score > queued.score);
   return q;
+}
+
+// ---------------------------------------------------------------------------
+// Advent pieces (plan 17, 2.6). The found-day store is the device's own record of a season's pieces (the
+// book is drawn from it, and the trees are claimed from it: S11 (a)); the queue carries them to
+// submit_advent_piece, which stores a piece only behind an unheld Daily run of its day (S12).
+
+const PIECE_OK = (k) => Number.isInteger(k) && k >= 1 && k <= TUNING.advent.piece.count;
+
+/** A season's record, or the empty one: { found: { piece: day }, miss: { day, n } | null }. */
+function normalizeAdvent(raw) {
+  const found = {};
+  const src = raw && typeof raw === 'object' && raw.found && typeof raw.found === 'object' ? raw.found : {};
+  for (const [k, day] of Object.entries(src)) {
+    const piece = Number(k);
+    if (PIECE_OK(piece) && String(piece) === k && typeof day === 'string' && DAY_RE.test(day)) found[piece] = day;
+  }
+  const m = raw?.miss;
+  const miss = m && typeof m === 'object' && typeof m.day === 'string' && DAY_RE.test(m.day) && Number.isInteger(m.n) && m.n > 0 ? { day: m.day, n: m.n } : null;
+  return { found, miss };
+}
+
+/**
+ * This device's Advent pieces for `season` (a year) under '<prefix>.<season>': found() { piece: day },
+ * add(piece, day) (true when new or earlier: a piece keeps its earliest day), merge(list) (advent_progress'
+ * [{ piece, day }]: the union, the earlier day; how many changed), misses(day) / addMiss(day) (the day's runs
+ * that ended without their piece: the spawn window's pity). `storage` null keeps it in memory (the practice
+ * sandbox: a test run or a Pretend date never touches the real record). Nothing here throws.
+ */
+export function createAdventStore(storage = browserStorage(), season, { prefix = LEADERBOARD.adventKey } = {}) {
+  const box = createJsonStore(storage, `${prefix}.${season}`, normalizeAdvent);
+  const put = (rec, piece, day) => {
+    if (!PIECE_OK(piece) || typeof day !== 'string' || !DAY_RE.test(day)) return false;
+    if (rec.found[piece] && rec.found[piece] <= day) return false;
+    rec.found[piece] = day;
+    return true;
+  };
+  return {
+    found: () => ({ ...box.read().found }),
+    count: () => Object.keys(box.read().found).length,
+    add(piece, day) {
+      const rec = box.read();
+      if (!put(rec, piece, day)) return false;
+      box.write(rec);
+      return true;
+    },
+    merge(list) {
+      const rec = box.read();
+      let changed = 0;
+      for (const e of Array.isArray(list) ? list : []) if (e && put(rec, e.piece, e.day)) changed += 1;
+      if (changed) box.write(rec);
+      return changed;
+    },
+    misses(day) {
+      const m = box.read().miss;
+      return m && m.day === day ? m.n : 0;
+    },
+    addMiss(day) {
+      if (typeof day !== 'string' || !DAY_RE.test(day)) return;
+      const rec = box.read();
+      rec.miss = { day, n: (rec.miss?.day === day ? rec.miss.n : 0) + 1 };
+      box.write(rec);
+    },
+  };
+}
+
+/** A queued piece, or null: { playerId, season, piece, day } (day: the Daily's day the run started on). */
+function normalizeAdventEntry(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.playerId !== 'string' || !ID_RE.test(raw.playerId)) return null;
+  if (!Number.isInteger(raw.season) || !PIECE_OK(raw.piece) || typeof raw.day !== 'string' || !DAY_RE.test(raw.day)) return null;
+  return { playerId: raw.playerId, season: raw.season, piece: raw.piece, day: raw.day };
+}
+
+const adventEntryId = (e) => `${e.playerId}:${e.season}:${e.piece}`;
+
+/**
+ * Pieces waiting for submit_advent_piece, one per player, season and piece. drain(submit, { today, waits })
+ * sends one batch per player id (at most the count, 24) with submit(playerId, [{ piece, day }]) and reads its
+ * answer: 'rejected' drops the batch (a bad batch is never taken), 'keep' (no answer, 'too soon') keeps it
+ * for the next sync; { stored, kept, refused } takes the stored and refused pieces out and keeps the kept ones
+ * (S12). A piece whose day is before yesterday (`today`'s UTC day) leaves unsent: the server no longer takes
+ * it; the book keeps it. waits(playerId, day) holds a piece back while its run waits to be sent (plan 30).
+ */
+export function createAdventQueue(storage = browserStorage(), { key = LEADERBOARD.adventQueueKey, max = LEADERBOARD.adventQueueMax } = {}) {
+  const q = createPostQueue(storage, { key, max, normalize: normalizeAdventEntry, idOf: adventEntryId });
+  return {
+    load: q.load,
+    add: q.add,
+    drain(submit, { today, waits = () => false } = {}) {
+      return q.exclusive(async () => {
+        const yesterday = shiftDay(today, -1);
+        q.retain((e) => e.day >= yesterday);
+        const byPlayer = new Map();
+        for (const e of q.load()) {
+          if (waits(e.playerId, e.day)) continue;
+          if (!byPlayer.has(e.playerId)) byPlayer.set(e.playerId, []);
+          byPlayer.get(e.playerId).push(e);
+        }
+        let done = 0;
+        for (const [playerId, all] of byPlayer) {
+          const batch = all.slice(0, TUNING.advent.piece.count);
+          let res = 'keep';
+          try {
+            res = await submit(playerId, batch.map((e) => ({ piece: e.piece, day: e.day })));
+          } catch {
+            res = 'keep';
+          }
+          if (res === 'keep') continue;
+          const gone = new Set(res === 'rejected' ? batch.map((e) => e.piece) : [...(res?.stored ?? []), ...(res?.refused ?? [])]);
+          const sent = new Set(batch.map(adventEntryId));
+          q.retain((e) => !(sent.has(adventEntryId(e)) && gone.has(e.piece)));
+          done += gone.size;
+        }
+        return done;
+      });
+    },
+  };
+}
+
+/** `day` ('YYYY-MM-DD') moved by `step` whole days (logic.js shiftDayKey; leaderboard.js keeps its own imports small). */
+function shiftDay(day, step) {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + step);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Is a Daily run of `playerId` on `day` still waiting in the run queue? Its pieces wait for it (plan 30, S12). */
+export function waitsForDailyRun(entries, playerId, day) {
+  return (Array.isArray(entries) ? entries : []).some((q) => q?.playerId === playerId && q.row?.mode === 'daily' && q.row.day === day);
+}
+
+/**
+ * Post a batch of pieces (submit_advent_piece): { stored, kept, refused } (piece numbers), 'rejected' when the
+ * server will never take the batch ('bad pieces', 'bad player id') or it is malformed, else 'keep' (offline,
+ * 'too soon', the function not deployed yet).
+ */
+export async function submitAdventPiece(playerId, pieces, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId) || !Array.isArray(pieces) || pieces.length === 0 || pieces.length > TUNING.advent.piece.count) return 'rejected';
+  const list = pieces.map((e) => ({ piece: e?.piece, day: e?.day }));
+  if (list.some((e) => !PIECE_OK(e.piece) || typeof e.day !== 'string' || !DAY_RE.test(e.day))) return 'rejected';
+  const out = await request('/rpc/submit_advent_piece', { method: 'POST', errors: true, body: { p_player_id: playerId, p_pieces: list } }, opts);
+  if (out === null || out === undefined) return 'keep';
+  if (out?.error) return out.status === 400 && /bad (pieces|player id)/i.test(out.message) ? 'rejected' : 'keep';
+  const nums = (v) => (Array.isArray(v) ? v.filter(PIECE_OK) : []);
+  return { stored: nums(out.stored), kept: nums(out.kept), refused: nums(out.refused) };
+}
+
+/** The pieces the board holds for this player and `season` (advent_progress): [{ piece, day }], or null unreachable. */
+export async function fetchAdventProgress(playerId, season, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId) || !Number.isInteger(season)) return null;
+  const out = await request('/rpc/advent_progress', { method: 'POST', body: { p_player_id: playerId, p_season: season } }, opts);
+  if (!Array.isArray(out)) return null;
+  return out.filter((e) => e && PIECE_OK(e.piece) && typeof e.day === 'string' && DAY_RE.test(e.day)).map((e) => ({ piece: e.piece, day: e.day }));
 }
 
 /** A queued run summary: { playerId (the id it was flown under, or null before the device had one), row }. */
@@ -813,13 +980,16 @@ export async function submitDailyScore(entry, opts = {}) {
   return 'ok';
 }
 
-/** A 🌞 board row { rank, name, score, level, pipes, me, total } from a server row, or null. */
+/**
+ * A 🌞 board row { rank, name, score, level, pipes, me, total, gift } from a server row, or null. gift (plan 17,
+ * 2.4 and 2.6): the player found that day's Advent piece on that day (the board draws a 🎁); false before the migration.
+ */
 function normalizeDailyRow(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const { rank, name, score, level, pipes, total } = raw;
   if (!Number.isInteger(rank) || rank < 1 || typeof name !== 'string' || !validateName(name).ok) return null;
   if (!COUNT(score) || !Number.isInteger(level) || !COUNT(pipes) || !COUNT(total)) return null;
-  return { rank, name, score, level, pipes, me: Boolean(raw.me), total };
+  return { rank, name, score, level, pipes, me: Boolean(raw.me), total, gift: raw.gift === true };
 }
 
 /**

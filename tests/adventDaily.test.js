@@ -213,10 +213,12 @@ test('2.3 Play: every December final is queued, a better one replacing the one n
   const storage = fakeStorage();
   const a = decScene({ storage });
   fly(a, 30, 30);
-  assert.deepEqual(a.dailyResult, { replay: true, best: 30, newBest: true });
+  const strip = ({ advent, ...rest }) => rest; // 2.6's Advent outcome rides along (tests/adventPieces.test.js)
+  assert.deepEqual(strip(a.dailyResult), { replay: true, best: 30, newBest: true });
+  assert.equal(a.dailyResult.advent.offered, false, 'this stub run rolled no piece (start() did not run)');
   const b = decScene({ storage });
   fly(b, 20, 20);
-  assert.deepEqual(b.dailyResult, { replay: true, best: 30, newBest: false }, 'Over shows the day\'s best');
+  assert.deepEqual(strip(b.dailyResult), { replay: true, best: 30, newBest: false }, 'Over shows the day\'s best');
   assert.deepEqual(b.dailyQueue.load().map((x) => x.score), [30], 'the lower final does not replace the unsent higher one');
   b.dailyQueue.drain(async () => 'ok');
   return b.dailyQueue.drain(async () => 'ok').then(() => {

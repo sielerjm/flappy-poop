@@ -544,6 +544,13 @@ export const TUNING = {
     // Home snowfall (src/ui/snowfall.js): white dots drifting down the ready screen; none under reduced motion (D6).
     snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9 },
     snowCap: { ox: -6.5, oy: -14.5 }, // px from a bottom pipe's cap top-left to the snow layer's top-left (process_art's --anchor report)
+    // Advent pieces (Stage 2, 2.6): piece k comes out on k Dec, up to `count` (submit_advent_piece's 24); a December Daily run
+    // offers one, rolled from the pieces out that the device has not found (today's weighs todayWeight, each other 1), in the
+    // first band slot nothing else took from a pair in [minPair, maxPair] pairs into the run (per-attempt RNG, never the
+    // course). Each run of the day that ends without it takes pityStep pairs off maxPair, down to floorPair.
+    piece: { count: 24, minPair: 3, maxPair: 20, pityStep: 3, floorPair: 6, todayWeight: 3 },
+    chipPx: 26, // px font of the home screen's Advent chip ("🧩 N/24 · 🎄 on track", readyLayout's adventChip box)
+    chipGapPx: 46, // px from the 🎅 circle's bottom to the chip's centre (clear of its halo; above the Bowelidays image)
     // The 🎅 that stands in for the 🌞 all December, a new one each time the home screen shows (pickSanta):
     // Santa, Mrs. Claus and Mx Claus in the five skin tones and plain. The first is the fallback; variants a
     // device cannot draw as one glyph are dropped at the first pick (supportedSantas). Drop the plain three here.
@@ -632,6 +639,9 @@ export const LEADERBOARD = {
   dailyKey: 'flappyPoop.daily', // localStorage key for this device's Daily Dump (🌞) attempt: claimed at the start, rewritten as the score grows
   dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
   dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full
+  adventKey: 'flappyPoop.advent', // localStorage key prefix for this device's Advent pieces (plan 17, 2.6): '<prefix>.<season>' holds { found: { piece: day }, miss: { day, n } }; the book is the device's own record
+  adventQueueKey: 'flappyPoop.adventQueue', // localStorage key for Advent pieces the board has not stored yet (submit_advent_piece), one per player, season and piece
+  adventQueueMax: 48, // pieces kept for a later post: a season's 24 for two players on one device; the oldest go first when full
   runQueueKey: 'flappyPoop.runQueue', // localStorage key for run summaries not yet sent (submit_runs; plan 30)
   runQueueMax: 50, // run summaries kept for a later send; the oldest go first when full (never the run behind a best not yet posted)
   runBatchMax: 20, // run summaries a sync sends in one submit_runs call (the server takes at most 20)
