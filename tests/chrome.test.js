@@ -121,6 +121,18 @@ test('the 🌞 opens the Daily Dump popup from the ready screen only, never over
   assert.deepEqual(intent({ state: 'ready', overlay: 'daily', input: 'changelog' }), { do: 'openChangelog', pause: false }, 'its version line');
 });
 
+test('the Advent book (plan 17, 2.15) opens from the ready screen or over the 🌞 popup only; closing goes back to the popup without the lockout', () => {
+  assert.deepEqual(intent({ state: 'ready', input: 'advent' }), { do: 'openAdvent', pause: false });
+  for (const state of STATES.filter((s) => s !== 'ready')) assert.deepEqual(intent({ state, input: 'advent' }), { do: 'ignore' }, state);
+  assert.deepEqual(intent({ state: 'ready', overlay: 'daily', input: 'advent' }), { do: 'openAdvent', pause: false }, 'its 🧩 line');
+  for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'stats', 'advent']) {
+    assert.deepEqual(intent({ state: 'ready', overlay, input: 'advent' }), { do: 'ignore' }, overlay);
+  }
+  assert.deepEqual(intent({ state: 'ready', overlay: 'advent', stackedUnder: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
+  assert.deepEqual(intent({ state: 'ready', overlay: 'advent', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
+  assert.deepEqual(intent({ state: 'ready', overlay: 'advent', input: 'changelog' }), { do: 'openChangelog', pause: false }, 'its version line');
+});
+
 test('howto while About is top opens HowTo; howto while HowTo is top is ignored', () => {
   for (const state of STATES) {
     assert.deepEqual(intent({ state, overlay: 'about', input: 'howto' }), { do: 'openHowTo', pause: false });

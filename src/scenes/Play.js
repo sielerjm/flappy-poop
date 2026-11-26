@@ -130,6 +130,7 @@ import {
   adventSpawnPair,
   adventSpawnHere,
   adventStatus,
+  adventBookSeason,
   adventAward,
   stormStartsHere,
   stormPhase,
@@ -1989,6 +1990,23 @@ export class Play extends Phaser.Scene {
     return store ? { [season]: adventAward(store.found(), season, T) } : {};
   }
 
+  /**
+   * What the Advent book shows (2.15): { season, found } for December's season (practice's sandbox in test mode, as
+   * adventNow), or after it last December's real record while it holds a piece (adventBookSeason); null: no book.
+   */
+  adventBook(day = dailyDay(this.registry)) {
+    const season = adventBookSeason(day, T, (y) => createAdventStore(undefined, y).count() > 0);
+    if (season === null) return null;
+    const store = this.adventSeasonOf(day) ? this.adventStoreFor(day, this.isTestMode()) : createAdventStore(undefined, season);
+    return { season, found: store.found() };
+  }
+
+  /** Open the Advent book; `onClose` (the save panel's button) runs when it closes, in place of going home. */
+  openAdvent({ onClose = null } = {}) {
+    this.adventOnClose = onClose;
+    this.handleChrome('advent');
+  }
+
   /** The home screen's Advent chip, on `day` (null hides it: off season, a match): the count only, "🧩 5/24" (Michael, 26 Nov: the tree's status stays in the Daily window). */
   refreshAdventChip(day) {
     const now = day && this.adventChip ? this.adventNow(day) : null;
@@ -3496,6 +3514,10 @@ export class Play extends Phaser.Scene {
       case 'openDaily':
         if (!this.scene.isActive('Daily')) this.scene.launch('Daily');
         this.scene.bringToTop('Daily');
+        break;
+      case 'openAdvent': // the Advent book (plan 17, 2.15)
+        if (!this.scene.isActive('Advent')) this.scene.launch('Advent');
+        this.scene.bringToTop('Advent');
         break;
       case 'openStats': {
         if (this.overlayPause(result)) this.pauseRun();

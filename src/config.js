@@ -557,6 +557,11 @@ export const TUNING = {
     // row floor(c / cols)). Piece k (out on k Dec) fills cell order[k − 1]: one plain shuffle shared by every player
     // (Michael, S7, 26 Nov), made once with createRng(20261201) and Fisher-Yates and fixed here as data.
     puzzle: { cols: 4, rows: 6, cellPx: 332, order: [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6] },
+    // The Advent book (2.15, Gate A sheet 5, Michael 26 Nov): a width x height panel centred on the field, "N of 24 found"
+    // (countPx) countDy from its centre, the grid's top gridDy from it; slots of cellPx x spriteDisplayScale (166) with no gaps.
+    // A locked slot is a flat lockFill square with a 1 px lockLine; a piece found on its own day wears a gold star of
+    // radius starR, starInset px in from its slot's top-right corner.
+    book: { width: 696, height: 1112, countPx: 36, countDy: -508, gridDy: -460, lockFill: 0x2a1420, lockLine: 0x4a2a3a, starR: 13, starInset: 18 },
     // Snow storms (Stage 2, 2.7): December Daily runs only, from the day's shared course (course.storm), so every run of a
     // day meets the same storms at the same pairs. A pair at least firstPair pairs into the run, and pairs + gapPairs after
     // the last storm's first pair, starts one when its draw is under `chance`; a banner shows one pair ahead; the storm

@@ -85,6 +85,7 @@ export const OVERLAYS = {
   daily: 'Daily',
   stats: 'Stats',
   quiz: 'Quiz',
+  advent: 'Advent',
 };
 
 /** Overlays that open only inside a run (the 📚 quiz: a level break or a crash), so the ready-screen loops skip them; their own sections cover them. */

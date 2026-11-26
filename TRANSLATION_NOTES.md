@@ -327,6 +327,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | reviveFree | No questions left: you're back in. | 没有题了：可以继续飞了。 |
 | eduNotSaved | Education runs are not on the 🏆 boards | 教育模式的成绩不上 🏆 排行榜 |
 | saveEduData | 📚 Education data | 📚 教育数据 |
+| saveAdvent | 🧩 Advent (2.15: the save panel's button that opens the Advent book, the December puzzle; in season, and after it while a piece is owned) | 🧩 圣诞拼图 |
 | eduIntroTitle | 📚 Education mode (plan 26: the popup the 📚 switch and glyph open) | 📚 教育模式 |
 | eduIntroBeta | Beta: the cards are still being checked. If one looks wrong, tap the 🚩 by its code to tell us. | 测试版：卡片仍在核对中。如果发现有误，请点卡片编号旁的 🚩 告诉我们。 |
 | eduIntroNotMedical | The cards are about how the gut and its microbes work. They are not medical advice. | 这些卡片讲的是肠道和肠道微生物如何运作，不是医疗建议。 |
@@ -601,6 +602,7 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | adventTreePlain | 🌲 (all 24 found, the last after 24 Dec) | 🌲 |
 | adventNoGift | No gift this run, play again (2.6: on Over after a December Daily run that offered a piece and ended without it) | 这局没有礼物，再来一局 |
 | adventCount | 🧩 {n}/{total} (2.6: the pieces found so far; on the home screen under the 🎅, the Daily popup and Over; {total} is 24) | 🧩 {n}/{total} |
+| adventBookCount | {n} of {total} found (2.15: the Advent book's only line, over the puzzle; {total} is 24) | 已找到 {n}/{total} |
 | adventOnTrack | 🧩 {n}/{total} · 🎄 on track (2.6: every piece out so far found, through 24 Dec: the decorated tree is in reach) | 🧩 {n}/{total} · 🎄 进度正好 |
 | adventPlainOpen | 🧩 {n}/{total} · 🌲 by 31 Dec (2.6: 25 to 31 Dec, not all found: the plain tree is still open) | 🧩 {n}/{total} · 🌲 12月31日前 |
 | adventDecorated | 🧩 {n}/{total} · 🎄 (2.6: all 24 found by 24 Dec) | 🧩 {n}/{total} · 🎄 |

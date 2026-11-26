@@ -52,7 +52,9 @@ export class Daily extends Phaser.Scene {
     const advent = this.scene.get('Play')?.adventNow?.(this.day) ?? null;
     if (advent) {
       const [count, today] = adventDailyLines(locale, advent, T.advent.piece.count);
-      this.add.text(cx, cy + 24, count, { ...STYLE, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5); // clear of the December body's seven English lines (it ends near cy − 11)
+      // A tap on it opens the Advent book over this popup (2.15); closing the book comes back here.
+      this.adventLine = this.add.text(cx, cy + 24, count, { ...STYLE, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5).setInteractive({ useHandCursor: true }); // clear of the December body's seven English lines (it ends near cy − 11)
+      this.adventLine.on('pointerdown', () => this.openBook());
       if (today) this.add.text(cx, cy + 62, today, { ...MUTED, fontSize: '24px' }).setOrigin(0.5);
     } else this.add.text(cx, cy + 30, `${this.glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`, { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
     // Under the button's row: why a name is needed, or that practice is not saved.
@@ -79,7 +81,7 @@ export class Daily extends Phaser.Scene {
     const close = this.add.text(cx + 256, cy - 396, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('daily', this.buttonZone), pressable('changelog', version)] });
+    this.focus = createFocus(this, T, { items: [pressable('close', close), ...(this.adventLine ? [pressable('advent', this.adventLine)] : []), pressable('daily', this.buttonZone), pressable('changelog', version)] });
     this.checking = false; // asking the 🌞 board whether this player already played today (verify)
     this.draw();
     this.verify();
@@ -147,6 +149,11 @@ export class Daily extends Phaser.Scene {
     if (played) this.countdown.setText(t(this.locale, 'dailyNext').replace('{time}', countdownText(msUntilUtcMidnight(new Date()))));
     // The 🎁 beside it once the day's own Advent piece was found that day (plan 17, 2.6), as the board's row shows it.
     else if (best) this.countdown.setText(t(this.locale, 'dailyTodaysBest').replace('{n}', String(best.score)) + (play?.adventNow?.(this.day)?.giftToday ? ' \u{1F381}' : ''));
+  }
+
+  /** The 🧩 line: the Advent book over this popup (plan 17, 2.15). */
+  openBook() {
+    if (isTopOverlay(this)) this.scene.get('Play')?.handleChrome('advent');
   }
 
   press() {

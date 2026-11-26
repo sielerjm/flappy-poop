@@ -38,12 +38,7 @@ const ALLOWED_KEYS = {};
 const CONFIG_ROOTS = ['TUNING', 'FIELD', 'LEADERBOARD', 'TEST_MODE', 'EDUCATION', 'SHARE', 'BACKGROUND'];
 
 /** Config leaves nothing reads, kept on purpose: dotted path → why. */
-const ALLOWED_KNOBS = {
-  'TUNING.advent.puzzle.cols': "plan 17, 2.13: the Advent book (2.15) is its first reader; tests/assets.test.js's grid table reads it now",
-  'TUNING.advent.puzzle.rows': "plan 17, 2.13: the Advent book (2.15) is its first reader; tests/assets.test.js's grid table reads it now",
-  'TUNING.advent.puzzle.cellPx': "plan 17, 2.13: the Advent book's loader (2.15) is its first reader; tests/assets.test.js's grid table reads it now",
-  'TUNING.advent.puzzle.order': 'plan 17, 2.13: the Advent book (2.15) is its first reader; tests/advent.test.js pins it now',
-};
+const ALLOWED_KNOBS = {};
 
 // --- scanners (pure; the self-tests at the bottom prove each can fail) ---
 

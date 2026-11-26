@@ -8,7 +8,7 @@ review and for the later step that copies the frames into the game.
 
 Run:    uv run --with pillow python3 tools/advent_puzzle.py --src PICTURE.png --out DIR \
             --cols 4 --rows 6 --cell 332 --order 7,14,4,18,17,22,12,10,20,3,23,19,8,13,1,0,11,16,21,9,15,2,5,6 \
-            [--pad] [--selftest]
+            [--pad] [--colours 256] [--selftest]
         --src       the picture (any size; RGB or RGBA)
         --out       output folder (created if missing)
         --cols, --rows, --cell   the grid and the frame side in px
@@ -16,6 +16,8 @@ Run:    uv run --with pillow python3 tools/advent_puzzle.py --src PICTURE.png --
                     that piece k fills
         --pad       a picture smaller than the grid is padded with its edge colour (default: only crops;
                     a smaller picture then fails)
+        --colours   write advent-puzzle.png with this many colours (octree with k-means, Floyd-Steinberg; 256
+                    takes the shipped sheet from 1.9 MB to about 0.43 MB with no visible change; plan 17, 2.15)
         --selftest  run the real arguments and three broken inputs (a repeated --order number, a sheet one
                     pixel too narrow, an output pixel with alpha 0); exit 0 only if the real run passes and
                     every broken input is caught
@@ -214,7 +216,7 @@ def parse_order(text):
         raise SystemExit(f"FAIL: --order must be a comma list of integers, got {text!r}")
 
 
-def run(src, out_dir, cols, rows, cell, order, pad):
+def run(src, out_dir, cols, rows, cell, order, pad, colours=0):
     """The real run. Returns a list of problems (empty if every check passed)."""
     problems = check_order(order, cols, rows)
     if problems:
@@ -245,6 +247,10 @@ def run(src, out_dir, cols, rows, cell, order, pad):
         problems += check_alpha(im, name)
     if ImageChops.difference(built, fitted).getbbox() is not None:
         problems.append("the frames rebuilt from advent-puzzle.png differ from the fitted picture")
+    if colours:
+        q = sheet.quantize(colours, method=Image.Quantize.FASTOCTREE, kmeans=2, dither=Image.Dither.FLOYDSTEINBERG)
+        outputs["advent-puzzle.png"] = q
+        print(f"colours:  advent-puzzle.png at {colours} colours")
     for name, im in outputs.items():
         path = out_dir / name
         im.save(path, optimize=True)
@@ -263,7 +269,7 @@ def selftest(args, order):
         results.append(ok)
         print(f"selftest: {'ok  ' if ok else 'FAIL'} {label}{(': ' + detail) if detail else ''}")
 
-    real = run(args.src, args.out, args.cols, args.rows, args.cell, order, args.pad)
+    real = run(args.src, args.out, args.cols, args.rows, args.cell, order, args.pad, args.colours)
     expect("real arguments pass", not real, "; ".join(real))
     for name in OUTPUTS:
         p = Path(args.out) / name
@@ -305,6 +311,7 @@ def main():
     ap.add_argument("--cell", type=int, required=True)
     ap.add_argument("--order", required=True)
     ap.add_argument("--pad", action="store_true")
+    ap.add_argument("--colours", type=int, default=0)
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     order = parse_order(args.order)
@@ -312,7 +319,7 @@ def main():
         ok = selftest(args, order)
         print("selftest: PASS" if ok else "selftest: FAIL")
         return 0 if ok else 1
-    problems = run(args.src, args.out, args.cols, args.rows, args.cell, order, args.pad)
+    problems = run(args.src, args.out, args.cols, args.rows, args.cell, order, args.pad, args.colours)
     for p in problems:
         print(f"FAIL: {p}")
     if not problems:

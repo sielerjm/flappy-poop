@@ -45,7 +45,7 @@ test('every this.load.image() / load.spritesheet() in src/ points at an existing
 // whose loader is not built yet (with the step that builds it); a pending entry whose loader exists fails, so the
 // entry is dropped when the loader lands (the orphans test's allowlist rule).
 const gridSheets = {
-  'advent-puzzle': { path: 'assets/advent/advent-puzzle.png', grid: TUNING.advent.puzzle, knob: 'puzzle.cellPx', pending: 'the Advent book (plan 17, 2.15) loads it' },
+  'advent-puzzle': { path: 'assets/advent/advent-puzzle.png', grid: TUNING.advent.puzzle, knob: 'puzzle.cellPx' }, // the Advent book's preload (plan 17, 2.15)
 };
 
 test('every grid sheet is cols x rows frames of its constant, loaded with that constant (plan 17, 2.13)', () => {

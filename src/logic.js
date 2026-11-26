@@ -2102,11 +2102,11 @@ export function chromeShown({ state, launching = false, quizOpen = false, shopOp
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'respawn'|'dead'} state ('respawn': a match half between a crash and its restart; pauses like 'playing', ignores taps)
- * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'|'stats'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'|'stats'|'advent'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
  * @param {boolean} stackedUnder true when Feedback, What's new or a profile sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'shop'|'quiz'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break; 'quiz': the 📚 pill in an education run's level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'advent'|'shop'|'quiz'|'tap'|'esc'|'close'} input ('advent': the Advent book, ready screen or over the 🌞 popup; 'shop': the 💰 button in a level break; 'quiz': the 📚 pill in an education run's level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @param {boolean} shop true while this half's level-break shop panel is open
  * @param {boolean} breaking true while this half is in its own level break (the only place the shop opens)
@@ -2141,6 +2141,9 @@ export function chromeIntent({
       if (overlay === 'stats') {
         return { do: 'closeTop', armResumeLockout: !stackedUnder }; // back to the board or the 🌞 popup underneath
       }
+      if (overlay === 'advent') {
+        return { do: 'closeTop', armResumeLockout: !stackedUnder }; // back to the 🌞 popup when it opened from its 🧩 line
+      }
       return { do: 'closeTop', armResumeLockout: !(overlay === 'about' && stackedSettings) };
     }
     if (input === 'feedback') return { do: 'openFeedback', pause: false };
@@ -2148,6 +2151,8 @@ export function chromeIntent({
     if (input === 'howto' && overlay === 'about') return { do: 'openHowTo', pause: false };
     // A profile (plan 08) opens over the board (a tapped name) or the 🌞 popup (the save panel over it).
     if (input === 'stats' && (overlay === 'leaderboard' || overlay === 'daily')) return { do: 'openStats', pause: false };
+    // The Advent book (plan 17, 2.15) opens over the 🌞 popup from its 🧩 line.
+    if (input === 'advent' && overlay === 'daily') return { do: 'openAdvent', pause: false };
     // A version line: What's new opens over any overlay (its own version links restart it instead).
     if (input === 'changelog' && overlay !== 'changelog') return { do: 'openChangelog', pause: false };
     return { do: 'ignore' };
@@ -2178,6 +2183,8 @@ export function chromeIntent({
   if (input === 'howto') return { do: 'openHowTo', pause: live };
   // The 🌞 popup starts a run, so it opens from the ready screen only.
   if (input === 'daily') return state === 'ready' ? { do: 'openDaily', pause: false } : { do: 'ignore' };
+  // The Advent book (plan 17, 2.15): from the home screen's Advent button (or the save panel), never mid-run.
+  if (input === 'advent') return state === 'ready' ? { do: 'openAdvent', pause: false } : { do: 'ignore' };
   if (input === 'changelog') return { do: 'openChangelog', pause: live };
   if (input === 'lang') return { do: 'openLanguage', pause: live };
   if (input === 'feedback') return { do: 'openFeedback', pause: live };
@@ -2604,6 +2611,55 @@ export function adventStatus(found, day, t) {
   if (!adventSeason(day, t)) return { n, tree: null };
   if (day <= eve) return { n, tree: adventBacklog(found, day, t).length === 0 ? 'onTrack' : null };
   return { n, tree: 'plainOpen' };
+}
+
+/**
+ * The Advent book's layout (plan 17, 2.15; Gate A sheet 5) on a `width` x `height` field: the panel centred, the ✕ in its
+ * top-right corner, "N of 24 found" above the grid, and the 24 slots (top-left corners, reading order) of `slot` px
+ * (a cell at spriteDisplayScale) with no gaps, so the full set reads as one picture; `centre` is the grid's.
+ */
+export function adventBookLayout(width, height, t) {
+  const b = t.advent.book;
+  const p = t.advent.puzzle;
+  const cx = width / 2;
+  const cy = height / 2;
+  const slot = p.cellPx * t.spriteDisplayScale;
+  const left = cx - (p.cols * slot) / 2;
+  const top = cy + b.gridDy;
+  const slots = Array.from({ length: p.cols * p.rows }, (_, c) => ({ x: left + slot * (c % p.cols), y: top + slot * Math.floor(c / p.cols) }));
+  return {
+    panel: { x: cx, y: cy, width: b.width, height: b.height },
+    close: { x: cx + b.width / 2 - 44, y: cy - b.height / 2 + 44 },
+    count: { x: cx, y: cy + b.countDy },
+    slot,
+    slots,
+    centre: { x: cx, y: top + (p.rows * slot) / 2 },
+  };
+}
+
+/**
+ * The pieces the book draws for `season` from a found-day record ({ piece: day }): [{ piece, cell (order[piece − 1]),
+ * onDay (found on its own release day) }] by piece. Days of other seasons and junk are left out.
+ */
+export function adventBookPieces(found, season, t) {
+  const out = [];
+  const month = String(t.advent.seasonMonth).padStart(2, '0');
+  for (let k = 1; k <= t.advent.piece.count; k += 1) {
+    const day = found?.[k];
+    if (!isDayKey(day) || !day.startsWith(`${season}-`)) continue;
+    out.push({ piece: k, cell: t.advent.puzzle.order[k - 1], onDay: day === `${season}-${month}-${String(k).padStart(2, '0')}` });
+  }
+  return out;
+}
+
+/**
+ * The season the book shows on `day`: December's own; after it (January to November), last December's while
+ * `hasPieces(year)` says this device holds a piece of it (read-only for owners, 2.16); else null (no book).
+ */
+export function adventBookSeason(day, t, hasPieces) {
+  if (adventSeason(day, t)) return Number(day.slice(0, 4));
+  const last = Number(String(day).slice(0, 4)) - 1;
+  return isDayKey(day) && hasPieces(last) ? last : null;
 }
 
 /**

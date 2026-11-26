@@ -222,12 +222,14 @@ test('the real tree: every src/**/*.js is in the import map and in FILES, each w
   assert.match(plan.build, new RegExp(`^${VERSION.replace(/\./g, '\\.')}-[0-9a-f]{10}$`));
 });
 
-test('the real tree: every asset Boot, loadLazyAudio, the splash cards, the trap and supabaseLoader ask for is listed with the query it is asked with', () => {
+test('the real tree: every asset Boot, loadLazyAudio, the Advent book, the splash cards, the trap and supabaseLoader ask for is listed with the query it is asked with', () => {
   const plan = planStamp(REPO);
   const urls = new Set(plan.files.map(([u]) => u));
   const read = (p) => readFileSync(join(REPO, p), 'utf8');
   const want = new Set();
   for (const m of read('src/scenes/Boot.js').matchAll(/this\.load\.(?:image|spritesheet|audio)\('[^']+', '(assets\/[^']+)' \+ V/g)) want.add(`${m[1]}?v=${VERSION}`);
+  // The Advent book loads its picture in its own preload, the first time it opens (plan 17, 2.15).
+  for (const m of read('src/scenes/Advent.js').matchAll(/this\.load\.spritesheet\('[^']+', '(assets\/[^']+)' \+ V/g)) want.add(`${m[1]}?v=${VERSION}`);
   const play = read('src/scenes/Play.js');
   const lazy = play.slice(play.indexOf('  loadLazyAudio() {'), play.indexOf('\n  }\n', play.indexOf('  loadLazyAudio() {')));
   for (const m of lazy.matchAll(/this\.load\.audio\('[^']+', '(assets\/[^']+)' \+ V\)/g)) want.add(`${m[1]}?v=${VERSION}`);
