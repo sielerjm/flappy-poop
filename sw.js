@@ -20,9 +20,9 @@
 // worker for that browser (src/swClient.js).
 
 // --- stamp (tools/sw_stamp.mjs; written by npm run push, empty in the committed file) ---
-const BUILD = '0.32.0-0c095fdea6';
+const BUILD = '0.32.0-06e359d05e';
 const FILES = [
-  ["index.html","711a23b9eaae977b8465b71ef44937c7ff399780e0087a718405297011f2c8da"],
+  ["index.html","8ca6d01e8ea4b1bc6708ddbd1ccadf8d77a0eaf76699bbfd97274888c02a4f9a"],
   ["src/achievements.js?h=a598390119","a5983901190503f9d81306082792f5d2ece31232a8269090219ea8f709b1fa86"],
   ["src/advent.js?h=792441568c","792441568cecbf6f843d89925bc5a392e7f3c87f8300e2b3ac73c1d5126194af"],
   ["src/changelog.js?h=af96ae32b6","af96ae32b6cb528ee0a54bd1a428d4a6729e3d54ffd79ab0f195c0be8c5e9f0e"],
@@ -32,7 +32,7 @@ const FILES = [
   ["src/i18n.js?h=0b3d4692cc","0b3d4692cc9fbe047f4c4286426614ff26907f18931ce18203208af5805d6204"],
   ["src/input/pad.js?h=e5def632b0","e5def632b0facc1e20e02b24c55d2b36e15ab42724c384e69fe60d6d677ae485"],
   ["src/leaderboard.js?h=f4d895fd4e","f4d895fd4e7c31894372421c877fb91fb9b0b4b81842bd7278f13da27175749f"],
-  ["src/logic.js?h=c44516e511","c44516e511e20e3430413ed4f5cb2982354a1df59db1a27f2c6030f05f38f190"],
+  ["src/logic.js?h=664ccf3764","664ccf37648c070c42406c6700d8f6e60e7d724fb6eba948526a5c2deb659b96"],
   ["src/main.js?h=08aad77068","08aad7706837efb4d0cedfef88661b98c020e7d923afe60c61d9cfe57822a7c4"],
   ["src/online.js?h=1acfbb4bdf","1acfbb4bdfa38e292d99c2199be795d7ce7811170f4cddbfd2b6bf6187ce45de"],
   ["src/onlineAccount.js?h=08f891661f","08f891661fb487b888e9e96a43e2484181dd22cb0b16f54e5986a751a7f7f4b8"],
