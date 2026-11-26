@@ -508,8 +508,8 @@ for _name, _size in ICONS + (APPLE_ICON,):
 # frame's centre (ref omitted: the stock frames always come from assets/src/) and the poop set's scale k, never
 # on its own pixels. The two fart twins sit on the stock fart's brown-mask centre (the hat does not move it),
 # the speech twin on the stock speech centre after the pre-transform that matches its drawing to the stock
-# canvas (scale 1.09, dx -181, dy -180). poop-dead-santa has no art yet (D13): add it here, stock "body",
-# when Poop_Emoji_Dead-santa.png arrives.
+# canvas (scale 1.09, dx -181, dy -180). poop-dead-santa (26 Nov) is cut on the stock dead frame's
+# body centre like the rest.
 ADVENT_TWINS = (
     ("poop-santa", "Poop_Emoji_Alive-santa.png", "body", None),
     ("poop-scared-santa", "PoopScared-santa.png", "body", None),
@@ -522,6 +522,7 @@ ADVENT_TWINS = (
     ("poop-stink-falling2-santa", "PoopStinkFalling2-santa.png", "body", None),
     ("poop-fart-santa1", "Poop_Fart-santa-1.png", "fart", None),
     ("poop-fart-santa2", "Poop_Fart-santa-2.png", "fart", None),
+    ("poop-dead-santa", "Poop_Emoji_Dead-santa.png", "body", None),
     ("poop-speech-santa", "Poop_Speech-santa.png", "speech", (1.09, -181, -180)),
 )
 for _name, _src, _stock, _pre in ADVENT_TWINS:

@@ -5,8 +5,8 @@
 // one flight), never in Boot. `twins` maps a stock key to the key shown while the season holds (seasonalSkin);
 // the stock key stays the game's state (Play.poopStockKey), so the race snapshot and the match slot send it and
 // each side maps it through its own skin. The fart alternates `fartFrames` on the stink frames' clock; its
-// `twins` entry is the first frame (the ghost has no clock). No poop-dead twin yet: the stock dead frame
-// shows (D13). Every file is a full 'assets/advent/….png' literal, so the service worker precaches it.
+// `twins` entry is the first frame (the ghost has no clock). The dead frame has its twin too
+// (D13's fallback ended 26 Nov). Every file is a full 'assets/advent/….png' literal, so the service worker precaches it.
 export const ADVENT_ART = {
   twins: {
     poop: 'poop-santa',
@@ -19,6 +19,7 @@ export const ADVENT_ART = {
     'poop-stink-falling1': 'poop-stink-falling1-santa',
     'poop-stink-falling2': 'poop-stink-falling2-santa',
     'poop-fart': 'poop-fart-santa1',
+    'poop-dead': 'poop-dead-santa',
     'poop-speech': 'poop-speech-santa',
     // The world pickups only (D2; 1.11): the HUD, the cards, Over and Stats keep the stock items.
     fiber: 'candy-cane',
@@ -39,6 +40,7 @@ export const ADVENT_ART = {
     'poop-stink-falling2-santa': 'assets/advent/poop-stink-falling2-santa.png',
     'poop-fart-santa1': 'assets/advent/poop-fart-santa1.png',
     'poop-fart-santa2': 'assets/advent/poop-fart-santa2.png',
+    'poop-dead-santa': 'assets/advent/poop-dead-santa.png',
     'poop-speech-santa': 'assets/advent/poop-speech-santa.png',
     'candy-cane': 'assets/advent/candy-cane.png',
     gingerbread: 'assets/advent/gingerbread.png',

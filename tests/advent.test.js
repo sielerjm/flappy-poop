@@ -156,14 +156,14 @@ test('the last 🎅 is kept beside the Daily Dump\'s key', () => {
 });
 
 // 1.10: the hatted poop frames, a texture-twin map (the stock key stays the state; 1.16 adds the scene's checks).
-test('seasonalSkin: every stock poop frame the game loads has its December twin in season, none off season; the dead frame stays stock (D13)', async () => {
+test('seasonalSkin: every stock poop frame the game loads has its December twin in season, none off season, the dead frame included', async () => {
   const { seasonalSkin } = await import('../src/logic.js');
   const { ADVENT_ART } = await import('../src/advent.js');
   const boot = readFileSync(new URL('../src/scenes/Boot.js', import.meta.url), 'utf8');
   const stock = [...boot.matchAll(/load\.image\('(poop[\w-]*)'/g)].map((m) => m[1]);
   assert.ok(stock.length >= 12 && stock.includes('poop-speech'), `Boot's poop frames: ${stock}`);
   const on = seasonalSkin('2026-12-05', T, ADVENT_ART);
-  for (const k of stock) assert.equal(Boolean(on.twins[k]), k !== 'poop-dead', `${k}: ${on.twins[k] ?? 'stock'}`);
+  for (const k of stock) assert.ok(on.twins[k], `${k}: no twin`);
   assert.deepEqual(on.fartFrames, ['poop-fart-santa1', 'poop-fart-santa2']);
   assert.equal(on.twins['poop-fart'], on.fartFrames[0], 'the ghost, with no fart clock, wears the first fart twin');
   for (const key of new Set([...Object.values(on.twins), ...on.fartFrames, on.snowCap])) assert.equal(on.files[key], `assets/advent/${key}.png`, key);
@@ -178,7 +178,8 @@ test('twinKey: the twin once it has loaded, else the stock key; the fart alterna
   assert.equal(twinKey('poop', on, 0, () => true), 'poop-santa');
   assert.equal(twinKey('poop', on, 0, () => false), 'poop', 'not loaded yet: the stock face');
   assert.equal(twinKey('poop', off, 0, () => true), 'poop');
-  assert.equal(twinKey('poop-dead', on, 0, () => true), 'poop-dead');
+  assert.equal(twinKey('poop-dead', on, 0, () => true), 'poop-dead-santa');
+  assert.equal(twinKey('poop-dead', on, 0, () => false), 'poop-dead', 'not loaded yet: the stock dead frame');
   assert.equal(twinKey('poop-fart', on, 0, () => true), 'poop-fart-santa1');
   assert.equal(twinKey('poop-fart', on, 1, () => true), 'poop-fart-santa2');
   assert.equal(twinKey('poop-fart', on, 1, (k) => k !== 'poop-fart-santa2'), 'poop-fart');

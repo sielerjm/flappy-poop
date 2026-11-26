@@ -3607,8 +3607,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             the optional h (hand) key
   advent.test.js            Christmas (plan 17): isDayKey / shiftDayKey, dailyNow / dailyDay / nextPretendDay
                             (the Pretend date only in test mode), adventSeason, dailyGlyph, fillDaily and the seven
-                            {daily} strings, pickSanta / supportedSantas, the twin map and its files, the stock
-                            dead frame (D13), Settings' Date row layout.
+                            {daily} strings, pickSanta / supportedSantas, the twin map and its files, the dead
+                            frame's twin, Settings' Date row layout.
   adventScene.test.js       The countdown line, and the December skin on the real Play prototype: the stock key
                             as state, the fart and boost alternation, the one lazy flight and its re-apply.
   ready.test.js             readyLayout boxes inside the field, non-overlapping,

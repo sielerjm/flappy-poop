@@ -89,6 +89,7 @@ const adventSquares = {
   'poop-stink-falling2-santa.png': 366,
   'poop-fart-santa1.png': 438,
   'poop-fart-santa2.png': 446,
+  'poop-dead-santa.png': 272,
   'poop-speech-santa.png': 510,
   'bacteria-santa.png': 196, // built at 1.11 (plan 17)
 };
