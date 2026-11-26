@@ -7,7 +7,7 @@ change or cut each piece before it enters assets/advent/. Nothing here touches s
 sheets go to the Dropbox checkout's .claude/plans/17-previews/gateA/ (gitignored).
 
 Run:    ~/.local/bin/uv run --with pillow python3 tools/advent_preview.py [--sheets 1,2,3,7]
-        --sheets  comma list of: 1, 2, 3, 7 (step 1.4), pipes (step 1.5), or all (default)
+        --sheets  comma list of: 1, 2, 3, 7 (step 1.4), pipes (step 1.5), 9 (step 1b.1), or all (default)
         --art DIR       fitted December art (default <main checkout>/meta/advent-previews/art-fit/)
         --guides DIR    pipe-cap guides (default .../meta/advent-previews/art-guides/)
         --backdrop PNG  sheet 7's ready-screen backdrop (default <out>/backdrop-home-720x1280.png)
@@ -689,6 +689,97 @@ def sheet7(inp, out, manifest, failures):
     sheet_save(c, out, "sheet7c-bowelidays-title-up.png", [inp.backdrop.name, "art-fit/poop-speech-santa", "art-fit/bowelidays"], manifest)
 
 
+# ---------------------------------------------------------------- step 1b.1: sheet 9, the loading screen's hatted poop
+# The splash's numbers, read from index.html as tests/html.test.js reads them (a moved line fails loudly).
+SPLASH_OPTIONS = [  # (label, left, top, size) as shares of the hero box; the stock box first
+    ("Today (stock poop.png)", None, None, None),
+    ("A: the brief's box, 64 % moved", 0.15, 0.19, 0.64),
+    ("B: 64 %, centred for the most room", 0.195, 0.195, 0.64),
+    ("C: 70 %, the biggest box that passes", 0.165, 0.17, 0.70),
+]
+
+
+def splash_numbers():
+    html = (ROOT / "index.html").read_text()
+    blk = re.search(r"\.splash-poop \{([^}]*)\}", html).group(1)
+    pct = lambda prop: float(re.search(rf"(?:^|[\s;]){prop}: (-?[\d.]+)%", blk).group(1)) / 100
+    bob = float(re.search(r"@keyframes splash-bob \{ from \{ transform: translateY\(-([\d.]+)%\); \} to \{ transform: translateY\(([\d.]+)%\)", html).group(2)) / 100
+    stroke = float(re.search(r"\.splash-ring circle \{[^}]*stroke-width: ([\d.]+);", html).group(1))
+    r = float(re.search(r'class="splash-arc" cx="60" cy="60" r="(\d+)"', html).group(1))
+    hexc = lambda name: tuple(int(re.search(rf"--{name}: #([0-9a-f]{{6}})", html).group(1)[i:i + 2], 16) for i in (0, 2, 4))
+    return {"left": pct("left"), "top": pct("top"), "w": pct("width"), "bob": bob, "stroke": stroke, "r": r,
+            "bg": hexc("splash-bg"), "brown": hexc("splash-brown")}
+
+
+def splash_reach(im, left, top, w, bob):
+    """tests/html.test.js's ring check: the farthest pixel with alpha > 32 from the hero centre, at both ends of the bob."""
+    px = im.getchannel("A").load()
+    worst = 0.0
+    for y in range(im.height):
+        for x in range(im.width):
+            if px[x, y] <= 32:
+                continue
+            for dy in (-bob, bob):
+                worst = max(worst, math.hypot(left + w * ((x + 0.5) / im.width) - 0.5, top + w * ((y + 0.5) / im.height + dy) - 0.5))
+    return worst
+
+
+def splash_hero(sn, im, left, top, w, dy, size):
+    """One hero box at `size` px: the track, a part-filled arc, the poop at one end of its bob, the inner edge and the 2 % line."""
+    k = 4
+    big = Image.new("RGBA", (size * k, size * k), sn["bg"] + (255,))
+    d = ImageDraw.Draw(big)
+    c, rr, sw = size * k / 2, sn["r"] / 120 * size * k, sn["stroke"] / 120 * size * k
+    box = (c - rr - sw / 2, c - rr - sw / 2, c + rr + sw / 2, c + rr + sw / 2)  # PIL strokes inward from the box
+    track = tuple(int(b + (s - b) * 0.18) for b, s in zip(sn["bg"], sn["brown"]))
+    d.ellipse(box, outline=track + (255,), width=int(round(sw)))
+    d.arc(box, -90, -90 + 0.65 * 360, fill=sn["brown"] + (255,), width=int(round(sw)))
+    hero = big.resize((size, size), Image.Resampling.LANCZOS)
+    poop = im.resize((int(round(w * size)), int(round(w * size))), Image.Resampling.LANCZOS)
+    paste_subpixel(hero, poop, left * size, (top + w * dy) * size)
+    inner = (sn["r"] - sn["stroke"] / 2) / 120 * size
+    ring(hero, size / 2, size / 2, inner, (200, 30, 30), 1, halo=False)
+    lim = inner - 0.02 * size
+    dd = ImageDraw.Draw(hero)
+    for i in range(0, 360, 8):  # the 2 % clearance line, dotted
+        a0, a1 = math.radians(i), math.radians(i + 4)
+        dd.line((size / 2 + lim * math.cos(a0), size / 2 + lim * math.sin(a0), size / 2 + lim * math.cos(a1), size / 2 + lim * math.sin(a1)),
+                fill=(30, 90, 200, 255), width=1)
+    return hero
+
+
+def sheet9(inp, out, manifest, failures):
+    sn = splash_numbers()
+    stock, santa = load(ASSETS / "poop.png"), load(ASSETS / "advent/poop-santa.png")
+    limit = (sn["r"] - sn["stroke"] / 2) / 120 - 0.02
+    sheet = new_sheet(sn["bg"])
+    header(sheet, ["Sheet 9 (1b.1): the loading screen's hatted poop, December box",
+                   f"each pair: top and bottom of the bob (±{sn['bob'] * 100:.0f} % of the box); red = the ring's inner edge, blue dots = 2 % inside it",
+                   f"the test passes when the art's farthest pixel (alpha > 32) is at most {limit:.3f} of the box from the centre",
+                   "the December splash decoration (1b.2) is not drawn: its art is not in yet"])
+    y = 108
+    for i, (label, left, top, w) in enumerate(SPLASH_OPTIONS):
+        im = stock if left is None else santa
+        if left is None:
+            left, top, w = sn["left"], sn["top"], sn["w"]
+        size = 160 if i == 0 else 266
+        reach = splash_reach(im, left, top, w, sn["bob"])
+        body = 100 * w / sn["w"] * (stock.width / im.width)
+        ok = reach <= limit
+        if not ok:
+            failures.append(f"sheet 9 {label}: the poop reaches {reach:.3f}, over {limit:.3f}")
+        x0 = (W_PX - 2 * size - 16) // 2
+        for j, dy in enumerate((-sn["bob"], sn["bob"])):
+            sheet.alpha_composite(splash_hero(sn, im, left, top, w, dy, size), (x0 + j * (size + 16), y))
+            text(sheet, (x0 + j * (size + 16) + 6, y + 4), "top of bob" if j == 0 else "bottom of bob", 11, (90, 60, 30))
+        y += size + 6
+        text(sheet, (W_PX // 2, y), label, 14, (60, 30, 10), True, "ma")
+        text(sheet, (W_PX // 2, y + 18), f"left {left * 100:.1f} %, top {top * 100:.1f} %, size {w * 100:.0f} %;  reach {reach:.3f} of {limit:.3f}"
+             f" ({'passes' if ok else 'FAILS'});  body {body:.0f} % of today's", 12, (60, 30, 10) if ok else (190, 20, 20), False, "ma")
+        y += 44
+    sheet_save(sheet, out, "sheet9-loading-poop.png", ["index.html (.splash-poop, ring, bob)", "assets/poop.png", "assets/advent/poop-santa.png"], manifest)
+
+
 def header(sheet, lines):
     """Title lines on a light panel across the top (over the ceiling strip, which the screens never use for text)."""
     sheet.alpha_composite(Image.new("RGBA", (W_PX, 16 + 19 * len(lines)), (255, 255, 255, 215)), (0, 8))
@@ -923,7 +1014,7 @@ def selftest(inp):
 def main():
     main_co = main_checkout()
     ap = argparse.ArgumentParser(description="Gate A mock-up sheets for the December art (plan 17, 1.4 and 1.5)")
-    ap.add_argument("--sheets", default="all", help="comma list of 1, 2, 3, 7, pipes or all")
+    ap.add_argument("--sheets", default="all", help="comma list of 1, 2, 3, 7, 9, pipes or all")
     ap.add_argument("--art", default=str(main_co / "meta/advent-previews/art-fit"))
     ap.add_argument("--guides", default=str(main_co / "meta/advent-previews/art-guides"))
     ap.add_argument("--out", default=str(main_co / ".claude/plans/17-previews/gateA"))
@@ -934,8 +1025,8 @@ def main():
     inp = Inputs(args.art, args.guides, backdrop)
     if args.selftest:
         sys.exit(selftest(inp))
-    wanted = {"1", "2", "3", "7", "pipes"} if args.sheets == "all" else set(args.sheets.split(","))
-    unknown = wanted - {"1", "2", "3", "7", "pipes"}
+    wanted = {"1", "2", "3", "7", "9", "pipes"} if args.sheets == "all" else set(args.sheets.split(","))
+    unknown = wanted - {"1", "2", "3", "7", "9", "pipes"}
     if unknown:
         raise SystemExit(f"unknown sheet(s): {', '.join(sorted(unknown))}")
     manifest, failures = [], []
@@ -947,6 +1038,8 @@ def main():
         sheet3(inp, args.out, manifest, failures)
     if "7" in wanted:
         sheet7(inp, args.out, manifest, failures)
+    if "9" in wanted:
+        sheet9(inp, args.out, manifest, failures)
     if "pipes" in wanted:
         pipes_sheets(inp, args.out, manifest, failures)
     for m in manifest:
