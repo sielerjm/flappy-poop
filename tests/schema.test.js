@@ -508,7 +508,7 @@ test("daily_board: a day's top by score (earlier post first), the caller flagged
   assert.deepEqual(old.map((r) => [r.rank, r.score, r.total]), [[1, 9999, 1]], 'p_day picks another day');
   assert.equal((await dboard(db, null, null, 500)).length, 33, 'the limit caps at 100, more than this day has');
   assert.equal((await dboard(db, 'garbage')).length, 25, 'a bad id is no caller');
-  assert.ok(Object.keys(top[0]).every((k) => ['rank', 'name', 'score', 'level', 'pipes', 'me', 'total'].includes(k)), 'no ids leave the server');
+  assert.ok(Object.keys(top[0]).every((k) => ['rank', 'name', 'score', 'level', 'pipes', 'me', 'total', 'gift'].includes(k)), 'no ids leave the server (gift: the 🎁, plan 17)');
 });
 
 test('the daily day is UTC whatever the session time zone says', async () => {
@@ -1823,7 +1823,8 @@ async function liveView(db) {
     meta: await rows('select player_id, dev, exact from public.player_meta order by player_id'),
     board: await call('select name, score, toilet, level from public.scores order by name, toilet'),
     medals: await call('select * from public.tournament_board($1, 25)', [id('UpAlice')]),
-    dailyBoard: await call('select * from public.daily_board($1, null, 25)', [id('UpAlice')]),
+    // gift (plan 17, 2.4): new on a 🌞 row, set aside as education is; the upgrade test checks it is false.
+    dailyBoard: (await call('select * from public.daily_board($1, null, 25)', [id('UpAlice')])).map(({ gift, ...r }) => r),
     rank: await call('select public.player_rank($1, false) as r', [id('UpAlice')]),
     aliasName: await call('select public.player_name($1) as r', [id('UpCarolOld')]),
     available: await call('select public.name_available($1, $2) as r', ['upalice', id('UpZed')]),
@@ -1845,6 +1846,7 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   assert.ok(before.scores.length >= 5 && before.aliases.length === 1 && before.daily.length === 4 && before.counters.length >= 2 && before.tournaments.length === 4, 'the seed wrote every kind of row');
   await db.exec(SQL);
   assert.deepEqual(await liveView(db), before, 'after the first apply');
+  assert.deepEqual((await asAnon(db, 'select gift from public.daily_board($1, null, 25)', [id('UpAlice')])).rows.map((r) => r.gift).filter(Boolean), [], 'no 🎁 on an upgraded board (no pieces yet; plan 17)');
   await db.exec(SQL);
   assert.deepEqual(await liveView(db), before, 'after a second apply');
   assert.equal((await asAnon(db, 'select public.schema_version() as v')).rows[0].v, stampOf(SQL), 'the upgraded database answers the new stamp');
