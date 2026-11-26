@@ -565,6 +565,9 @@ export const TUNING = {
       extra: 144, fallMul: 2, minPx: 5, maxPx: 14, gust: 0.35, swirls: 2, swirlR: 160, swirlS: 180,
       fartWind: 420, fartRampMs: 250, bannerPx: 48, bannerY: 320,
     },
+    // December's sounds (2.7a; Michael's Pixabay clips, CREDITS.md): the twinkle when a piece is caught, and the blizzard
+    // looped under a storm, faded in from the banner (blizzardFadeMs) and out as the storm ends. Levels for his listen check.
+    sound: { foundVolume: 0.6, blizzardVolume: 0.35, blizzardFadeMs: 1200 },
     // The 🎅 that stands in for the 🌞 all December, a new one each time the home screen shows (pickSanta):
     // Santa, Mrs. Claus and Mx Claus in the five skin tones and plain. The first is the fallback; variants a
     // device cannot draw as one glyph are dropped at the first pick (supportedSantas). Drop the plain three here.

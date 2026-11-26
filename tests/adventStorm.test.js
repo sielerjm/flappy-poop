@@ -221,3 +221,35 @@ test('Play: a flap in a storm is stormFlap as strong; calmAir puts everything ba
   c.calmAir();
   assert.deepEqual([c.stormFlap, c.stormScroll, banner.visible, calls.storm.at(-1), calls.air.at(-1)], [1, 1, false, 0, null]);
 });
+
+test('Play: the blizzard loop fades in from the banner, holds through the storm, fades out after it; pause holds it, calmAir stops it (2.7a)', () => {
+  const made = [];
+  const { s } = airScene({ passed: 18 });
+  s.cache = { audio: { exists: (k) => k === 'advent-blizzard' } };
+  s.sound = { add: (key, cfg) => { const snd = { key, cfg, volume: cfg.volume, playing: false, paused: false, play() { this.playing = true; }, stop() { this.playing = false; }, destroy() { this.gone = true; }, setVolume(v) { this.volume = v; }, pause() { this.paused = true; }, resume() { this.paused = false; } }; made.push(snd); return snd; } };
+  const F = T.advent.sound.blizzardFadeMs;
+  s.tickAir(F / 2); // the banner: half way up
+  assert.equal(made.length, 1);
+  assert.deepEqual([made[0].key, made[0].cfg.loop, made[0].playing], ['advent-blizzard', true, true]);
+  assert.ok(Math.abs(made[0].volume - T.advent.sound.blizzardVolume / 2) < 1e-9, 'fading in over the banner');
+  s.pipesPassed = 19;
+  for (let i = 0; i < 10; i += 1) s.tickAir(F / 5);
+  assert.equal(made[0].volume, T.advent.sound.blizzardVolume, 'full under the storm');
+  s.blizzard.pause();
+  assert.equal(made[0].paused, true);
+  s.blizzard.resume();
+  s.pipesPassed = 19 + S.pairs;
+  for (let i = 0; i < 10; i += 1) s.tickAir(F / 5);
+  assert.deepEqual([made[0].playing, made[0].gone, s.blizzard], [false, true, null], 'faded out, stopped and dropped');
+  // calmAir (a death mid-storm) stops it at once.
+  s.pipesPassed = 19;
+  for (let i = 0; i < 10; i += 1) s.tickAir(F / 5);
+  assert.equal(made.length, 2);
+  s.calmAir();
+  assert.deepEqual([made[1].playing, s.blizzard], [false, null]);
+  // No file yet: silence, no error.
+  const { s: quiet } = airScene({ passed: 19 });
+  quiet.cache = { audio: { exists: () => false } };
+  quiet.sound = { add: () => assert.fail('nothing to add') };
+  assert.doesNotThrow(() => quiet.tickAir(500));
+});

@@ -470,7 +470,14 @@ Inspired by Flappy Bird`,
     dailyNewBest: 'New best today!',
     adventFoundToday: "Found today's gift!",
     stormAhead: 'Snowstorm ahead!',
-    adventFoundLate: 'Found a catch-up gift (Dec {d})!',
+    adventFoundLate: "Found a previous day's puzzle!",
+    adventFoundLeft: '\u{1F9E9} {n} of {total} found \u00b7 {left} left',
+    adventTodayFound: "Today's piece: found",
+    adventTodayMissing: "Today's piece: not found yet",
+    adventTreeOnTrack: '\u{1F384} on track',
+    adventTreePlainOpen: '\u{1F332} by 31 Dec',
+    adventTreeDecorated: '\u{1F384}',
+    adventTreePlain: '\u{1F332}',
     adventNoGift: 'No gift this run, play again',
     adventCount: '\u{1F9E9} {n}/{total}',
     adventOnTrack: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384} on track',
@@ -1304,7 +1311,14 @@ Inspired by Flappy Bird`,
     dailyNewBest: '今日新纪录！',
     adventFoundToday: '找到了今天的礼物！',
     stormAhead: '前方有暴风雪！',
-    adventFoundLate: '补到一份礼物（12月{d}日）！',
+    adventFoundLate: '找到了往日的拼图！',
+    adventFoundLeft: '\u{1F9E9} 已找到 {n}/{total} \u00b7 还剩 {left}',
+    adventTodayFound: '今天的拼图：已找到',
+    adventTodayMissing: '今天的拼图：还没找到',
+    adventTreeOnTrack: '\u{1F384} 进度正好',
+    adventTreePlainOpen: '\u{1F332} 12月31日前',
+    adventTreeDecorated: '\u{1F384}',
+    adventTreePlain: '\u{1F332}',
     adventNoGift: '这局没有礼物，再来一局',
     adventCount: '\u{1F9E9} {n}/{total}',
     adventOnTrack: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384} 进度正好',
@@ -1919,10 +1933,21 @@ export function adventLineText(locale, { n, tree }, total) {
   return t(locale, key).replace('{n}', String(n)).replace('{total}', String(total));
 }
 
-/** The game-over line for a December Daily's piece: today's, a catch-up one (its day of December), or none this run. */
+/** The game-over line for a December Daily's piece: today's, a previous day's (Michael, 26 Nov), or none this run. */
 export function adventFoundText(locale, { found, late }) {
   if (!found) return t(locale, 'adventNoGift');
-  return late ? t(locale, 'adventFoundLate').replace('{d}', String(found)) : t(locale, 'adventFoundToday');
+  return late ? t(locale, 'adventFoundLate') : t(locale, 'adventFoundToday');
+}
+
+/**
+ * The Daily window's two December lines (S14, Michael 26 Nov): ["🧩 5 of 24 found · 19 left", "Today's piece: found ·
+ * 🎄 on track"]; the second drops today's piece on 25–31 Dec (none comes out) and the tree when there is none to show.
+ */
+export function adventDailyLines(locale, { status, today }, total) {
+  const first = t(locale, 'adventFoundLeft').replace('{n}', String(status.n)).replace('{total}', String(total)).replace('{left}', String(total - status.n));
+  const tree = { onTrack: 'adventTreeOnTrack', plainOpen: 'adventTreePlainOpen', decorated: 'adventTreeDecorated', plain: 'adventTreePlain' }[status.tree];
+  const parts = [today === 'found' ? t(locale, 'adventTodayFound') : today === 'missing' ? t(locale, 'adventTodayMissing') : null, tree ? t(locale, tree) : null].filter(Boolean);
+  return [first, parts.join(' \u00b7 ')];
 }
 
 /** The 📚 board's footer for the player's own row: "You: #3 of 12 · 92.5 %". */

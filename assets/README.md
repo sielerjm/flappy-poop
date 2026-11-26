@@ -70,6 +70,8 @@ Audio files live in `assets/sfx/`. Every file there must be named in `CREDITS.md
 | `sfx/Coin_Spend.mp3` | A shop purchase. Via Pixabay. See `CREDITS.md`. |
 | `sfx/ShopOpenClose.mp3` | The level-break shop opening and closing. Via Pixabay. See `CREDITS.md`. |
 | `sfx/ToiletFlush_Win.mp3` | The toilet flush when GO appears in a two-player countdown. "Toilet Flush 1" by FreeSounds-4U via Pixabay. See `CREDITS.md`. |
+| `sfx/Advent_PieceFound.mp3` | December (plan 17, 2.7a): the twinkle when a Daily run catches its Advent piece (2.0 s). Loaded in season only. "Christmas Twinkle Effect" by Dragon-Studio via Pixabay. See `CREDITS.md`. |
+| `sfx/Advent_Blizzard.mp3` | December (2.7a): a quiet looped blizzard under a snow storm (13.5 s loop, the seam crossfaded), faded in from the warning banner and out as the storm ends. Loaded in season only. "Blizzard" by tanweraman via Pixabay. See `CREDITS.md`. |
 
 Re-encodes (plan 35, 2.2): `ToiletFlush_Win.mp3` (mono, 80 kbps, 48 kHz) and `fart_accelerate.mp3` (mono, 48 kbps, 24 kHz), both CBR with `ffmpeg -i <original> -map_metadata -1 -ac 1 -c:a libmp3lame -b:a <rate>`, accepted by ear. Keep a clip's duration when re-encoding: a super fart lasts exactly `fart_accelerate`'s length (`TUNING.beans.powerMs`, 4344 ms). `NewLevel.mp3` stays the original stereo 256 kbps encode: a mono or 96 kbps joint-stereo version lost the A/B.
 

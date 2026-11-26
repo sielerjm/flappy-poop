@@ -214,7 +214,11 @@ test('submit_advent_piece and advent_progress through the Data API: stored with 
 
 /** A Play stand-in on a December Daily: a real store and queue in fake storage, a fixed RNG. */
 function pieceScene({ day = '2026-12-05', test = false, storage = fakeStorage(), rng = () => 0, reg = registry() } = {}) {
+  const played = [];
   return playScene({
+    played,
+    cache: { audio: { exists: (k) => k === 'advent-found' } },
+    sound: { play: (k, o) => played.push([k, o.volume]) },
     registry: reg,
     runIsTest: test,
     isTestMode: () => test,
@@ -242,6 +246,7 @@ test('Play: the piece is caught once, into the store and the queue; practice kee
   s.advent = s.rollAdvent({ day: '2026-12-05', level: 3 }, 0);
   s.takeAdvent();
   s.takeAdvent();
+  assert.deepEqual(s.played, [['advent-found', T.advent.sound.foundVolume]], 'the twinkle, once (2.7a)');
   assert.deepEqual(s.adventStores.get(2026).found(), { 1: '2026-12-05' });
   assert.deepEqual(s.adventQueue.load(), [{ playerId: PID, season: 2026, piece: 1, day: '2026-12-05' }], 'queued once');
   assert.deepEqual(s.adventOutcome(), { offered: true, found: 1, late: true, status: { n: 1, tree: null } }, 'piece 1 on 5 Dec: a catch-up gift');
@@ -284,4 +289,24 @@ test('Play: the Advent sync steps never throw, so the posts after them in syncLe
   const s = playScene({ save: { id: PID }, adventQueue: { drain: () => { throw new Error('boom'); } } }); // no registry, a queue that throws
   await assert.doesNotReject(() => s.drainAdvent());
   await assert.doesNotReject(() => s.pullAdventProgress());
+});
+
+test('the Daily window\'s two December lines (S14): the count and what is left; today\'s piece and the tree; home shows the count alone', async () => {
+  const { adventDailyLines } = await import('../src/i18n.js');
+  const upTo = (n) => Object.fromEntries(Array.from({ length: n }, (_, i) => [i + 1, `2026-12-${String(i + 1).padStart(2, '0')}`]));
+  const at = (found, day) => {
+    const k = Number(day.slice(8, 10));
+    return { status: adventStatus(found, day, T), today: k <= 24 ? (found[k] === day ? 'found' : 'missing') : null };
+  };
+  assert.deepEqual(adventDailyLines('en', at(upTo(5), '2026-12-05'), 24), ['\u{1F9E9} 5 of 24 found · 19 left', "Today's piece: found · \u{1F384} on track"]);
+  assert.deepEqual(adventDailyLines('en', at(upTo(3), '2026-12-05'), 24), ['\u{1F9E9} 3 of 24 found · 21 left', "Today's piece: not found yet"]);
+  assert.deepEqual(adventDailyLines('en', at(upTo(20), '2026-12-27'), 24), ['\u{1F9E9} 20 of 24 found · 4 left', '\u{1F332} by 31 Dec'], 'no piece of the day after the 24th');
+  assert.deepEqual(adventDailyLines('zh-Hans', at(upTo(5), '2026-12-05'), 24), ['\u{1F9E9} 已找到 5/24 · 还剩 19', '今天的拼图：已找到 · \u{1F384} 进度正好']);
+  // The home chip: the count only (Michael, 26 Nov), whatever the tree.
+  let text = null;
+  const s = pieceScene();
+  s.adventStores.get(2026).merge(Object.entries(upTo(5)).map(([k, day]) => ({ piece: Number(k), day })));
+  Object.assign(s, { locale: 'en', readyUiShown: true, adventChip: { setText(v) { text = v; return this; }, setVisible() { return this; } } });
+  s.refreshAdventChip('2026-12-05');
+  assert.equal(text, '\u{1F9E9} 5/24');
 });

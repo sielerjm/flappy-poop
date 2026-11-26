@@ -93,6 +93,16 @@
   Pixabay Content License, published 2025-05-30. Plays when the poop touches
   a challenge question's ❓ bubble in education mode. Bundled inside the game
   only; not redistributed as a standalone file.
+- `assets/sfx/Advent_PieceFound.mp3` — "Christmas Twinkle Effect" by
+  Dragon-Studio, https://pixabay.com/sound-effects/musical-christmas-twinkle-effect-451850/,
+  Pixabay Content License. Plays when a December Daily run catches its Advent
+  piece (re-encoded mono, 96 kbps). Bundled inside the game only; not
+  redistributed as a standalone file.
+- `assets/sfx/Advent_Blizzard.mp3` — "Blizzard" by tanweraman,
+  https://pixabay.com/sound-effects/nature-blizzard-445020/, Pixabay Content
+  License. Loops quietly under a December snow storm (re-encoded mono, 48 kbps,
+  its last 1.5 s crossfaded into its start so it loops without a seam). Bundled
+  inside the game only; not redistributed as a standalone file.
 
 ## Services
 

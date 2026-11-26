@@ -591,7 +591,14 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | dailyNewBest | New best today! (December, plan 17: on Over when a December Daily beats the day's best on this device) | 今日新纪录！ |
 | adventFoundToday | Found today's gift! (December, plan 17, 2.6: on Over after a Daily Dump run that caught the day's Advent piece) | 找到了今天的礼物！ |
 | stormAhead | Snowstorm ahead! (December, plan 17, 2.7: the banner one pipe pair before a Daily Dump run's snow storm, in the score's style under the popup rows; Gate A sheet 4b (a)) | 前方有暴风雪！ |
-| adventFoundLate | Found a catch-up gift (Dec {d})! (2.6: on Over when the run caught an earlier day's piece; {d} is its day of December, 1 to 24) | 补到一份礼物（12月{d}日）！ |
+| adventFoundLate | Found a previous day's puzzle! (2.6: on Over when the run caught an earlier day's piece; Michael's words, 26 Nov) | 找到了往日的拼图！ |
+| adventFoundLeft | 🧩 {n} of {total} found · {left} left (S14: the Daily popup's first December line; {total} is 24, {left} = total − n) | 🧩 已找到 {n}/{total} · 还剩 {left} |
+| adventTodayFound | Today's piece: found (S14: the Daily popup's second December line, 1–24 Dec) | 今天的拼图：已找到 |
+| adventTodayMissing | Today's piece: not found yet (S14: as above) | 今天的拼图：还没找到 |
+| adventTreeOnTrack | 🎄 on track (after today's piece on the Daily popup: every piece out so far found, through 24 Dec) | 🎄 进度正好 |
+| adventTreePlainOpen | 🌲 by 31 Dec (25–31 Dec, not all found: the plain tree is still open) | 🌲 12月31日前 |
+| adventTreeDecorated | 🎄 (all 24 found by 24 Dec) | 🎄 |
+| adventTreePlain | 🌲 (all 24 found, the last after 24 Dec) | 🌲 |
 | adventNoGift | No gift this run, play again (2.6: on Over after a December Daily run that offered a piece and ended without it) | 这局没有礼物，再来一局 |
 | adventCount | 🧩 {n}/{total} (2.6: the pieces found so far; on the home screen under the 🎅, the Daily popup and Over; {total} is 24) | 🧩 {n}/{total} |
 | adventOnTrack | 🧩 {n}/{total} · 🎄 on track (2.6: every piece out so far found, through 24 Dec: the decorated tree is in reach) | 🧩 {n}/{total} · 🎄 进度正好 |

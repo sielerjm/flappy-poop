@@ -4,7 +4,7 @@ import { versionText, chromeIntent, overlayOutsideHit, dailyDay, dailyLevel, msU
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createButton } from '../ui/button.js';
-import { t, metaFontSize, levelLabel, fillDaily, adventLineText } from '../i18n.js';
+import { t, metaFontSize, levelLabel, fillDaily, adventDailyLines } from '../i18n.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
@@ -48,9 +48,13 @@ export class Daily extends Phaser.Scene {
     this.add.text(cx, cy - 130, fillDaily(t(locale, adventSeason(this.day, T) ? 'dailyBodyDec' : 'dailyBody'), this.glyph), { ...MUTED, fontSize: '28px', wordWrap: wrap, lineSpacing: 6 }).setOrigin(0.5);
     // The day in four pictures (no words, so nothing to translate): sun up, poop, sleep, repeat. In December
     // (plan 17, 2.6) the Advent pieces found and the tree in reach take their place ("🧩 5/24 · 🎄 on track").
+    // S14 (Michael, 26 Nov): "🧩 5 of 24 found · 19 left" and "Today's piece: found · 🎄 on track" (the tree's status lives here, not on home).
     const advent = this.scene.get('Play')?.adventNow?.(this.day) ?? null;
-    if (advent) this.add.text(cx, cy + 30, adventLineText(locale, advent.status, T.advent.piece.count), { ...STYLE, fontSize: '34px', color: '#ffd700' }).setOrigin(0.5);
-    else this.add.text(cx, cy + 30, `${this.glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`, { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
+    if (advent) {
+      const [count, today] = adventDailyLines(locale, advent, T.advent.piece.count);
+      this.add.text(cx, cy + 14, count, { ...STYLE, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5);
+      if (today) this.add.text(cx, cy + 56, today, { ...MUTED, fontSize: '24px' }).setOrigin(0.5);
+    } else this.add.text(cx, cy + 30, `${this.glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`, { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
     // Under the button's row: why a name is needed, or that practice is not saved.
     this.note = this.add.text(cx, cy + 105, '', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5);
     // Or, when there is no note, the Daily Dump streak (plan 34, round 2: Michael), in the 🌞 subscript's orange.

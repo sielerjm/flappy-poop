@@ -480,6 +480,7 @@ export class Play extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.game.events.off('advent-art', reapplySkin);
       this.events.off('postupdate', this.placeSnowCaps, this); // the scene's emitter outlives a restart
+      this.setBlizzard(0); // the sound manager is the game's: a storm's loop would outlive the scene (plan 17, 2.7a)
     });
 
     // HUD
@@ -1855,6 +1856,10 @@ export class Play extends Phaser.Scene {
       }
       const banner = phase === 'banner';
       if (banner !== this.stormBanner.visible) this.stormBanner.setText(t(this.locale, 'stormAhead')).setVisible(banner);
+      // The blizzard's sound (2.7a): fades in from the banner, out as the storm ends (and during a fart).
+      const humStep = delta / T.advent.sound.blizzardFadeMs;
+      st.hum = (phase === 'banner' || phase === 'storm') && !farting ? Math.min(1, (st.hum ?? 0) + humStep) : Math.max(0, (st.hum ?? 0) - humStep);
+      this.setBlizzard(st.hum);
     }
     if (!this.snowfall) return;
     const wind = farting ? fartWind(this.effects.powerElapsed(), this.fartDurationMs, T) : stormWind(level, (st?.ms ?? 0) / 1000, T);
@@ -1874,6 +1879,26 @@ export class Play extends Phaser.Scene {
     this.stormBanner?.setVisible(false);
     this.snowfall?.setAir(null);
     this.snowfall?.setStorm(0);
+    if (this.stormRun) this.stormRun.hum = 0;
+    this.setBlizzard(0);
+  }
+
+  /**
+   * The blizzard loop at `level` 0 to 1 of advent.sound.blizzardVolume (2.7a): started on the first level above 0 once
+   * its file is in, stopped and dropped at 0. Phaser's global mute covers it; pause holds it (pauseEffects).
+   */
+  setBlizzard(level) {
+    if (level > 0 && !this.blizzard && this.cache?.audio?.exists('advent-blizzard')) {
+      this.blizzard = this.sound.add('advent-blizzard', { loop: true, volume: 0 });
+      this.blizzard.play();
+    }
+    if (!this.blizzard) return;
+    if (level > 0) this.blizzard.setVolume(T.advent.sound.blizzardVolume * level);
+    else {
+      this.blizzard.stop();
+      this.blizzard.destroy();
+      this.blizzard = null;
+    }
   }
 
   // ---- December's Advent pieces (plan 17, 2.6)
@@ -1925,7 +1950,7 @@ export class Play extends Phaser.Scene {
     a.found = true;
     const added = this.adventStoreFor(a.day, this.runIsTest)?.add(a.piece, a.day);
     if (added && !this.runIsTest && this.daily) this.adventQueue.add({ playerId: this.daily.playerId, season: a.season, piece: a.piece, day: a.day });
-    sfx.pickup();
+    this.playSample('advent-found', T.advent.sound.foundVolume, sfx.pickup); // the twinkle (2.7a); the pickup blip until it has loaded
   }
 
   /**
@@ -1950,7 +1975,8 @@ export class Play extends Phaser.Scene {
     if (!store) return null;
     const found = store.found();
     const k = Number(day.slice(8, 10));
-    return { status: adventStatus(found, day, T), giftToday: k <= T.advent.piece.count && found[k] === day };
+    const giftToday = k <= T.advent.piece.count && found[k] === day;
+    return { status: adventStatus(found, day, T), giftToday, today: k <= T.advent.piece.count ? (giftToday ? 'found' : 'missing') : null };
   }
 
   /**
@@ -1963,10 +1989,10 @@ export class Play extends Phaser.Scene {
     return store ? { [season]: adventAward(store.found(), season, T) } : {};
   }
 
-  /** The home screen's Advent chip, on `day` (null hides it: off season, a match). */
+  /** The home screen's Advent chip, on `day` (null hides it: off season, a match): the count only, "🧩 5/24" (Michael, 26 Nov: the tree's status stays in the Daily window). */
   refreshAdventChip(day) {
     const now = day && this.adventChip ? this.adventNow(day) : null;
-    this.adventChip?.setText(now ? adventLineText(this.locale, now.status, T.advent.piece.count) : '').setVisible(Boolean(now) && this.readyUiShown);
+    this.adventChip?.setText(now ? adventLineText(this.locale, { n: now.status.n, tree: null }, T.advent.piece.count) : '').setVisible(Boolean(now) && this.readyUiShown);
   }
 
   /**
@@ -3826,6 +3852,7 @@ export class Play extends Phaser.Scene {
     if (this.stinkTimer) this.stinkTimer.paused = true;
     if (this.fartClock) this.fartClock.paused = true;
     this.fartSound?.pause();
+    this.blizzard?.pause(); // December's storm sound (plan 17, 2.7a)
     this.fartTween?.pause();
     this.popupTween?.pause();
     this.pipePopupTween?.pause();
@@ -3843,6 +3870,7 @@ export class Play extends Phaser.Scene {
     if (this.stinkTimer) this.stinkTimer.paused = false;
     if (this.fartClock) this.fartClock.paused = false;
     this.fartSound?.resume();
+    this.blizzard?.resume();
     this.fartTween?.resume();
     this.popupTween?.resume();
     this.pipePopupTween?.resume();
@@ -4941,6 +4969,11 @@ export class Play extends Phaser.Scene {
     if (!has('flush')) this.load.audio('flush', 'assets/sfx/ToiletFlush_Win.mp3' + V); // a two-player GO
     // In December the twins too (plan 17, 1.10; D8, D15), never in Boot: the stock frame shows until they land.
     for (const [key, file] of Object.entries(this.skin.files)) if (!this.textures.exists(key)) this.load.image(key, file + V);
+    // And December's two sounds (2.7a), in season only (the season's skin has files).
+    if (Object.keys(this.skin.files).length) {
+      if (!has('advent-found')) this.load.audio('advent-found', 'assets/sfx/Advent_PieceFound.mp3' + V); // a piece caught
+      if (!has('advent-blizzard')) this.load.audio('advent-blizzard', 'assets/sfx/Advent_Blizzard.mp3' + V); // under a storm (looped)
+    }
     if (!this.load.list.size) {
       registerWorker();
       return; // all in already
