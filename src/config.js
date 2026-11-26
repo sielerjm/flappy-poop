@@ -551,6 +551,20 @@ export const TUNING = {
     piece: { count: 24, minPair: 3, maxPair: 20, pityStep: 3, floorPair: 6, todayWeight: 3 },
     chipPx: 26, // px font of the home screen's Advent chip ("🧩 N/24 · 🎄 on track", readyLayout's adventChip box)
     chipGapPx: 46, // px from the 🎅 circle's bottom to the chip's centre (clear of its halo; above the Bowelidays image)
+    // Snow storms (Stage 2, 2.7): December Daily runs only, from the day's shared course (course.storm), so every run of a
+    // day meets the same storms at the same pairs. A pair at least firstPair pairs into the run, and pairs + gapPairs after
+    // the last storm's first pair, starts one when its draw is under `chance`; a banner shows one pair ahead; the storm
+    // lasts `pairs` pairs, its pull eased in and out over rampMs (none during a fart). While it blows the flap is flapMul
+    // as strong and the scroll scrollMul as fast (tests/adventStorm.test.js keeps the climb per pair at 85 % or more).
+    // The look is Gate A's option B (Michael, 26 Nov): `extra` storm flakes over the light snow, falling fallMul times as
+    // fast, minPx to maxPx, blown left to right at their mean fall (a 45° slant) with gusts of ±gust that never reverse,
+    // and `swirls` whirls of radius swirlR (tangential speed up to swirlS) whose centres sit 2 × swirlR apart. A fart
+    // blows the snow right to left at fartWind px/s, eased over fartRampMs, in every December run (Michael, 26 Nov).
+    storm: {
+      firstPair: 6, chance: 0.15, pairs: 4, gapPairs: 8, rampMs: 600, flapMul: 0.92, scrollMul: 1.08,
+      extra: 144, fallMul: 2, minPx: 5, maxPx: 14, gust: 0.35, swirls: 2, swirlR: 160, swirlS: 180,
+      fartWind: 420, fartRampMs: 250, bannerPx: 48, bannerY: 320,
+    },
     // The 🎅 that stands in for the 🌞 all December, a new one each time the home screen shows (pickSanta):
     // Santa, Mrs. Claus and Mx Claus in the five skin tones and plain. The first is the fallback; variants a
     // device cannot draw as one glyph are dropped at the first pick (supportedSantas). Drop the plain three here.

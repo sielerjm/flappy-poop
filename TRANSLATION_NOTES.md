@@ -590,6 +590,7 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | dailyTodaysBest | Today's best: {n} (December, plan 17: on the Daily popup and on Over after a December Daily, in the countdown's place; {n} is the score) | 今日最佳：{n} |
 | dailyNewBest | New best today! (December, plan 17: on Over when a December Daily beats the day's best on this device) | 今日新纪录！ |
 | adventFoundToday | Found today's gift! (December, plan 17, 2.6: on Over after a Daily Dump run that caught the day's Advent piece) | 找到了今天的礼物！ |
+| stormAhead | Snowstorm ahead! (December, plan 17, 2.7: the banner one pipe pair before a Daily Dump run's snow storm, in the score's style under the popup rows; Gate A sheet 4b (a)) | 前方有暴风雪！ |
 | adventFoundLate | Found a catch-up gift (Dec {d})! (2.6: on Over when the run caught an earlier day's piece; {d} is its day of December, 1 to 24) | 补到一份礼物（12月{d}日）！ |
 | adventNoGift | No gift this run, play again (2.6: on Over after a December Daily run that offered a piece and ended without it) | 这局没有礼物，再来一局 |
 | adventCount | 🧩 {n}/{total} (2.6: the pieces found so far; on the home screen under the 🎅, the Daily popup and Over; {total} is 24) | 🧩 {n}/{total} |

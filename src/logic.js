@@ -1240,7 +1240,7 @@ export function mixSeed(seed, n, salt = 0) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14, reward: 15, superQ: 16 };
+const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14, reward: 15, superQ: 16, storm: 17 };
 
 /**
  * The run's course: the pair the first mystery box rides after, and per pair
@@ -1308,6 +1308,13 @@ export function createCourse(seed, t, { shared = false } = {}) {
      */
     coin(n) {
       return createRng(mixSeed(seed, n, COURSE_SALT.coin))() < t.coin.chance;
+    },
+    /**
+     * Pair `n`'s storm draw in [0, 1) (plan 17, 2.7: stormStartsHere compares it with advent.storm.chance), from its
+     * own stream, so no other roll moves. A shared course only (the Daily Dump's); null on a single run's.
+     */
+    storm(n) {
+      return shared ? createRng(mixSeed(seed, n, COURSE_SALT.storm))() : null;
     },
     kernelPair(level) {
       const lv = Math.max(1, Math.floor(level) || 1);
@@ -2489,6 +2496,79 @@ export function adventSpawnPair(misses, rng, t) {
  */
 export function adventSpawnHere(advent, n, slotTaken, ready) {
   return Boolean(advent && !advent.spawned && !advent.found && ready && !slotTaken && n - advent.startN >= advent.pair);
+}
+
+// Snow storms (plan 17, 2.7): December Daily runs only. The pairs are the course's (pipesSpawned), so every run of a
+// day meets the same storms; Play walks them in spawn order (stormStartsHere) and keeps the starts.
+
+/** Does pair `n` start a storm? Its course draw under advent.storm.chance, firstPair pairs or more into the run (from `startN`), pairs + gapPairs or more after the last start. */
+export function stormStartsHere(draw, n, lastStart, startN, t) {
+  const s = t.advent.storm;
+  return typeof draw === 'number' && draw < s.chance && n - startN >= s.firstPair && (lastStart === null || n - lastStart >= s.pairs + s.gapPairs);
+}
+
+/**
+ * The storm at `passed` pairs flown (Play.pipesPassed) for storm `starts`: { phase: 'banner' (one pair before the
+ * storm's first pair: passed = start − 2), 'storm' (while its pairs come: passed in [start − 1, start − 1 + pairs)),
+ * or null, start }.
+ */
+export function stormPhase(passed, starts, t) {
+  const p = t.advent.storm.pairs;
+  for (const n of starts) {
+    if (passed >= n - 1 && passed < n - 1 + p) return { phase: 'storm', start: n };
+    if (passed === n - 2) return { phase: 'banner', start: n };
+  }
+  return { phase: null, start: null };
+}
+
+/** Is pair `n` one of a storm's pairs? (No Advent piece shows on them.) */
+export function stormCovers(starts, n, t) {
+  return starts.some((s) => n >= s && n < s + t.advent.storm.pairs);
+}
+
+/** The flap's share at storm level 0 (calm) to 1 (full): 1 down to advent.storm.flapMul, linearly. */
+export function stormFlapMul(level, t) {
+  return 1 + (t.advent.storm.flapMul - 1) * level;
+}
+
+/** The scroll's share at storm level 0 to 1: 1 up to advent.storm.scrollMul, linearly. */
+export function stormScrollMul(level, t) {
+  return 1 + (t.advent.storm.scrollMul - 1) * level;
+}
+
+/**
+ * px/s of wind on the snow at storm level 0 to 1, `tSec` into the storm: left to right (positive) at the storm flakes'
+ * mean fall (a 45° slant), times 1 + gust × a wobble of two sines in [−1, 1], so the gusts never turn it back.
+ */
+export function stormWind(level, tSec, t) {
+  if (!level) return 0;
+  const s = t.advent.storm;
+  const mean = ((t.advent.snow.minSpeed + t.advent.snow.maxSpeed) / 2) * s.fallMul;
+  const wobble = 0.65 * Math.sin((2 * Math.PI * tSec) / 2.6) + 0.35 * Math.sin((2 * Math.PI * tSec) / 1.1 + 1.3);
+  return level * mean * (1 + s.gust * wobble);
+}
+
+/** px/s of wind on the snow `elapsedMs` into a fart of `durationMs` (null: none): right to left at advent.storm.fartWind, eased in and out over fartRampMs. */
+export function fartWind(elapsedMs, durationMs, t) {
+  if (typeof elapsedMs !== 'number' || !(durationMs > 0) || elapsedMs <= 0 || elapsedMs >= durationMs) return 0;
+  const r = t.advent.storm.fartRampMs;
+  return -t.advent.storm.fartWind * Math.min(1, elapsedMs / r, (durationMs - elapsedMs) / r);
+}
+
+/**
+ * advent.storm.swirls whirl centres in `area` from `rng` (decoration: Math.random in the game), each at least
+ * 2 × swirlR from the others (two that overlap, one turning each way, cancel out: Gate A, 26 Nov), turning
+ * counter-clockwise (dir 1) and clockwise (dir −1) in turn: [{ x, y, R, S, dir }].
+ */
+export function swirlCentres(rng, area, t) {
+  const s = t.advent.storm;
+  const box = { x0: area.x + 100, x1: area.x + area.width - 100, y0: area.y + 300, y1: area.y + area.height - 280 };
+  const out = [];
+  for (let tries = 0; out.length < s.swirls && tries < 400; tries += 1) {
+    const c = { x: box.x0 + rng() * (box.x1 - box.x0), y: box.y0 + rng() * (box.y1 - box.y0) };
+    if (out.every((o) => Math.hypot(o.x - c.x, o.y - c.y) >= 2 * s.swirlR) || tries >= 399) out.push({ ...c, R: s.swirlR, S: s.swirlS, dir: out.length % 2 ? -1 : 1 });
+  }
+  return out;
 }
 
 /**

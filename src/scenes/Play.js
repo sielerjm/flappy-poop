@@ -131,6 +131,14 @@ import {
   adventSpawnHere,
   adventStatus,
   adventAward,
+  stormStartsHere,
+  stormPhase,
+  stormCovers,
+  stormWind,
+  fartWind,
+  swirlCentres,
+  stormFlapMul,
+  stormScrollMul,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines, adventLineText } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
@@ -476,6 +484,11 @@ export class Play extends Phaser.Scene {
 
     // HUD
     this.scoreText = this.add.text(W / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
+    // December's storm warning (plan 17, 2.7; Gate A 4b (a), text only): one pair before a Daily run's storm, under the popup rows.
+    this.stormBanner = this.add.text(W / 2, T.advent.storm.bannerY, '', { ...TEXT_STYLE, fontSize: `${T.advent.storm.bannerPx}px` }).setOrigin(0.5).setDepth(20).setVisible(false);
+    this.stormRun = null; // a December Daily run's storms (start)
+    this.stormFlap = 1; // the storm's share of the flap and of the scroll (tickAir)
+    this.stormScroll = 1;
     // A split-screen half's player name at the bottom of its half, above the tray row, on a pill so it
     // reads over the pipes and the cave, for the whole match: countdown, run, level breaks (plan 39,
     // 1.6e, Michael's ask with Preview A, item 36; the pill from Preview C, items 41 and 42). Split-screen
@@ -1044,6 +1057,9 @@ export class Play extends Phaser.Scene {
     this.refreshTestBadge();
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 };
     this.advent = this.rollAdvent(daily, begin.pipes); // December: this Daily run's Advent piece, or null (plan 17, 2.6)
+    this.calmAir(); // no storm carries over from the last run
+    // December: a Daily run's snow storms (plan 17, 2.7), walked from the day's shared course as its pairs spawn.
+    this.stormRun = daily && adventSeason(daily.day, T) ? { startN: begin.pipes, starts: [], level: 0, ms: 0, swirls: [] } : null;
     this.runFarts = 0; // this run's farts and super farts, for the career counters
     this.runSuperFarts = 0;
     this.runFalls = 0; // ‼️ long falls this run (fallStarted)
@@ -1805,6 +1821,59 @@ export class Play extends Phaser.Scene {
     this.dailyStore.save({ day, playerId: id, level: me.level, score: me.score, pipes: me.pipes, collected: {}, final: true });
     this.refreshDailyPrompt();
     return true;
+  }
+
+  // ---- December's air (plan 17, 2.7)
+
+  /**
+   * One frame of December's air in a run: a Daily's storm, eased in and out by its pairs (stormPhase; never during a
+   * fart, finding 27), its banner one pair ahead, its pull on the flap and the scroll; and the wind on the snow, a
+   * storm's left to right or a fart's right to left (every December run, Michael 26 Nov). Off season, nothing.
+   */
+  tickAir(delta) {
+    const st = this.stormRun;
+    if (!st && !this.snowfall) return;
+    const farting = this.effects.powerActive();
+    let level = 0;
+    if (st) {
+      const { phase } = stormPhase(this.pipesPassed, st.starts, T);
+      const step = delta / T.advent.storm.rampMs;
+      if (phase === 'storm' && !farting) {
+        if (st.level === 0) {
+          st.ms = 0;
+          st.swirls = swirlCentres(Math.random, { x: 0, y: 0, width: this.fieldW, height: GAME_HEIGHT }, T);
+        }
+        st.level = Math.min(1, st.level + step);
+      } else st.level = Math.max(0, st.level - step);
+      st.ms += delta;
+      level = st.level;
+      this.stormFlap = stormFlapMul(level, T);
+      const scroll = stormScrollMul(level, T);
+      if (scroll !== this.stormScroll) {
+        this.stormScroll = scroll;
+        this.applyScroll();
+      }
+      const banner = phase === 'banner';
+      if (banner !== this.stormBanner.visible) this.stormBanner.setText(t(this.locale, 'stormAhead')).setVisible(banner);
+    }
+    if (!this.snowfall) return;
+    const wind = farting ? fartWind(this.effects.powerElapsed(), this.fartDurationMs, T) : stormWind(level, (st?.ms ?? 0) / 1000, T);
+    if (level > 0) for (const s of st.swirls) s.x = ((((s.x + (0.5 * wind * delta) / 1000) % this.fieldW) + this.fieldW) % this.fieldW); // the whirls drift with half the wind
+    this.snowfall.setAir(wind || level ? { wind, swirls: level > 0 ? st.swirls.map((s) => ({ ...s, S: s.S * level })) : [] } : null);
+    this.snowfall.setStorm(level, T.advent.storm);
+  }
+
+  /** Calm air (a run's end and start): no storm pull, no banner, the snow back to its light fall. */
+  calmAir() {
+    if (this.stormRun) this.stormRun.level = 0;
+    this.stormFlap = 1;
+    if ((this.stormScroll ?? 1) !== 1) {
+      this.stormScroll = 1;
+      this.applyScroll();
+    }
+    this.stormBanner?.setVisible(false);
+    this.snowfall?.setAir(null);
+    this.snowfall?.setStorm(0);
   }
 
   // ---- December's Advent pieces (plan 17, 2.6)
@@ -3447,7 +3516,7 @@ export class Play extends Phaser.Scene {
     // No lockout, and no fart (it carries the poop through the middle).
     const applied = !(this.time.now < this.flapLockedUntil) && !this.effects.powerActive();
     if (applied) {
-      this.poop.setVelocityY(T.flapVelocity);
+      this.poop.setVelocityY(T.flapVelocity * (this.stormFlap ?? 1)); // a little weaker in a December storm (plan 17, 2.7)
       sfx.flap();
       if (this.match) this.flapCount = (this.flapCount ?? 0) + 1; // the online race sends each one (raceSnapshot)
     }
@@ -4057,7 +4126,10 @@ export class Play extends Phaser.Scene {
     // December's Advent piece (plan 17, 2.6; finding 5): once a Daily run, only in a band slot nothing else took
     // (a Daily rolls no extra coin), from its pair on, once its texture has landed. No pair spawns in a fart's
     // held stretch (spawnHeldByFart), so it never shows there.
-    if (adventSpawnHere(this.advent, n, slotTaken, this.textures.exists(ADVENT_ART.piece))) {
+    // December's storms (plan 17, 2.7): pair n starts one when its course draw says so; no Advent piece on a storm's pairs.
+    const st = this.stormRun;
+    if (st && stormStartsHere(this.course.storm(n), n, st.starts.at(-1) ?? null, st.startN, T)) st.starts.push(n);
+    if (adventSpawnHere(this.advent, n, slotTaken || Boolean(st && stormCovers(st.starts, n, T)), this.textures.exists(ADVENT_ART.piece))) {
       this.advent.spawned = true;
       this.spawnBandItem(ADVENT_ART.piece, still ? stillY() : null, shift);
     }
@@ -4242,7 +4314,7 @@ export class Play extends Phaser.Scene {
    */
   scrollSpeed() {
     if (this.respawning()) return 0;
-    return this.diff.pipeSpeed * this.scrollMul;
+    return this.diff.pipeSpeed * this.scrollMul * (this.stormScroll ?? 1); // a December storm's push (plan 17, 2.7)
   }
 
   /** In a respawn, or paused in the middle of one (pausePlay keeps respawnPaused). */
@@ -5522,6 +5594,7 @@ export class Play extends Phaser.Scene {
     this.endBoost();
     this.endSweep(); // a death mid-sweep leaves the pairs in place, opaque
     this.state = 'dead';
+    this.calmAir(); // a storm ends with the run (plan 17, 2.7)
     this.markHowToSeen(); // a finished run counts as having seen this build
     this.setCharged(false);
     this.setMultiplierBadge(false); // no pulsing ×2 under the game-over panel
@@ -6572,6 +6645,7 @@ export class Play extends Phaser.Scene {
           this.applyScroll();
         }
       }
+      this.tickAir(delta); // December: a Daily's storm and the wind on the snow (plan 17, 2.7)
       if (this.effects.endedPower()) this.endPower();
       if (this.graceLeftMs > 0) this.graceLeftMs = Math.max(0, this.graceLeftMs - delta);
       this.distance += this.scrollSpeed() * dt;
