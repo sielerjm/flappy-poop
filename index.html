@@ -194,6 +194,14 @@
       -webkit-user-drag: none;
       animation: splash-bob 0.7s ease-in-out infinite alternate;
     }
+    /* December (plan 17, 1b.1): the hatted twin is taller (the hat), so it takes its own smaller, centred
+       box; tests/html.test.js measures it in the ring as it does the stock poop. */
+    .splash-poop-xmas {
+      left: 21.5%;
+      top: 21.5%;
+      width: 60%;
+      height: 60%;
+    }
     .splash-body {
       width: 100%;
       display: flex;
@@ -374,6 +382,7 @@
           <circle class="splash-arc" cx="60" cy="60" r="54"></circle>
         </svg>
         <img class="splash-poop" src="assets/poop.png" alt="" draggable="false">
+        <img class="splash-poop splash-poop-xmas" src="assets/advent/poop-santa.png" alt="" draggable="false" hidden>
       </div>
       <div class="splash-body">
         <div class="splash-deck">
@@ -385,6 +394,21 @@
       </div>
     </div>
   </div>
+  <!-- December (plan 17, 1b.1): the hatted poop on the loading screen when the real UTC month is 12, or with
+       ?xmas=1 (to check it outside December). Its own guarded script, apart from the error trap below: if
+       anything here throws, the stock poop stays. The game's pretend date cannot reach this. -->
+  <script>
+    (function () {
+      try {
+        var stock = document.querySelector('.splash-poop:not(.splash-poop-xmas)');
+        var xmas = document.querySelector('.splash-poop-xmas');
+        if (stock && xmas && (new Date().getUTCMonth() === 11 || /[?&]xmas=1(?:&|$)/.test(location.search))) {
+          xmas.hidden = false;
+          stock.hidden = true;
+        }
+      } catch (e) {}
+    })();
+  </script>
   <!-- First of all (plan 35, 1.1 and 1.2): the error trap and Phaser's loader, in window.__flappyBoot.
        Errors from the game's own code are kept (the last one in memory only, for a bug report) and shown:
        on the error card once the game exists (src/ui/errorCard.js), else on the splash's failed state.

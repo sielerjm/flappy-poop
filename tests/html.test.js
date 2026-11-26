@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
+import vm from 'node:vm';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
@@ -142,18 +143,30 @@ function pngAlpha(path) {
   return { width, height, alpha };
 }
 
-test('the poop stays inside the ring at both ends of its bob (2 % of the box clear)', () => {
+// The splash's box from the CSS: `.splash-poop`, then any later class's own left / top / width / height over it.
+function splashBox(...sels) {
   const block = (sel) => new RegExp(`${sel.replace('.', '\\.')} \\{([^}]*)\\}`).exec(html)?.[1] ?? '';
-  const pct = (css, prop) => Number(new RegExp(`(?:^|[\\s;])${prop}: (-?[\\d.]+)%`).exec(css)?.[1]) / 100;
-  const poop = block('.splash-poop');
-  const box = { left: pct(poop, 'left'), top: pct(poop, 'top'), w: pct(poop, 'width'), h: pct(poop, 'height') };
-  assert.ok(Object.values(box).every((v) => v > 0), `the poop's box from the CSS (${JSON.stringify(box)})`);
+  const pct = (css, prop) => {
+    const m = new RegExp(`(?:^|[\\s;])${prop}: (-?[\\d.]+)%`).exec(css);
+    return m ? Number(m[1]) / 100 : undefined;
+  };
+  const box = {};
+  for (const sel of sels) {
+    const css = block(sel);
+    assert.ok(css, `${sel} has a CSS block`);
+    for (const [k, prop] of [['left', 'left'], ['top', 'top'], ['w', 'width'], ['h', 'height']]) box[k] = pct(css, prop) ?? box[k];
+  }
+  assert.ok(Object.values(box).length === 4 && Object.values(box).every((v) => v > 0), `the poop's box from the CSS (${JSON.stringify(box)})`);
+  return box;
+}
+
+function ringReach(box, png) {
   const bob = Number(/@keyframes splash-bob \{ from \{ transform: translateY\(-([\d.]+)%\); \} to \{ transform: translateY\(([\d.]+)%\)/.exec(html)?.[2]) / 100;
   const stroke = Number(/\.splash-ring circle \{[^}]*stroke-width: ([\d.]+);/.exec(html)?.[1]);
   const r = Number(/class="splash-arc" cx="60" cy="60" r="(\d+)"/.exec(html)?.[1]);
   assert.ok(bob > 0 && stroke > 0 && r > 0, 'bob, stroke and r read from index.html');
   const inner = (r - stroke / 2) / 120; // the ring's inner edge, as a share of the hero box (viewBox 120)
-  const { width, height, alpha } = pngAlpha(new URL('../assets/poop.png', import.meta.url));
+  const { width, height, alpha } = pngAlpha(new URL(`../${png}`, import.meta.url));
   let worst = 0;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -165,5 +178,48 @@ test('the poop stays inside the ring at both ends of its bob (2 % of the box cle
       }
     }
   }
+  return { worst, inner };
+}
+
+test('the poop stays inside the ring at both ends of its bob (2 % of the box clear)', () => {
+  const { worst, inner } = ringReach(splashBox('.splash-poop'), 'assets/poop.png');
   assert.ok(worst <= inner - 0.02, `the poop reaches ${worst.toFixed(3)} of the box from the centre; the ring starts at ${inner.toFixed(3)}`);
+});
+
+// Plan 17, 1b.1: in December the hatted twin shows in its own box (taller art: the hat).
+test('the December hatted poop stays inside the ring in its own box, at both ends of its bob', () => {
+  const xmas = /<img class="splash-poop splash-poop-xmas" src="(assets\/advent\/[\w-]+\.png)" alt="" draggable="false" hidden>/.exec(splashMarkup);
+  assert.ok(xmas, 'a second, hidden splash img for December, with its src written in the markup (assetUrls precaches it)');
+  const { worst, inner } = ringReach(splashBox('.splash-poop', '.splash-poop-xmas'), xmas[1]);
+  assert.ok(worst <= inner - 0.02, `the hatted poop reaches ${worst.toFixed(3)} of the box from the centre; the ring starts at ${inner.toFixed(3)}`);
+});
+
+// Plan 17, 1b.1: the December swap runs before any game code, in its own guarded script, on the real UTC
+// month (or ?xmas=1). Run it in a vm with a stubbed Date, location and two fake imgs.
+function runXmasScript({ iso, search = '', throwingDate = false }) {
+  const m = /<script>\s*(\(function \(\) \{\s*try \{[\s\S]*?splash-poop-xmas[\s\S]*?\}\)\(\);)\s*<\/script>/.exec(html);
+  assert.ok(m, 'the December splash script');
+  assert.ok(!m[1].includes('__flappyBoot'), 'it is not the error trap');
+  const stock = { hidden: false };
+  const xmas = { hidden: true };
+  const document = { querySelector: (sel) => (sel === '.splash-poop-xmas' ? xmas : sel === '.splash-poop:not(.splash-poop-xmas)' ? stock : null) };
+  const RealDate = Date;
+  const FakeDate = throwingDate
+    ? function () { throw new Error('no clock'); }
+    : function (...a) { return a.length ? new RealDate(...a) : new RealDate(iso); };
+  vm.runInNewContext(m[1], { document, location: { search }, Date: FakeDate });
+  return { stock: stock.hidden ? 'hidden' : 'shown', xmas: xmas.hidden ? 'hidden' : 'shown' };
+}
+
+test('the December splash script shows the hatted poop only in the real UTC December, or with ?xmas=1', () => {
+  const stock = { stock: 'shown', xmas: 'hidden' };
+  const hatted = { stock: 'hidden', xmas: 'shown' };
+  assert.deepEqual(runXmasScript({ iso: '2026-11-30T23:59:59Z' }), stock, '30 Nov: stock');
+  assert.deepEqual(runXmasScript({ iso: '2026-12-01T00:00:00Z' }), hatted, '1 Dec 00:00 UTC: hatted');
+  assert.deepEqual(runXmasScript({ iso: '2026-12-31T23:59:59Z' }), hatted, '31 Dec: hatted');
+  assert.deepEqual(runXmasScript({ iso: '2027-01-01T00:00:00Z' }), stock, '1 Jan: stock');
+  assert.deepEqual(runXmasScript({ iso: '2026-07-04T12:00:00Z', search: '?xmas=1' }), hatted, '?xmas=1: hatted');
+  assert.deepEqual(runXmasScript({ iso: '2026-07-04T12:00:00Z', search: '?perf&xmas=1' }), hatted, '?perf&xmas=1: hatted');
+  assert.deepEqual(runXmasScript({ iso: '2026-07-04T12:00:00Z', search: '?xmas=10' }), stock, '?xmas=10: stock');
+  assert.deepEqual(runXmasScript({ throwingDate: true }), stock, 'a throwing Date: stock, no error');
 });

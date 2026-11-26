@@ -691,13 +691,12 @@ def sheet7(inp, out, manifest, failures):
 
 # ---------------------------------------------------------------- step 1b.1: sheet 9, the loading screen's hatted poop
 # The splash's numbers, read from index.html as tests/html.test.js reads them (a moved line fails loudly).
-SPLASH_OPTIONS = [  # (label, left, top, size) as shares of the hero box; the stock box first
+SPLASH_OPTIONS = [  # (label, left, top, size) as shares of the hero box; None = read from index.html
     ("Today (stock poop.png)", None, None, None),
     ("A: the brief's box, 64 % moved", 0.15, 0.19, 0.64),
     ("B: 64 %, centred for the most room", 0.195, 0.195, 0.64),
-    ("C: 70 %, the biggest box that passes", 0.165, 0.17, 0.70),
+    ("Built (Michael, 26 Nov): smaller and centred, .splash-poop-xmas", "xmas", None, None),
 ]
-
 
 def splash_numbers():
     html = (ROOT / "index.html").read_text()
@@ -707,7 +706,10 @@ def splash_numbers():
     stroke = float(re.search(r"\.splash-ring circle \{[^}]*stroke-width: ([\d.]+);", html).group(1))
     r = float(re.search(r'class="splash-arc" cx="60" cy="60" r="(\d+)"', html).group(1))
     hexc = lambda name: tuple(int(re.search(rf"--{name}: #([0-9a-f]{{6}})", html).group(1)[i:i + 2], 16) for i in (0, 2, 4))
-    return {"left": pct("left"), "top": pct("top"), "w": pct("width"), "bob": bob, "stroke": stroke, "r": r,
+    xb = re.search(r"\.splash-poop-xmas \{([^}]*)\}", html)
+    xpct = lambda prop: float(re.search(rf"(?:^|[\s;]){prop}: (-?[\d.]+)%", xb.group(1)).group(1)) / 100
+    xmas = (xpct("left"), xpct("top"), xpct("width")) if xb else None
+    return {"left": pct("left"), "top": pct("top"), "w": pct("width"), "bob": bob, "stroke": stroke, "r": r, "xmas": xmas,
             "bg": hexc("splash-bg"), "brown": hexc("splash-brown")}
 
 
@@ -762,6 +764,10 @@ def sheet9(inp, out, manifest, failures):
         im = stock if left is None else santa
         if left is None:
             left, top, w = sn["left"], sn["top"], sn["w"]
+        elif left == "xmas":
+            if not sn["xmas"]:
+                continue
+            left, top, w = sn["xmas"]
         size = 160 if i == 0 else 266
         reach = splash_reach(im, left, top, w, sn["bob"])
         body = 100 * w / sn["w"] * (stock.width / im.width)

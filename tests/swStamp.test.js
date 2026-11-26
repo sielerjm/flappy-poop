@@ -237,7 +237,7 @@ test('the real tree: every asset Boot, loadLazyAudio, the splash cards, the trap
   for (const n of SPLASH_NOTES) if (n.art?.file) want.add(splashArtUrl(n.art.file));
   const html = read('index.html');
   want.add(/s\.src = '(assets\/vendor\/phaser\.min\.js\?v=[^']+)'/.exec(html)[1]);
-  want.add(/<img class="splash-poop" src="(assets\/[^"]+)"/.exec(html)[1]);
+  for (const m of html.matchAll(/<img class="splash-poop[\w -]*" src="(assets\/[^"]+)"/g)) want.add(m[1]); // stock, and December's (plan 17, 1b.1)
   want.add(`assets/vendor/supabase.js?v=${SUPABASE_JS_VERSION}`);
   assert.ok(want.size >= 40, `found ${want.size} asset URLs in the code`);
   for (const u of want) assert.ok(urls.has(u), `${u} is not in FILES`);
