@@ -419,7 +419,9 @@ test('merge_players folds medals, events and best, and re-points matchups and re
 // ---------------------------------------------------------------------------
 // Daily Dump (🌞): daily_scores, submit_daily_score, daily_board, and the fold.
 
-const utcToday = (db) => db.query("select to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') as d").then((r) => r.rows[0].d);
+const utcToday = (db) => db.query("select to_char(public.utc_today(), 'YYYY-MM-DD') as d").then((r) => r.rows[0].d); // the server's day (pinServerDay moves it)
+/** Pin the server's day (plan 17's utc_today) to a November day: the off-season Daily rule on any real clock. */
+const pinServerDay = (db, day = '2026-11-20') => db.exec(`create or replace function public.utc_today() returns date language sql stable as $$ select '${day}'::date $$`);
 const shiftDay = (day, n) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 const dsubmit = (db, pid, name, day, score, level, pipes = 10) =>
   asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6) as r', [pid, name, day, score, level, pipes]).then((r) => r.rows[0].r);
@@ -451,6 +453,7 @@ test("the server's FNV-1a and daily_level agree with the client's over a year", 
 
 test('submit_daily_score keeps the first post of a day, takes today and yesterday only, and checks the level', async () => {
   const db = await freshDb();
+  await pinServerDay(db); // the off-season rule, on any real clock (plan 17: December keeps each player's best)
   const { dailyLevel } = await import('../src/logic.js');
   const today = await utcToday(db);
   const lv = (day) => dailyLevel(day, T);
@@ -526,6 +529,7 @@ test('the daily day is UTC whatever the session time zone says', async () => {
 
 test('merging players folds their daily rows: the kept row wins a day both played', async () => {
   const db = await freshDb();
+  await pinServerDay(db); // the off-season rule, on any real clock (plan 17: December keeps each player's best)
   const today = await utcToday(db);
   const keep = id('MK');
   const merge = id('MM');
@@ -824,6 +828,7 @@ test('👑 dethroned on the 🏆 board: counted when a post takes #1 from anothe
 
 test('👑 dethroned on a 🌞 board: the day\'s #1 by score then earlier post; another day is its own board', async () => {
   const db = await freshDb();
+  await pinServerDay(db); // the off-season rule, on any real clock (plan 17: December keeps each player's best)
   const { dailyLevel } = await import('../src/logic.js');
   const today = await utcToday(db);
   const yesterday = shiftDay(today, -1);

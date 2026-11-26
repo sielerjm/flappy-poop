@@ -32,6 +32,15 @@ export async function freshDb({ sql = SCHEMA, open = true, invite = null } = {})
   return db;
 }
 
+/**
+ * Pin the server's day (utc_today, plan 17) for a test, by default to a November day: a test of the
+ * off-season Daily (one post a day) then answers the same on any real clock, December's included.
+ */
+export const OFF_SEASON_DAY = '2026-11-20';
+export function pinServerDay(db, day = OFF_SEASON_DAY) {
+  return db.exec(`create or replace function public.utc_today() returns date language sql stable as $$ select '${day}'::date $$`);
+}
+
 /** One statement as the game runs it (the anon role), then back to the owner. */
 export async function asAnon(db, sql, params = []) {
   await db.exec('set role anon');

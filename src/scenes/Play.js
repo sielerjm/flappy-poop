@@ -927,7 +927,12 @@ export class Play extends Phaser.Scene {
    */
   startAgain(kind) {
     if (this.match) return false;
-    if (kind === 'daily') return Boolean(this.save?.name && this.dailyOpen() && this.startDaily());
+    if (kind === 'daily') {
+      // A practice Daily (test mode; Over offers Play again on a December one, plan 17) starts again as the
+      // popup's Practice does: no username or open day needed, since practice writes nothing.
+      if (this.isTestMode()) return Boolean(this.startDaily());
+      return Boolean(this.save?.name && this.dailyOpen() && this.startDaily());
+    }
     this.launch({ solo: true });
     return true;
   }

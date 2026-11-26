@@ -86,7 +86,7 @@ test('2.2: the Daily popup reads its day from the decorations\' clock; the posti
 
 // --- 2.3: December replay and the day's best on the client ---------------------------------------------
 
-const DEC = '2026-12-05';
+const DEC = today === '2026-12-05' ? '2026-12-06' : '2026-12-05'; // a December day that is never today (the tests read today apart from it)
 const rec = (o = {}) => ({ day: DEC, playerId: P, level: 4, score: 0, pipes: 0, collected: {}, final: false, ...o });
 
 test('2.3 store: a final attempt sets the day\'s best; a lower one keeps it, a higher one raises it', () => {
@@ -102,7 +102,7 @@ test('2.3 store: a final attempt sets the day\'s best; a lower one keeps it, a h
   assert.deepEqual(store.best(DEC, P), { score: 30, pipes: 30, collected: { fiber: 2 } }, 'a lower final keeps the best');
   store.save(rec({ score: 44, pipes: 40, final: true }));
   assert.equal(store.best(DEC, P).score, 44, 'a higher final raises it');
-  assert.equal(store.best('2026-12-06', P), null, 'another day has none');
+  assert.equal(store.best(shiftDayKey(DEC, 1), P), null, 'another day has none');
   assert.equal(store.best(DEC, 'BBBBBBBBBBBBBBBBBBBBBB'), null, 'another player has none');
 });
 
@@ -304,4 +304,14 @@ test('2.3 copy: the How to play row and the popup body have December versions in
     assert.ok(t(locale, 'dailyTodaysBest').includes('{n}'), `${locale}: dailyTodaysBest takes the score`);
   }
   assert.doesNotMatch(howToItems('en', { dailyReplay: true }).find((r) => r.key === 'daily').detail, /one try a day/i);
+});
+
+test('2.4b: Over\'s Play again after a practice Daily (test mode) starts practice again, with no username or open day needed, as the popup\'s Practice', () => {
+  const launched = [];
+  const s = decScene({ state: 'ready', save: { id: P, top: [] }, dailyReplay: () => false, isTestMode: () => true, startDaily: () => (launched.push('daily'), true) });
+  s.dailyStore.save({ day: utcDayKey(), playerId: P, level: 4, score: 9, pipes: 9, collected: {}, final: true });
+  assert.equal(s.startAgain('daily'), true, 'test mode: practice, even with today used and no name');
+  assert.deepEqual(launched, ['daily']);
+  const real = decScene({ state: 'ready', save: { id: P, top: [] }, dailyReplay: () => true, isTestMode: () => false, startDaily: () => (launched.push('real'), true) });
+  assert.equal(real.startAgain('daily'), false, 'outside test mode a username is still needed');
 });

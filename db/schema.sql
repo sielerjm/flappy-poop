@@ -98,7 +98,7 @@
 -- or research_responses (nor the research_* views), run_log, run_rejects, held_scores,
 -- score_steps, board_settings, online_profiles, online_players, online_pairings, rooms,
 -- join_attempts, online_secret, matches, online_settings, online_trust, friendships, blocks,
--- friend_asks or online_beats (authenticated has nothing on any table either). Profiles are public
+-- friend_asks, online_beats or advent_pieces (authenticated has nothing on any table either). Profiles are public
 -- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
 -- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
@@ -3733,7 +3733,7 @@ revoke execute on function public.hold_run(text, text) from public, anon, authen
 
 -- release_run (owner only): undo hold_run. The run counts again, and every held best of that
 -- player with the run's content goes onto the board through the normal rules (the higher score
--- wins; a Daily day keeps the first). True when the run was found and held.
+-- wins; a Daily day keeps the first, a December day the higher, plan 17). True when the run was found and held.
 create or replace function public.release_run(p_player_id text, p_run_id text)
 returns boolean
 language plpgsql
@@ -6357,7 +6357,7 @@ returns text
 language sql
 immutable
 as $$
-  select '325acd1b7dc99009'::text; -- schema stamp
+  select '6b5886ef69cf5db5'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
