@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.32.0',
+    date: '30 Nov 2026',
+    notes: {
+      en: [
+        '🎅 From 1 December, all month long: a Santa stands in for the 🌞, a different one each time the home screen opens (Santa, Mrs. Claus and Mx Claus, in every skin tone).',
+        '💩 Your poop wears a Santa hat, and so do the bad bacteria; fiber turns into a candy cane, the probiotic into gingerbread, and snow sits on the pipes. Only the look changes: the game plays the same.',
+        '❄️ Snow falls all month, on the home screen and in every game. The home screen says Happy Bowelidays! over the title, with a countdown under it: "20 sleeps till Christmas", then Merry Christmas! on the 25th.',
+      ],
+      'zh-Hans': [
+        '🎅 从12月1日起，整个十二月由圣诞老人代替🌞，每次打开主页都会换一位（圣诞老人、圣诞老奶奶和中性圣诞人，各种肤色都有）。',
+        '💩 你的便便戴上了圣诞帽，有害细菌也戴上了；纤维变成拐杖糖，益生菌变成姜饼，管道上还积了雪。只是外观变了，玩法完全一样。',
+        '❄️ 整个十二月都在下雪，主页和每种游戏模式里都有。主页标题上方是 Happy Bowelidays!，下方是圣诞倒计时：“离圣诞节还有20晚”，25日显示“圣诞快乐！”。',
+      ],
+    },
+  },
+  {
     version: '0.30.0',
     date: '25 Nov 2026',
     notes: {
