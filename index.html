@@ -6,14 +6,15 @@
   <script type="importmap">
   {"imports": {
     "./src/achievements.js": "./src/achievements.js?h=a598390119",
-    "./src/changelog.js": "./src/changelog.js?h=6aa822ca68",
-    "./src/config.js": "./src/config.js?h=9fda709850",
+    "./src/advent.js": "./src/advent.js?h=792441568c",
+    "./src/changelog.js": "./src/changelog.js?h=af96ae32b6",
+    "./src/config.js": "./src/config.js?h=e6d2142a18",
     "./src/education.js": "./src/education.js?h=ef29b1fb5e",
     "./src/fsrs.js": "./src/fsrs.js?h=d8492a1fbe",
-    "./src/i18n.js": "./src/i18n.js?h=b3904f8a9b",
+    "./src/i18n.js": "./src/i18n.js?h=0b3d4692cc",
     "./src/input/pad.js": "./src/input/pad.js?h=e5def632b0",
     "./src/leaderboard.js": "./src/leaderboard.js?h=f4d895fd4e",
-    "./src/logic.js": "./src/logic.js?h=8cb721c97e",
+    "./src/logic.js": "./src/logic.js?h=c44516e511",
     "./src/main.js": "./src/main.js?h=08aad77068",
     "./src/online.js": "./src/online.js?h=1acfbb4bdf",
     "./src/onlineAccount.js": "./src/onlineAccount.js?h=08f891661f",
@@ -32,17 +33,17 @@
     "./src/scenes/About.js": "./src/scenes/About.js?h=d3d29a16f7",
     "./src/scenes/Boot.js": "./src/scenes/Boot.js?h=7b5151e34c",
     "./src/scenes/Changelog.js": "./src/scenes/Changelog.js?h=e374a9be1a",
-    "./src/scenes/Daily.js": "./src/scenes/Daily.js?h=1a2329ba8f",
+    "./src/scenes/Daily.js": "./src/scenes/Daily.js?h=1de4093ba6",
     "./src/scenes/Feedback.js": "./src/scenes/Feedback.js?h=1a8ea68d3b",
-    "./src/scenes/HowTo.js": "./src/scenes/HowTo.js?h=2802da14a1",
+    "./src/scenes/HowTo.js": "./src/scenes/HowTo.js?h=de628740bc",
     "./src/scenes/Language.js": "./src/scenes/Language.js?h=631494ff46",
-    "./src/scenes/Leaderboard.js": "./src/scenes/Leaderboard.js?h=0eea7b6cdf",
+    "./src/scenes/Leaderboard.js": "./src/scenes/Leaderboard.js?h=ee41d0fb6e",
     "./src/scenes/OnlineRace.js": "./src/scenes/OnlineRace.js?h=8c4111e4a2",
-    "./src/scenes/Over.js": "./src/scenes/Over.js?h=f53574b017",
-    "./src/scenes/Play.js": "./src/scenes/Play.js?h=0fb1c4b3ac",
+    "./src/scenes/Over.js": "./src/scenes/Over.js?h=8af42e2f32",
+    "./src/scenes/Play.js": "./src/scenes/Play.js?h=2366df9cc2",
     "./src/scenes/Quiz.js": "./src/scenes/Quiz.js?h=7fdea351f0",
-    "./src/scenes/Settings.js": "./src/scenes/Settings.js?h=2c33787d60",
-    "./src/scenes/Stats.js": "./src/scenes/Stats.js?h=e1f0ad05a2",
+    "./src/scenes/Settings.js": "./src/scenes/Settings.js?h=efcc0be240",
+    "./src/scenes/Stats.js": "./src/scenes/Stats.js?h=7d97568336",
     "./src/scenes/Versus.js": "./src/scenes/Versus.js?h=cb04febe4c",
     "./src/sha256.js": "./src/sha256.js?h=5bc5d3593c",
     "./src/share.js": "./src/share.js?h=ff59feb661",
@@ -76,6 +77,7 @@
     "./src/ui/savePanel.js": "./src/ui/savePanel.js?h=26c2a658d6",
     "./src/ui/scrollView.js": "./src/ui/scrollView.js?h=0fa9865e8a",
     "./src/ui/shareCard.js": "./src/ui/shareCard.js?h=c62e33febd",
+    "./src/ui/snowfall.js": "./src/ui/snowfall.js?h=e921c7fed0",
     "./src/ui/tabs.js": "./src/ui/tabs.js?h=dbda91317c",
     "./src/ui/toggle.js": "./src/ui/toggle.js?h=30040abc11",
     "./src/ui/tournamentPanel.js": "./src/ui/tournamentPanel.js?h=99cabdbe8c",
@@ -93,11 +95,11 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <!-- The module graph is four levels deep, and a browser only learns a level once the one above has arrived: these start the big first-run modules at once (plan 35, 2.4). The hrefs are exactly the URLs the imports use, or the preload is wasted: bare in the tree, and `npm run push` writes the import map's ?h= into them and into the main tag (tools/sw_stamp.mjs, plan 35, 3.1). -->
   <link rel="modulepreload" href="src/main.js?h=08aad77068">
-  <link rel="modulepreload" href="src/config.js?h=9fda709850">
-  <link rel="modulepreload" href="src/logic.js?h=8cb721c97e">
-  <link rel="modulepreload" href="src/i18n.js?h=b3904f8a9b">
+  <link rel="modulepreload" href="src/config.js?h=e6d2142a18">
+  <link rel="modulepreload" href="src/logic.js?h=c44516e511">
+  <link rel="modulepreload" href="src/i18n.js?h=0b3d4692cc">
   <link rel="modulepreload" href="src/scenes/Boot.js?h=7b5151e34c">
-  <link rel="modulepreload" href="src/scenes/Play.js?h=0fb1c4b3ac">
+  <link rel="modulepreload" href="src/scenes/Play.js?h=2366df9cc2">
   <!-- ?v= on the icons: browsers cache favicons and manifest icons by URL for a long time; bump it when the icon art changes. -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=2">
