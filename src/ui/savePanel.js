@@ -10,7 +10,7 @@
 
 import { TEST_MODE, EDUCATION } from '../config.js';
 import { t, welcomeText } from '../i18n.js';
-import { isTestWord } from '../logic.js';
+import { isTestWord, adventTreeGlyph } from '../logic.js';
 import { loadLocal, saveLocal, ensureId, validateName, checkNewName, exportCode, importCode, merge } from '../save.js';
 import { panelFrameCss } from './panelFrame.js';
 
@@ -317,7 +317,7 @@ function applyLocale(locale) {
   dom.codeNote.textContent = t(locale, 'saveCodeNote');
   dom.profileBtn.textContent = t(locale, 'saveProfile');
   dom.eduBtn.textContent = t(locale, 'saveEduData');
-  dom.adventBtn.textContent = t(locale, 'saveAdvent');
+  dom.adventBtn.textContent = `${t(locale, 'saveAdvent')} ${adventTreeGlyph(ctx?.play?.adventTree?.() ?? null)}`.trim(); // the tree once earned (2.16)
   dom.clearBtn.textContent = t(locale, 'saveSignOut');
   dom.mergeBtn.textContent = t(locale, 'saveMergeOpen');
   dom.logoutWarn.textContent = t(locale, 'saveSignOutWarning');

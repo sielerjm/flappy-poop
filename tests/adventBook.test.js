@@ -109,3 +109,56 @@ test('the found-day store\'s seen flag (S14): unseen pieces by day found, markSe
   sandbox.markSeen([1]);
   assert.deepEqual(sandbox.unseen(), [], 'the practice sandbox keeps its own');
 });
+
+// 2.16: the 🧩 board (advent_board) and the trees' badge in the save panel.
+const BCONFIG = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
+function boardFetch({ status = 200, body = '' } = {}) {
+  const calls = [];
+  const fetch = async (url, init) => {
+    calls.push({ url, body: init?.body === undefined ? undefined : JSON.parse(init.body) });
+    const text = typeof body === 'string' ? body : JSON.stringify(body);
+    return { ok: status >= 200 && status < 300, status, text: async () => text };
+  };
+  fetch.calls = calls;
+  return fetch;
+}
+
+test('fetchAdventBoard: advent_board\'s rows in rank order (pieces, on-day count, the tree, me, total), or null on junk / failure', async () => {
+  const { fetchAdventBoard } = await import('../src/leaderboard.js');
+  const PID = 'PPPPPPPPPPPPPPPPPPPPPP';
+  const row = (rank, over = {}) => ({ rank, name: `N${rank}`, pieces: 25 - rank, on_day: 20 - rank, award: null, me: false, total: 7, ...over });
+  const fetch = boardFetch({ body: [row(2, { award: 'plain' }), row(1, { award: 'decorated' }), row(7, { me: true })] });
+  const rows = await fetchAdventBoard(PID, 2026, { fetch, config: BCONFIG });
+  assert.deepEqual(rows.map((r) => [r.rank, r.pieces, r.onDay, r.award, r.me, r.total]), [[1, 24, 19, 'decorated', false, 7], [2, 23, 18, 'plain', false, 7], [7, 18, 13, null, true, 7]]);
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/advent_board');
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: PID, p_season: 2026, p_limit: BCONFIG.limit });
+  const paged = boardFetch({ body: [] });
+  assert.deepEqual(await fetchAdventBoard('nope', 'x', { fetch: paged, config: BCONFIG, offset: 10 }), []);
+  assert.deepEqual(paged.calls[0].body, { p_player_id: null, p_season: null, p_limit: BCONFIG.limit, p_offset: 10 }, 'a bad id or season is sent as null');
+  for (const bad of [{ name: '' }, { pieces: 30 }, { on_day: -1 }, { award: 'gold' }, { rank: 0 }]) {
+    assert.equal(await fetchAdventBoard(PID, 2026, { fetch: boardFetch({ body: [row(1, bad)] }), config: BCONFIG }), null, JSON.stringify(bad));
+  }
+  assert.equal(await fetchAdventBoard(PID, 2026, { fetch: boardFetch({ status: 500, body: 'x' }), config: BCONFIG }), null);
+});
+
+test('the board\'s 🧩 tab (2.16): fifth, after 📚, while the book has a season; its title, glyph and rows', () => {
+  const src = readFileSync(`${root}src/scenes/Leaderboard.js`, 'utf8');
+  assert.match(src, /advent: '\\u\{1F9E9\}'/, 'the 🧩 glyph');
+  assert.match(src, /advent: 'adventBoardTitle'/);
+  assert.match(src, /play\?\.adventBook\?\.\(\)/, 'shown while the book has a season');
+  assert.match(src, /fetchAdventBoard\(/);
+  assert.match(src, /showAdvent\(/);
+});
+
+test('adventTreeGlyph: 🎄 for the decorated tree, 🌲 for the plain one, nothing else', async () => {
+  const { adventTreeGlyph } = await import('../src/logic.js');
+  assert.equal(adventTreeGlyph('decorated'), '\u{1F384}');
+  assert.equal(adventTreeGlyph('plain'), '\u{1F332}');
+  assert.equal(adventTreeGlyph(null), '');
+  assert.equal(adventTreeGlyph('gold'), '');
+});
+
+test('the save panel\'s 🧩 Advent button wears the tree once earned (2.16)', () => {
+  const panel = readFileSync(`${root}src/ui/savePanel.js`, 'utf8');
+  assert.match(panel, /adventTreeGlyph\(/);
+});

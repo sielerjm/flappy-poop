@@ -2023,6 +2023,12 @@ export class Play extends Phaser.Scene {
     return { season, found: store.found(), unseen: store.unseen(), markSeen: (pieces) => store.markSeen(pieces) };
   }
 
+  /** The tree the book's season has earned on this device ('decorated' | 'plain' | null; adventAward): the save panel's badge (2.16). */
+  adventTree() {
+    const book = this.adventBook();
+    return book ? adventAward(book.found, book.season, T) : null;
+  }
+
   /** Open the Advent book; `onClose` (the save panel's button) runs when it closes, in place of going home. */
   openAdvent({ onClose = null } = {}) {
     this.adventOnClose = onClose;

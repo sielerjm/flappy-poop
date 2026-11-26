@@ -1,12 +1,12 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout, utcDayKey, dailyLevel, dailyGlyphNow } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout, utcDayKey, dailyLevel, dailyGlyphNow, adventTreeGlyph } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createTabs, nearestTab } from '../ui/tabs.js';
 import { t, fillDaily, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText, eduYouText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
-import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, withOwnRows, boardPage } from '../leaderboard.js';
+import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, fetchAdventBoard, withOwnRows, boardPage } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
 import { createPager, pageRangeText } from '../ui/pager.js';
 import { boardRecord } from '../education.js';
@@ -15,12 +15,12 @@ const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', a
 const PINK = '#f8a0c8';
 const MUTED = '#c9b8dc';
 const DIM = '#6a5a74';
-/** The registry key for the board last shown this session: 'scores' (🏆), 'daily' (🌞), 'medals' (🏅) or 'education' (📚). */
+/** The registry key for the board last shown this session: 'scores' (🏆), 'daily' (🌞), 'medals' (🏅), 'education' (📚) or 'advent' (🧩). */
 const TAB_KEY = 'leaderboardTab';
-/** The boards in tab order, with their glyphs and titles. The 📚 board is a fourth tab only on a device with education mode unlocked (plan 21). */
+/** The boards in tab order, with their glyphs and titles. The 📚 board is a tab only on a device with education mode unlocked (plan 21); the 🧩 board (plan 17, 2.16) the last, while the Advent book has a season. */
 const BASE_TABS = ['scores', 'daily', 'medals'];
-const TAB_GLYPH = { scores: '\u{1F3C6}', daily: '\u{1F31E}', medals: '\u{1F3C5}', education: '\u{1F4DA}' };
-const TAB_TITLES = { scores: 'leaderboardTitle', daily: 'dailyBoardTitle', medals: 'medalBoardTitle', education: 'eduBoardTitle' };
+const TAB_GLYPH = { scores: '\u{1F3C6}', daily: '\u{1F31E}', medals: '\u{1F3C5}', education: '\u{1F4DA}', advent: '\u{1F9E9}' };
+const TAB_TITLES = { scores: 'leaderboardTitle', daily: 'dailyBoardTitle', medals: 'medalBoardTitle', education: 'eduBoardTitle', advent: 'adventBoardTitle' };
 
 /**
  * Shared board overlay (🏆 in the tray or T), three boards behind the 🏆 · 🌞 · 🏅 tabs
@@ -51,7 +51,8 @@ export class Leaderboard extends Phaser.Scene {
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
-    const TABS = play?.educationAvailable?.() ? [...BASE_TABS, 'education'] : BASE_TABS;
+    this.adventSeason = play?.adventBook?.()?.season ?? null; // the 🧩 board's season (December's, or last December's while a piece is owned)
+    const TABS = [...BASE_TABS, ...(play?.educationAvailable?.() ? ['education'] : []), ...(this.adventSeason ? ['advent'] : [])];
     this.tabList = TABS;
     this.tab = TABS.includes(this.registry.get(TAB_KEY)) ? this.registry.get(TAB_KEY) : 'scores';
     this.switching = false;
@@ -199,6 +200,12 @@ export class Leaderboard extends Phaser.Scene {
       const rows = await play.fetchEduBoard(state.id ?? null, offset);
       if (gen !== this.gen || !this.scene.isActive()) return;
       this.showEducation(rows, play);
+      return;
+    }
+    if (this.tab === 'advent') {
+      const rows = await fetchAdventBoard(state.id ?? null, this.adventSeason, { offset, peek: true });
+      if (gen !== this.gen || !this.scene.isActive()) return;
+      this.showAdvent(rows);
       return;
     }
     if (this.tab === 'medals') {
@@ -376,6 +383,46 @@ export class Leaderboard extends Phaser.Scene {
       const gift = row?.gift ? sv.add(this.add.text(0, y, '\u{1F381}', { fontFamily: 'sans-serif', fontSize: '28px' }).setOrigin(0, 0.5)) : null;
       name.setScale(fitScale(name.width, L.cols.level - name.x - (gift ? gift.width + 8 : 0), 8)); // no 🚽 or LV columns here: the name gets the room up to the score
       gift?.setX(name.x + name.displayWidth + 8);
+      if (row) this.linkName(sv, name, row.name);
+    }
+    sv.finish(y + L.pitch / 2 - 40);
+    this.scroll = sv;
+  }
+
+  /**
+   * The 🧩 board (plan 17, 2.16; Gate A sheet 5): the season's Advent pieces, rank · name (its tree after it, 🎄 / 🌲,
+   * the server's own advent_award) · pieces found, by S13's order; the player's own row in pink (appended below the top
+   * when it is lower). The footer gives their rank and pieces, or how to get on the board.
+   */
+  showAdvent(raw) {
+    const { locale, L, offset } = this;
+    this.fixed.push(this.add.text(this.cx, L.headerY, t(locale, 'adventBoardHeader').replace('{year}', String(this.adventSeason)), { ...STYLE, fontSize: '22px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
+    const { rows, mine, last } = boardPage(raw, { offset, limit: LEADERBOARD.limit });
+    this.pageDone(rows?.length ?? 0, last);
+    if (rows === null) {
+      this.status.setText(t(locale, 'leaderboardOffline'));
+      return;
+    }
+    this.setFooter(mine ? t(locale, 'adventBoardYou').replace('{rank}', String(mine.rank)).replace('{total}', String(mine.total)).replace('{pieces}', String(mine.pieces)) : fillDaily(t(locale, 'adventBoardJoin'), dailyGlyphNow(this.registry, T)));
+    if (rows.length === 0 && offset === 0) {
+      this.status.setText(t(locale, 'adventBoardEmpty'));
+      return;
+    }
+    this.status.setVisible(false);
+    const { sv, visible } = this.rowsBand();
+    const count = offset === 0 ? Math.max(rows.length, visible) : rows.length; // – rows on page 1 only (plan 28, 5.2)
+    let y = L.firstY;
+    for (let i = 0; i < count; i += 1) {
+      y = L.firstY + i * L.pitch;
+      const row = rows[i];
+      const color = row?.me ? PINK : row ? '#ffffff' : DIM;
+      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : offset + i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
+      sv.add(this.add.text(L.cols.right, y, row ? String(row.pieces) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
+      const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
+      const glyph = row ? adventTreeGlyph(row.award) : '';
+      const tree = glyph ? sv.add(this.add.text(0, y, glyph, { fontFamily: 'sans-serif', fontSize: '28px' }).setOrigin(0, 0.5)) : null;
+      name.setScale(fitScale(name.width, L.cols.level - name.x - (tree ? tree.width + 8 : 0), 8)); // as the 🌞 board: the name gets the room up to the count
+      tree?.setX(name.x + name.displayWidth + 8);
       if (row) this.linkName(sv, name, row.name);
     }
     sv.finish(y + L.pitch / 2 - 40);

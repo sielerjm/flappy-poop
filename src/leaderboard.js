@@ -1062,6 +1062,32 @@ export async function fetchDailyBoard(playerId, day = null, opts = {}) {
   return rows.sort((a, b) => a.rank - b.rank);
 }
 
+/** A 🧩 board row { rank, name, pieces, onDay, award ('decorated' | 'plain' | null), me, total } from advent_board, or null (plan 17, 2.16). */
+function normalizeAdventRow(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { rank, name, pieces, on_day: onDay, award, total } = raw;
+  if (!Number.isInteger(rank) || rank < 1 || typeof name !== 'string' || !validateName(name).ok) return null;
+  if (!PIECE_OK(pieces) || !Number.isInteger(onDay) || onDay < 0 || onDay > pieces || !COUNT(total)) return null;
+  if (award !== null && award !== undefined && award !== 'decorated' && award !== 'plain') return null;
+  return { rank, name, pieces, onDay, award: award ?? null, me: raw.me === true, total };
+}
+
+/**
+ * The 🧩 board for `season` (advent_board; plan 17, 2.16): players by pieces found, then pieces found on their day,
+ * then the earlier finisher (S13), each with their tree, plus this player's row (me) on every page; null when the board
+ * cannot be reached or a row is junk. opts.offset: the page from place offset + 1.
+ */
+export async function fetchAdventBoard(playerId, season = null, opts = {}) {
+  const limit = opts.config?.limit ?? LEADERBOARD.limit;
+  const id = typeof playerId === 'string' && ID_RE.test(playerId) ? playerId : null;
+  const y = Number.isInteger(season) ? season : null;
+  const out = await request('/rpc/advent_board', { method: 'POST', body: { p_player_id: id, p_season: y, p_limit: pageLimit(limit, opts), ...offsetField(opts.offset) } }, opts);
+  if (!Array.isArray(out)) return null;
+  const rows = out.map(normalizeAdventRow);
+  if (rows.some((r) => r === null)) return null;
+  return rows.sort((a, b) => a.rank - b.rank);
+}
+
 /** A 🏅 board row { rank, name, best, gold, silver, bronze, events, me } from a server row, or null. */
 function normalizeMedalRow(raw) {
   if (!raw || typeof raw !== 'object') return null;

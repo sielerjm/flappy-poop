@@ -2614,6 +2614,11 @@ export function adventStatus(found, day, t) {
   return { n, tree: 'plainOpen' };
 }
 
+/** A season's tree as its glyph (2.16: the 🧩 board's rows, the save panel's Advent button): 🎄 decorated, 🌲 plain, else ''. */
+export function adventTreeGlyph(award) {
+  return award === 'decorated' ? '\u{1F384}' : award === 'plain' ? '\u{1F332}' : '';
+}
+
 /**
  * The Advent book's layout (plan 17, 2.15; Gate A sheet 5) on a `width` x `height` field: the panel centred, the ✕ in its
  * top-right corner, "N of 24 found" above the grid, and the 24 slots (top-left corners, reading order) of `slot` px

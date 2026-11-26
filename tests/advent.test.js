@@ -143,7 +143,7 @@ test('supportedSantas drops what a device draws as two glyphs, keeps the plain ð
 });
 
 test('{daily}: every string that names the Daily Dump\'s glyph takes it in both locales; the splash keeps its ðŸŒž', () => {
-  const keys = ['itemDailyDetail', 'itemDailyDetailDec', 'itemLeaderboardDetail', 'dailyTitle', 'dailyBody', 'dailyBodyDec', 'dailyNeedName', 'dailyBoardJoin', 'statsDaily'];
+  const keys = ['itemDailyDetail', 'itemDailyDetailDec', 'itemLeaderboardDetail', 'dailyTitle', 'dailyBody', 'dailyBodyDec', 'dailyNeedName', 'dailyBoardJoin', 'adventBoardJoin', 'statsDaily'];
   for (const locale of ['en', 'zh-Hans']) {
     const cat = catalogFor(locale);
     for (const k of keys) {

@@ -610,6 +610,11 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | dailyBodyDec | All December, play as often as you like: your best score of the day counts. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the {daily} leaderboard; a new course starts every day at midnight UTC. (dailyBody's December version, plan 17; the zh-Hans keeps dailyBody's six lines) | 十二月不限次数，只记当天最好成绩。 / 今天所有人飞同一条赛道， / 而且没有尽头：能飞多远就飞多远。 / 没有玉米粒，也没有商店。 / 在{daily}排行榜上比分数； / 每天UTC午夜换一条新赛道。 |
 | itemDailyDetailDec | Tap the {daily} at the top of the home screen: a course everyone shares, endless at the day's level, with no kernels. All December, play it as often as you like: your best score of the day goes on the {daily} board. A new course every day at 00:00 UTC. (itemDailyDetail's December version, plan 17) | 点首页顶部的{daily}：所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。整个十二月不限次数，当天的最好成绩记到{daily}榜上；每天UTC 00:00换新赛道。 |
 | dailyBoardTitle | DAILY DUMP | 每日一拉 |
+| adventBoardTitle | ADVENT (2.16: the 🧩 board's title, the fifth tab of the board while the Advent book has a season; Michael's pick at Gate A) | 圣诞拼图 |
+| adventBoardHeader | Dec {year} · pieces found (2.16: under the 🧩 board's tabs; {year} is the season, e.g. 2026) | {year}年12月 · 已找到的拼图 |
+| adventBoardYou | You: #{rank} of {total} · {pieces} (2.16: the 🧩 board's footer; {pieces} is how many of the 24 the player found) | 你：第{rank}名 / 共{total}人 · {pieces} |
+| adventBoardEmpty | No one has found a piece yet (2.16: the 🧩 board with no rows) | 还没有人找到拼图 |
+| adventBoardJoin | Find the 🎁 in a December {daily} Daily Dump to join (2.16: the 🧩 board's footer for a player not on it; {daily} is the Daily Dump's glyph, 🎅 in December) | 在12月的{daily}每日一拉里找到🎁即可上榜 |
 | dailyBoardEmpty | No one has played today's Daily Dump yet | 今天还没有人玩每日一拉 |
 | dailyBoardJoin | Play today's Daily Dump from the {daily} on the home screen | 在首页点{daily}玩今天的每日一拉 |
 | dailyBoardYou | You: #{rank} of {total} · {score} | 你：第{rank}名 / 共{total}人 · {score} |
