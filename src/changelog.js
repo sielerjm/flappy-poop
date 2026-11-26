@@ -9,7 +9,7 @@ import { LOCALES } from './i18n.js';
 export const CHANGELOG = [
   {
     version: '0.32.0',
-    date: '30 Nov 2026',
+    date: '26 Nov 2026',
     notes: {
       en: [
         '🎅 From 1 December, all month long: a Santa stands in for the 🌞, a different one each time the home screen opens (Santa, Mrs. Claus and Mx Claus, in every skin tone).',
