@@ -149,7 +149,7 @@ default; pipes, ceiling and floor cannot kill), power-up buttons (`grantTest` �
 A test run (`runIsTest`, latched for the whole run) records nothing: no legacy best, top list or
 leaderboard sync, and Over says so. A 🧪 badge shows while it is on. Settings' **Date** row (plan 17, 1.6;
 `registry.testPretendDay`, session-only, counted only while `testMode` is on) steps the *decorations'* clock a day at a time
-(`nextPretendDay`; back on today it is the real date again), so December can be seen in November. It never moves the Daily Dump's own day.
+(`nextPretendDay`; back on today it is the real date again), so December can be seen in November. It moves only the *practice* Daily's day (plan 17, 2.2: `dailyDay`; see the Daily Dump's December exception); every stored or posted day stays on `utcDayKey()`.
 
 It is a side project by Michael Sieler (gut-microbiome researcher), hence the
 theme. The logical field is 1280 px tall and as wide as the window's aspect asks,
@@ -351,7 +351,7 @@ centre on the ?'s row; it breathes under a halo until today is played, `Play.ref
 opens the `Daily` overlay, whose one button follows the player: Create user (the save panel opens
 over it; `Play.setSaveState` redraws it), Play (`Play.startDaily`), See today's result
 (`Play.showDailyResult`), or Practice in test mode (a test run: never claimed or posted). One play
-per player, not per device: before offering Play (and once per page load and day for the glow),
+per player, not per device (off season; in December the Daily is open all day, see below): before offering Play (and once per page load and day for the glow),
 `Play.checkDailyOnServer` reads the caller's own row off `daily_board`; a score posted from another
 device becomes this device's final attempt ("Checking…" meanwhile; offline it falls back to Play,
 and the server still keeps only the first post). A daily
@@ -379,11 +379,19 @@ blank (no board lookup) and shows `dailyNotCounted` in the countdown's place.
 The server (`submit_daily_score`) takes today or yesterday (UTC), checks the day's level with its
 own FNV-1a (`daily_level` = the client's `dailyLevel`), keeps the first post per player and day
 ('duplicate' after), and follows the score board's name claim.
+**December exception** (plan 17, Stage 2a, v0.34.0): when `adventSeason` holds for the run's own day, the Daily stays open
+all day, every final is posted and the board keeps each player's best of the day (`submit_daily_score`'s December branch
+raises the row; `dailyQueue.addBetter` replaces a queued entry only with a higher score; `dailyStore.best(day, playerId)`
+is the best on this device, an optional `best` on the one `flappyPoop.daily` record that old builds ignore). Off season it
+is one attempt as before. `dailyPlayedToday` keeps its meaning (flown today: the halo, the board footer);
+`Play.dailyOpen()` is what lets the popup and Over start another December Daily. The practice Daily follows Pretend date
+(`dailyDay`: course, level, the popup's day); a test run still posts and stores nothing.
 
 **Christmas** (December, plan 17, Stage 1, v0.32.0): decoration only. No SQL, no new server call, no change to a hitbox,
-a rule or a score. The season is all of December UTC (`TUNING.advent`: `seasonMonth` 12, `seasonLastDay` 31;
+a rule or a score. (Stage 2a and 2b, v0.34.0, add the Advent pieces, the trees, the open December Daily and the storms,
+below; storms change a run's feel, on the Daily only.) The season is all of December UTC (`TUNING.advent`: `seasonMonth` 12, `seasonLastDay` 31;
 `adventSeason(day, T)`). **The clock** is `dailyNow(reg)` / `dailyDay(reg)` (`src/logic.js`): the real time, or in test mode the
-Pretend date at the real time of day. Only decorations read it; the Daily Dump's day, course, level, store, queue and posts keep
+Pretend date at the real time of day. Decorations and the practice Daily read it; the Daily Dump's store, queue and posts keep
 `utcDayKey()`, so a test run on a pretend date posts nothing and the real course never moves. Every scene reads the same
 day through the game registry.
 - **🎅 for the 🌞.** `Play.pickVisitSanta` picks a new 🎅 each time the home screen is built, never the last one
@@ -412,8 +420,41 @@ day through the game registry.
   (never a match half's); the snow falls in every mode: runs, the Daily, both match halves, the online race and 📚 runs
   (`src/ui/snowfall.js`: `createSnowfall`, `makeFlakes`, `stepFlakes`, one renderer for later storms; nothing under `prefers-reduced-motion`).
 - **Smoke.** `tools/headless_check.mjs` pins the page's and its own clock (`SMOKE_PIN_DAY` 2026-11-15, `pinOffset`, `clockStubSource`; `--date=YYYY-MM-DD`
-  overrides every pin), because every older check expects stock art and the 🌞; the `christmas` section runs on a 5 Dec pin and back.
+  overrides every pin), because every older check expects stock art and the 🌞; the `christmas` section runs on a 5 Dec pin and back,
+  and the `advent` section runs each of its parts on its own pin (5 Dec a real Daily, 7 Dec a storm, test mode on a Pretend 5 Dec).
   Checked by `tests/advent.test.js`, `tests/adventScene.test.js`, `tests/assets.test.js` and `tests/tools.test.js`.
+- **Advent pieces** (Stage 2b, v0.34.0; `TUNING.advent.piece`: `count` 24, `minPair` 3, `maxPair` 20, `pityStep` 3, `floorPair` 6,
+  `todayWeight` 3). Piece k comes out on k Dec. A December Daily run (`runIsDaily` and `adventSeason`) offers one: `rollAdvent` in
+  `start()` picks the target from the backlog (`adventBacklog`, `rollAdventTarget`; today's piece weighs `todayWeight`) and the spawn pair
+  (`adventSpawnPair`) with a per-attempt RNG, never `course.*`. It takes a free band slot from that pair on, in a window that shrinks
+  by `pityStep` pairs for each of the day's misses (down to `floorPair`), is caught even mid-fart (`takeAdvent`) and never sits in a
+  storm's band slots (`stormCovers`). No piece when nothing is left to find. **Found-day store** `flappyPoop.advent.<season>`
+  (`createAdventStore`, `{ found: { piece: day }, miss }`; the device's own record, so a test run or a Pretend date uses a
+  session sandbox, and Sign out clears it, `clearAdventStores`). **Queue** `flappyPoop.adventQueue` (`createAdventQueue`, max 48): one
+  batch a player a sync, drained after `drainDaily` and before `drainCareer`, each piece waiting for its run's post (`waitsForDailyRun`);
+  `submit_advent_piece` answers `{ stored, kept, refused }` (`kept` stays in the queue while its day is today or yesterday, `refused`
+  leaves it and stays in the book, `too soon` keeps the batch). `advent_progress` is merged once a page load (a union, the earlier day
+  per piece). The look: the home chip (the count alone, "🧩 5/24", `readyLayout`'s `adventChip`), the Daily window's two lines
+  ("🧩 N of 24 found · M left", today's piece found or not), Over's found line, a 🎁 after the name on 🌞 rows
+  (`normalizeDailyRow`'s `gift`). Old builds ignore both new keys and the new `best` field.
+  Tests: `tests/adventPieces.test.js`, `tests/adventDaily.test.js`.
+- **The trees** (v0.34.0). `advent_tree_2026` (🎄, all 24 by 24 Dec) and `advent_pine_2026` (🌲, by 31 Dec) are `seasonal`
+  `ACHIEVEMENTS`, quest rows in `achievement_defs` (1 to 31 Dec, claims close 2 Jan), claimed by the game from the found-day store
+  (`adventAward`, mirrored by the server's `advent_award`; `claim_achievements` has no award check) and judged on a Daily run's own
+  day. The Profile's quests drop the other tree once one is earned (`hiddenBy`). `tests/adventTrees.test.js`.
+- **Storms.** `course.storm(n)` (salt 17) on the shared Daily course, so every run of a day meets the same storms
+  (`TUNING.advent.storm`; `stormStartsHere`, `stormPhase`). The banner "Snowstorm ahead!" shows one pair ahead; while it blows
+  `stormFlapMul` and `stormScrollMul` pull on the flap and the scroll (`doFlap`, `scrollSpeed`), eased in and out, never during a fart.
+  The snow gets one wind input (`setAir`, `setStorm` in `src/ui/snowfall.js`; `tickAir` in Play): the storm's gusts and swirls, or,
+  in every December run, the fart wind that blows it right to left. `tests/adventStorm.test.js`.
+- **Sounds.** `Advent_PieceFound.mp3` (a piece caught) and `Advent_Blizzard.mp3` (a loop faded in from the banner and out as the storm
+  ends; `setBlizzard`, stopped in `calmAir`, paused in `pauseEffects`), both in `loadLazyAudio`, in season only
+  (`TUNING.advent.sound`); credits in CREDITS.md.
+- **Server** (`db/schema.sql`, one migration with 2b's trees): `utc_today()` and `advent_season(date)` (internal), the table
+  `advent_pieces`, the anon `submit_advent_piece(text, jsonb)`, `advent_progress(text, int)`, `advent_board(text, int, int, int)` and the
+  internal `advent_award(text, int)`; `submit_daily_score` (December branch), `daily_board` (now with `gift`), `release_run` and
+  `fold_player` (the December max; the pieces' union) changed; `claim_achievements` reads today from `utc_today()`.
+  `tests/adventSchema.test.js` (PGlite).
 
 **Player profiles and achievements** (👤, 2026-11-11, v0.14.0, plan `.claude/plans/Archive/08-user-stats.plan.md`):
 every player has a **public** profile (`scenes/Stats.js`, chromeIntent `'stats'`), opened by the save
@@ -1302,6 +1343,8 @@ src/
                             `snowCap`; `files`: every key's full 'assets/advent/….png' literal, so the service
                             worker precaches it, plus the Bowelidays image). Outside config.js on purpose:
                             tests/push.test.js stamps a copy of config.js alone. tests/advent.test.js.
+                            (Stage 2 adds the piece, storm and sound logic to logic.js, TUNING.advent.piece /
+                            chipPx / storm / sound, and LEADERBOARD.adventKey / adventQueueKey; see "Christmas".)
   achievements.js           Achievements and lifetime counters (plan 08), NO
                             Phaser/DOM: ACHIEVEMENTS (id, kind 'run' / 'lifetime' /
                             'seasonal', glyph, title / desc i18n keys, n, counters,
@@ -1797,7 +1840,10 @@ src/
                             release drops an unfinished 0-pipe record, spent is
                             final or pipes above 0; plan 48),
                             createDailyQueue (flappyPoop.dailyQueue, one entry per
-                            player and day, outcome 'nameTaken' kept),
+                            player and day, outcome 'nameTaken' kept; addBetter, plan 17),
+                            createAdventStore / createAdventQueue (flappyPoop.advent.<season>,
+                            flappyPoop.adventQueue), submitAdventPiece, fetchAdventProgress,
+                            clearAdventStores (plan 17, Stage 2),
                             submitDailyScore ('ok' / 'keep' / 'rejected' /
                             'nameTaken'), fetchDailyBoard (rows with me and total).
                             Profiles (plan 08): createCareerStore (flappyPoop.career:
@@ -2010,7 +2056,7 @@ src/
     snowfall.js             Snow (plan 17): createSnowfall(scene, area, snow, rng) (36 white dots drifting down,
                             `TUNING.advent.snow`; { setVisible, destroy }; null under prefers-reduced-motion,
                             prefersReducedMotion), makeFlakes, stepFlakes (pure). One renderer for the home screen and
-                            every run in December, and for Stage 2's storms.
+                            every run in December, and for the storms (setAir, setStorm: a 144-flake pool, wind, swirls).
     tray.js                 Phaser wrapper around trayLayout: leaderboard (🏆) /
                             mute / settings bottom-right, pause directly above the
                             cog, plus bottom-left info, language (🌐), feedback (💬).
@@ -3115,6 +3161,8 @@ assets/                     Contract PNGs + README.md (the art contract).
   sfx/Book_Close.mp3        (lazy) An education quiz being left.
   sfx/Sparkle_Restore.mp3   (lazy) A revive's full streak winning everything back.
   sfx/Bubble_Pop.mp3        (lazy) The poop touching a challenge question's ❓ bubble (the offer opens on it, with no book sound).
+  sfx/Advent_PieceFound.mp3 (lazy, in season, plan 17) A December piece caught (a twinkle).
+  sfx/Advent_Blizzard.mp3   (lazy, in season, plan 17) A storm's loop, faded in from the banner and out as it ends.
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant
@@ -3609,6 +3657,14 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             (the Pretend date only in test mode), adventSeason, dailyGlyph, fillDaily and the seven
                             {daily} strings, pickSanta / supportedSantas, the twin map and its files, the stock
                             dead frame (D13), Settings' Date row layout.
+  adventDaily.test.js       Plan 17, 2.2 and 2.3: the practice Daily on the Pretend date, the open December Daily, the
+                            store's best, addBetter, drain removing only what it sent.
+  adventPieces.test.js      Advent pieces: one a run, free slot only, target from the backlog, pity shrink, the found-day
+                            store and queue, the 'kept' / 'refused' / too-soon rules, the merge, Over's lines, the chip.
+  adventStorm.test.js       Storms: course.storm, phase, no piece in a storm, the pull per pair, the fart wind, the blizzard.
+  adventTrees.test.js       The 🎄 / 🌲 entries on found-day stores (adventAward).
+  adventSchema.test.js      The 2a + 2b SQL in PGlite: utc_today, advent_season, pieces, progress, board, award, the
+                            December branch of submit_daily_score, daily_board's gift, fold_player, the tree claims.
   adventScene.test.js       The countdown line, and the December skin on the real Play prototype: the stock key
                             as state, the fart and boost alternation, the one lazy flight and its re-apply.
   ready.test.js             readyLayout boxes inside the field, non-overlapping,
@@ -4385,7 +4441,7 @@ tools/
                             the wait, a no and Resend in the same room. Plan 39's online-join-link (4.3): the
                             real page opened at ?join= takes the code out of the address, opens 🌐, keeps it
                             through a failed sign-in, joins on Retry; a gone room says the link expired.
-                            Full smoke: 44 sections, 1002 checks.
+                            Full smoke: 46 sections, 1054 checks.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
