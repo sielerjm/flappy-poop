@@ -2492,6 +2492,20 @@ export function adventSpawnHere(advent, n, slotTaken, ready) {
 }
 
 /**
+ * A season's tree from its pieces (S1, Michael 26 Nov; db/schema.sql advent_award's mirror): 'decorated' (🎄) for
+ * all `count` pieces with the last found by Christmas Eve (late finds count), 'plain' (🌲) with the last after,
+ * else null. Only the season's own days count. The 🎄 / 🌲 badges read it (Play.adventTrees, 2.6b).
+ */
+export function adventAward(found, season, t) {
+  const count = t.advent.piece.count;
+  const days = [];
+  for (let k = 1; k <= count; k += 1) if (isDayKey(found?.[k]) && found[k].startsWith(`${season}-`)) days.push(found[k]);
+  if (days.length < count) return null;
+  const eve = `${season}-${String(t.advent.seasonMonth).padStart(2, '0')}-${String(count).padStart(2, '0')}`;
+  return days.sort().at(-1) <= eve ? 'decorated' : 'plain';
+}
+
+/**
  * The 🧩 line's state on `day`: { n (pieces found), tree }. tree (S1, Michael 26 Nov: 🎄 for all 24 by the end of
  * 24 Dec, late finds included, else 🌲 for all 24 by 31 Dec): 'decorated' / 'plain' once all are found, by the
  * last one's day; before that, through 24 Dec, 'onTrack' with nothing left to catch up, else null; 'plainOpen' after.
@@ -2502,7 +2516,7 @@ export function adventStatus(found, day, t) {
   for (let k = 1; k <= count; k += 1) if (isDayKey(found?.[k])) days.push(found[k]);
   const n = days.length;
   const eve = `${String(day).slice(0, 4)}-${String(t.advent.seasonMonth).padStart(2, '0')}-${String(count).padStart(2, '0')}`;
-  if (n === count) return { n, tree: days.sort().at(-1) <= eve ? 'decorated' : 'plain' };
+  if (n === count) return { n, tree: adventAward(found, Number(String(day).slice(0, 4)), t) ?? (days.sort().at(-1) <= eve ? 'decorated' : 'plain') };
   if (!adventSeason(day, t)) return { n, tree: null };
   if (day <= eve) return { n, tree: adventBacklog(found, day, t).length === 0 ? 'onTrack' : null };
   return { n, tree: 'plainOpen' };

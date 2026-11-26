@@ -747,6 +747,7 @@ test('claim_achievements stores only badges the game has: an unknown id is in ne
   assert.deepEqual((await db.query('select achievement_id from public.player_achievements where player_id = $1', [P])).rows, [{ achievement_id: 'win_game' }]);
   assert.deepEqual(await claim(db, P, ['made_up']), { stored: [], closed: [] }, 'a call of unknown ids alone answers empty lists');
   const catalog = (await db.query('select public.achievement_catalog() as c')).rows[0].c;
+  await pinServerDay(db, '2026-12-10'); // inside the Advent trees' window (plan 17, 2.6b: the first quest rows), so every catalog id is taken on any clock
   assert.deepEqual(await claim(db, P, catalog.slice(0, 50)), { stored: [...catalog].sort().slice(0, 50), closed: [] }, 'every catalog id is taken');
   await assert.rejects(asAnon(db, 'select public.achievement_catalog()'), /permission denied/, 'internal: anon cannot call it');
 });

@@ -130,6 +130,7 @@ import {
   adventSpawnPair,
   adventSpawnHere,
   adventStatus,
+  adventAward,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines, adventLineText } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
@@ -1883,6 +1884,16 @@ export class Play extends Phaser.Scene {
     return { status: adventStatus(found, day, T), giftToday: k <= T.advent.piece.count && found[k] === day };
   }
 
+  /**
+   * The Advent trees this device's own pieces earn on `day` ({ season: 'decorated' | 'plain' | null }, adventAward),
+   * the facts the 🎄 / 🌲 badges read (2.6b). The real record only, never practice's sandbox; {} off season.
+   */
+  adventTrees(day = utcDayKey()) {
+    const season = this.adventSeasonOf(day);
+    const store = season ? this.adventStoreFor(day, false) : null;
+    return store ? { [season]: adventAward(store.found(), season, T) } : {};
+  }
+
   /** The home screen's Advent chip, on `day` (null hides it: off season, a match). */
   refreshAdventChip(day) {
     const now = day && this.adventChip ? this.adventNow(day) : null;
@@ -1926,6 +1937,7 @@ export class Play extends Phaser.Scene {
           if (!list || this.save?.id !== id) return;
           this.registry?.set?.('adventProgressFor', `${id}:${season}`);
           if (this.adventStoreFor(day, false).merge(list)) {
+            this.creditCareer?.(); // a tree finished on another device (2.6b): its claim goes with this sync's drainCareer
             this.refreshSeasonHome?.();
             this.refreshDailyPrompt?.();
           }
@@ -5678,6 +5690,7 @@ export class Play extends Phaser.Scene {
     facts.boxesBought = this.runBoxesBought ?? 0;
     facts.closeShave = mode === 'single' && levelCloseShave(this.closeCallsByLevel, (lv) => levelPipes(lv, this.tune));
     facts.fourOfAKind = Boolean(this.fourOfAKind);
+    facts.adventTrees = this.adventTrees(day); // the 🎄 / 🌲 badges (plan 17, 2.6b)
     const now = Date.now();
     const { prevRunAt, winTimes } = this.careerStore.markRun(now, mode === 'single' && Boolean(this.won));
     facts.daysSinceLastRun = daysBetween(prevRunAt, now); // 🧱 null on this device's first run
@@ -5693,9 +5706,9 @@ export class Play extends Phaser.Scene {
    * already reaches (a veteran's, or bests pulled from the board) and lifetime badges on the
    * current totals. Unlocked quietly, their claims queued.
    */
-  creditCareer() {
-    const day = utcDayKey();
-    const earned = evaluate({ totals: this.careerStore.totals(this.save?.id ?? null), facts: bestFacts(this.save?.top), unlocked: this.careerStore.unlocked(), day });
+  creditCareer(day = utcDayKey()) {
+    // The Advent trees too (plan 17, 2.6b): a set finished on another device (advent_progress) is credited here.
+    const earned = evaluate({ totals: this.careerStore.totals(this.save?.id ?? null), facts: { ...bestFacts(this.save?.top), adventTrees: this.adventTrees(day) }, unlocked: this.careerStore.unlocked(), day });
     this.careerStore.unlock(earned, day);
   }
 

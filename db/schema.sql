@@ -269,8 +269,10 @@
 --   undo Advent (plan 17, Stage 2): drop function public.submit_advent_piece(text, jsonb),
 --     public.advent_progress(text, int), public.advent_board(text, int, int, int), public.advent_award(text, int);
 --     drop function public.daily_board(text, date, int, int); then restore submit_daily_score,
---     daily_board, release_run and fold_player from git (before plan 17) with daily_board's grant, run this
---     file, and drop function public.advent_season(date), public.utc_today(); drop table public.advent_pieces.
+--     daily_board, release_run, fold_player, achievement_catalog and claim_achievements from git (before
+--     plan 17) with daily_board's grant, run this file, delete from public.achievement_defs where id in
+--     ('advent_tree_2026', 'advent_pine_2026'), and drop function public.advent_season(date),
+--     public.utc_today(); drop table public.advent_pieces.
 --   undo a run row's limits: restore run_row_problem from git and run this file; then
 --     drop function public.run_limits().
 --   undo the board pages (plan 28, 5.2): drop function public.score_board(text, int, int),
@@ -960,10 +962,13 @@ create table if not exists public.achievement_defs (
 alter table public.achievement_defs enable row level security;
 revoke all on public.achievement_defs from public, anon, authenticated;
 -- Time-boxed quests: one row per catalog entry with from / to (tests/achievements.test.js
--- checks they agree). Re-running the file updates a window. None yet; for example:
---   insert into public.achievement_defs (id, starts, ends) values
---     ('quest_example', '2026-12-01', '2026-12-31')
---   on conflict (id) do update set starts = excluded.starts, ends = excluded.ends;
+-- checks they agree). Re-running the file updates a window. The Advent trees (plan 17, 2.6b; S1,
+-- Michael 26 Nov): one a player for December 2026, 🎄 for all 24 pieces found by 24 Dec, else 🌲 by
+-- 31 Dec; the game claims them from its own pieces (S11 (a)), and claims close on 2 Jan (the grace).
+insert into public.achievement_defs (id, starts, ends) values
+  ('advent_tree_2026', '2026-12-01', '2026-12-31'),
+  ('advent_pine_2026', '2026-12-01', '2026-12-31')
+on conflict (id) do update set starts = excluded.starts, ends = excluded.ends;
 
 create table if not exists public.player_achievements (
   player_id      text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
@@ -3164,7 +3169,7 @@ as $$
     'level_5', 'level_6', 'level_7', 'win_game', 'toilet_win', 'games_1000', 'deaths_1000', 'fart_100',
     'super_fart_25', 'fiber_1000', 'probiotic_1000', 'postbiotic_100', 'bacteria_1000', 'bean_100',
     'mystery_100', 'coin_1000', 'sky_diver', 'close_shave', 'ibs', 'constipated', 'icarus',
-    'four_of_a_kind', 'lets_go_gambling'
+    'four_of_a_kind', 'lets_go_gambling', 'advent_tree_2026', 'advent_pine_2026'
   ]::text[];
 $$;
 revoke execute on function public.achievement_catalog() from public, anon, authenticated;
@@ -3175,7 +3180,8 @@ revoke execute on function public.achievement_catalog() from public, anon, authe
 -- grace, which the game then forgets. Any other id in achievement_catalog() is an
 -- always-available badge and is kept. An id that is neither (plan 30) is left out
 -- of both lists and changes nothing. 1–50 ids a call, 300 per player. Errors
--- raise ('bad ...': the client drops those claims).
+-- raise ('bad ...': the client drops those claims). The day is utc_today() (plan 17,
+-- 2.6b: a test redefines it, since the Advent trees are the first quests).
 create or replace function public.claim_achievements(p_player_id text, p_ids text[])
 returns jsonb
 language plpgsql
@@ -3184,7 +3190,7 @@ set search_path = public
 as $$
 declare
   v_id text;
-  v_today date := (now() at time zone 'utc')::date;
+  v_today date := public.utc_today();
   v_stored text[] := '{}';
   v_closed text[] := '{}';
   x text;
@@ -6357,7 +6363,7 @@ returns text
 language sql
 immutable
 as $$
-  select '6b5886ef69cf5db5'::text; -- schema stamp
+  select '0ba4d9dc950ea93b'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

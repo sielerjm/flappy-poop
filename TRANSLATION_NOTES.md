@@ -966,6 +966,10 @@ Inspired by Flappy Bird
 | achDescCeiling | Hit the ceiling {n} times | 撞到顶部 {n} 次 |
 | achDescFourOfAKind | Open four mystery boxes in a row with the same reward | 连续 4 个神秘盒子开出同样的奖励 |
 | achDescBoxesBought | Buy {n} mystery boxes in the shop | 在商店买 {n} 个神秘盒子 |
+| achAdventTree | Christmas Tree 2026 (plan 17, 2.6b: the 🎄 badge, all 24 Advent gifts found by 24 Dec 2026) | 2026 圣诞树 |
+| achDescAdventTree | Find all 24 Advent gifts by 24 Dec 2026 (catch-ups count) (gifts found on a later day than their own still count, if found by 24 Dec) | 2026年12月24日前找齐全部24份降临礼物（补领也算） |
+| achAdventPine | Evergreen 2026 (2.6b: the 🌲 badge, all 24 found by 31 Dec 2026, the last after 24 Dec; one tree a player) | 2026 常青树 |
+| achDescAdventPine | Find all 24 Advent gifts by 31 Dec 2026 | 2026年12月31日前找齐全部24份降临礼物 |
 | achEduNerd | Nerd Alert | 学霸警报 |
 | achEduPerfect | Full Marks | 满分 |
 | achEduA | A Student | 优等生 |
