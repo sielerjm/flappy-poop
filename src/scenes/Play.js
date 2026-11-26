@@ -908,10 +908,12 @@ export class Play extends Phaser.Scene {
    * Today's Daily Dump (🌞), from the popup's Play (Practice in test mode): the launch slide, then
    * start() builds the day's shared course at the day's level. The 👥 toggle is ignored. `day`
    * pins a date for the smoke; the game never passes one. False when no run can start here.
+   * The day is the decorations' clock (plan 17, 2.2): the real UTC day, or in test mode the Pretend
+   * date, where every Daily is practice and writes nothing; what stores or posts keeps utcDayKey().
    */
   startDaily({ day } = {}) {
     if (this.match || this.launching || this.state !== 'ready') return false;
-    const d = day ?? utcDayKey();
+    const d = day ?? dailyDay(this.registry);
     this.dailyNext = { day: d, level: dailyLevel(d, T) };
     this.launch({ daily: true });
     return this.launching;
@@ -1747,8 +1749,8 @@ export class Play extends Phaser.Scene {
     const id = this.save?.id;
     if (!id || !this.save?.name) return false;
     if (this.dailyPlayedToday()) return true;
-    const day = utcDayKey();
-    const rows = await fetchDailyBoard(id, day);
+    const day = utcDayKey(); // the real day, never the Pretend date: the device keeps one record (plan 17, 2.2)
+    const rows = await this.fetchDailyRows(id, day);
     const me = rows?.find((r) => r.me);
     if (this.dailyStore.load(day, id)) return true; // a run here claimed the day while the board answered
     if (!me || this.save?.id !== id) return false;
@@ -1972,6 +1974,11 @@ export class Play extends Phaser.Scene {
         return res;
       });
     });
+  }
+
+  /** The 🌞 board for `day` as this player sees it (fetchDailyBoard), or null. A method so tests can stub it. */
+  fetchDailyRows(id, day) {
+    return fetchDailyBoard(id, day);
   }
 
   /** The player's two board rows [off the toilet, on it] (player_rank: aliases resolved), each null when missing or unreachable. A method so the smoke can stub it. */

@@ -1,6 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, utcDayKey, dailyLevel, msUntilUtcMidnight, countdownText, dailyGlyphNow } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, dailyDay, dailyLevel, msUntilUtcMidnight, countdownText, dailyGlyphNow } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createButton } from '../ui/button.js';
@@ -40,7 +40,7 @@ export class Daily extends Phaser.Scene {
 
     this.glyph = dailyGlyphNow(this.registry, T); // the 🌞, or this visit's 🎅 in December (plan 17)
     this.add.text(cx, cy - 370, fillDaily(t(locale, 'dailyTitle'), this.glyph), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
-    this.day = utcDayKey();
+    this.day = dailyDay(this.registry); // the day Play starts (practice in test mode on a Pretend date; plan 17, 2.2)
     this.todayText = this.add
       .text(cx, cy - 290, t(locale, 'dailyToday').replace('{level}', levelLabel(locale, dailyLevel(this.day, T))), { ...STYLE, fontSize: '34px', color: '#ffd700' })
       .setOrigin(0.5);
