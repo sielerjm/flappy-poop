@@ -145,7 +145,7 @@ export const SECTIONS = [
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
   { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
   { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the stock dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
-  { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the home chip's count, the Daily popup's two lines, the day's piece shown, caught, stored and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run that misses its piece and queues nothing better); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after); test mode on a Pretend 5 Dec (the piece in the sandbox only)" },
+  { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the home chip's count, the Daily popup's two lines, the day's piece shown, caught, stored and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run that misses its piece and queues nothing better; the book (2.18): the glowing button opens it, the piece flies into its cell, the glow is off after it closes, the Daily window's 🧩 line opens it and closes back, the 🧩 board tab on a stubbed advent_board); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after); test mode on a Pretend 5 Dec (the piece in the sandbox only)" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -8476,6 +8476,49 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       const o2 = await overTexts();
       const s2 = await stored();
       ok(chip1 === '1/24 glow' && run2.passed >= 1 && !run2.advent?.found && Boolean(o2?.includes('No gift this run, play again  \u{1F9E9} 1/24')) && !o2.includes('New best today!') && s2.daily.length === 1 && s2.daily[0].score === s1b.daily[0].score && s2.queue.length === 1, `a second, lower run: "No gift this run, play again", no new best; the queued best stays ${s2.daily[0]?.score}, nothing more queued`);
+
+      // --- (1b) the Advent book (plan 17, 2.18): the glowing button opens it, the caught piece flies into its slot
+      // (cell order[4]) and the glow is off once it closes; the Daily window's 🧩 line opens it and closing goes back
+      // to the Daily window; the 🧩 board tab reads advent_board (stubbed) with the trees beside the names ---
+      await homeAgain();
+      const B = `__flappy.scene.getScene('Advent')`;
+      const bookNow = () => evaluate(`JSON.stringify((() => { const b = ${B}; const s = JSON.parse(localStorage.getItem('flappyPoop.advent.2026') || 'null'); return { active: __flappy.scene.isActive('Advent'), arrivals: (b.arrivals ?? []).map((p) => p.piece), flight: Boolean(b.flight), locks: b.locks?.size ?? null, count: b.countText?.text ?? null, art: b.children.list.filter((c) => c.texture?.key === 'advent-puzzle').map((c) => c.frame.name), seen: s?.seen ?? null, glow: Boolean(${play}.adventHalo?.visible), chip: ${play}.adventShown ? ${play}.adventCount.text : null }; })())`).then(JSON.parse);
+      await evaluate(`(${play}.handleChrome('advent'), true)`);
+      await until(`__flappy.scene.isActive('Advent') && __flappy.textures.exists('advent-puzzle')`, 60);
+      await sleep(200);
+      const b0 = await bookNow();
+      const cell5 = T17.puzzle.order[4];
+      await until(`!${B}.flight`, 80);
+      await sleep(300);
+      const b1 = await bookNow();
+      ok(b0.active && JSON.stringify(b0.arrivals) === '[5]' && b0.locks === 24 && b0.count === '0 of 24 found' && JSON.stringify(b0.seen) === '[5]' && b1.locks === 23 && b1.count === '1 of 24 found' && JSON.stringify(b1.art) === JSON.stringify([cell5]), `the glowing button opens the book: piece 5 arrives${b0.flight ? ' in flight' : ' (reduced motion: no flight)'} into cell ${cell5} (${b0.count} → ${b1.count}, locks ${b0.locks} → ${b1.locks}), marked seen on open (${JSON.stringify(b0.seen)})`);
+      await evaluate(`(${B}.close(), true)`);
+      await until(`!__flappy.scene.isActive('Advent')`, 40);
+      const h1b = await bookNow();
+      ok(h1b.chip === '1/24' && !h1b.glow, `after the book closes the button reads ${h1b.chip} and no longer glows`);
+      await evaluate(`(${play}.scene.launch('Daily'), true)`);
+      await until(`__flappy.scene.isActive('Daily') && Boolean(__flappy.scene.getScene('Daily').adventLine)`, 40);
+      await sleep(300);
+      await evaluate(`(__flappy.scene.getScene('Daily').adventLine.emit('pointerdown'), true)`);
+      await until(`__flappy.scene.isActive('Advent')`, 40);
+      await sleep(200);
+      const b2 = await bookNow();
+      const under = await evaluate(`__flappy.scene.isActive('Daily')`);
+      await evaluate(`(${B}.close(), true)`);
+      await until(`!__flappy.scene.isActive('Advent')`, 40);
+      const back = await evaluate(`JSON.stringify({ daily: __flappy.scene.isActive('Daily') })`).then(JSON.parse);
+      ok(b2.active && under && b2.arrivals.length === 0 && !b2.flight && b2.locks === 23 && JSON.stringify(b2.art) === JSON.stringify([cell5]) && back.daily, `the Daily window's 🧩 line opens the book over it (the piece in place at once, nothing flies) and closing goes back to the Daily window (${JSON.stringify(back)})`);
+      await evaluate(`(__flappy.scene.getScene('Daily').close(), true)`);
+      await until(`!__flappy.scene.isActive('Daily')`, 40);
+      await evaluate(`(() => { globalThis.__fetchAd = globalThis.fetch; globalThis.__adAsks = []; const rows = [{ rank: 1, name: 'ElfOne', pieces: 24, on_day: 20, award: 'decorated', me: false, total: 3 }, { rank: 2, name: 'RudiTwo', pieces: 12, on_day: 9, award: 'plain', me: false, total: 3 }, { rank: 3, name: 'AdventTester', pieces: 1, on_day: 1, award: null, me: true, total: 3 }]; globalThis.fetch = async (url, init) => { const u = String(url); if (u.endsWith('/rpc/advent_board')) { globalThis.__adAsks.push(JSON.parse(init.body)); return new Response(JSON.stringify(rows), { status: 200 }); } return new Response('{"message":"stub"}', { status: 503 }); }; return import('./src/config.js').then((m) => { globalThis.__apiAd = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; __flappy.registry.set('leaderboardTab', 'advent'); ${play}.handleChrome('leaderboard'); return true; }); })()`);
+      const LBA = `__flappy.scene.getScene('Leaderboard')`;
+      await until(`__flappy.scene.isActive('Leaderboard') && ${LBA}.children.list.some((c) => c.type === 'Text' && c.text === 'ElfOne')`, 80);
+      const board = await evaluate(`JSON.stringify((() => { const lb = ${LBA}; const texts = lb.children.list.filter((c) => c.type === 'Text' && c.visible && c.text).map((c) => c.text); return { tab: lb.tab, tabs: lb.tabList, title: lb.title?.text ?? null, footer: lb.footer?.text ?? null, texts, asks: globalThis.__adAsks }; })())`).then(JSON.parse);
+      await evaluate(`(${LBA}.close(), true)`);
+      await until(`!__flappy.scene.isActive('Leaderboard')`, 40);
+      await evaluate(`(globalThis.fetch = globalThis.__fetchAd, __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__apiAd; return true; }))`);
+      const tx = (s) => board.texts.includes(s);
+      ok(board.tab === 'advent' && board.tabs?.at(-1) === 'advent' && board.title === (await evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'adventBoardTitle'))`)) && tx('ElfOne') && tx('RudiTwo') && tx('\u{1F384}') && tx('\u{1F332}') && tx('24') && board.footer === 'You: #3 of 3 · 1' && board.asks.some((b) => b.p_season === 2026), `the 🧩 board tab (last of ${board.tabs?.length}): "${board.title}", 🎄 and 🌲 by the names, footer "${board.footer}", asked advent_board for ${board.asks[0]?.p_season}`);
 
       // --- (2) 7 Dec, a storm ---
       await pinClock('2026-12-07');
