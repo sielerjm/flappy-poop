@@ -144,6 +144,7 @@ export const SECTIONS = [
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
   { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
   { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the stock dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
+  { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the home chip's count, the Daily popup's two lines, the day's piece shown, caught, stored and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run that misses its piece and queues nothing better); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after); test mode on a Pretend 5 Dec (the piece in the sandbox only)" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -8373,6 +8374,139 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       // Home again on a plain page, for the closing checks.
       await evaluate(`${play}.scene.restart(), true`);
       for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+    });
+
+    await section('advent', async () => {
+      // December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page with the live board blocked:
+      // (1) on a 5 Dec pin, a real (not test-mode) Daily: the home chip ("🧩 0/24", the 🎅 glowing) and the Daily popup's
+      // two lines; the run's piece (the day's own, from pair 3) shows in a band slot, is caught, and lands in the store
+      // and the advent queue with the day's 🌞 post; Over says "Found today's gift!" and "New best today!"; a second,
+      // lower run queues nothing better, misses its piece and says neither; (2) on a 7 Dec pin a Daily meets its storm:
+      // the banner one pair ahead, then the pull (flap 0.92, scroll 1.08) and the storm's 144 flakes over the light 36,
+      // calm again after; (3) test mode on a Pretend 5 Dec: the piece goes to the session's sandbox, nothing is queued
+      // and the real record stays as it was.
+      if (date) {
+        console.log(`note: --date=${date}: the advent section runs on its own pins only; skipped`);
+        return;
+      }
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const ex0 = exceptions.length;
+      const T17 = TT.advent;
+      const until = async (expr, tries = 60, ms = 100) => {
+        for (let i = 0; i < tries; i += 1) {
+          if (await evaluate(expr).catch(() => false)) return true;
+          await sleep(ms);
+        }
+        return false;
+      };
+      const KEYS = ['flappyPoop.advent.2026', 'flappyPoop.adventQueue', 'flappyPoop.daily', 'flappyPoop.dailyQueue', 'flappyPoop.runQueue'];
+      const load = async ({ clear = false } = {}) => {
+        if (clear) await evaluate(`(${JSON.stringify(KEYS)}.forEach((k) => localStorage.removeItem(k)), true)`);
+        await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+        let sp = null;
+        for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+          await sleep(500);
+          sp = await splashNow().catch(() => null);
+        }
+        if (sp?.enabled) {
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(250);
+        await until(`(() => { const p = ${play}; return p.state === 'ready' && !__flappy.registry.get('lazyAudio') && __flappy.textures.exists('advent'); })()`, 100);
+      };
+      const stored = () => evaluate(`JSON.stringify({ advent: JSON.parse(localStorage.getItem('flappyPoop.advent.2026') || 'null'), queue: JSON.parse(localStorage.getItem('flappyPoop.adventQueue') || '[]'), daily: JSON.parse(localStorage.getItem('flappyPoop.dailyQueue') || '[]') })`).then(JSON.parse);
+      const overTexts = () => evaluate(`JSON.stringify(__flappy.scene.isActive('Over') ? __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text' && c.text).map((c) => c.text) : null)`).then(JSON.parse);
+      // A Daily run held mid-field on grace (through the pipes), the poop moved to the piece once it shows.
+      const flyDaily = async ({ rng, until: stop, maxMs = 20000 }) => {
+        await evaluate(`(() => { const p = ${play}; let i = 0; const seq = ${JSON.stringify(rng)}; p.adventRng = () => seq[i++ % seq.length]; return p.startDaily(); })()`);
+        for (let i = 0; i < 60 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        await evaluate(`${play}.graceLeftMs = ${maxMs + 5000}, true`);
+        const t0 = Date.now();
+        let last = null;
+        while (Date.now() - t0 < maxMs) {
+          await sleep(100);
+          last = await evaluate(`(() => { const p = ${play}; const it = p.items.getChildren().find((c) => c.getData('kind') === 'advent'); if (p.poop?.body) { p.poop.y = it && ${stop === 'found'} ? it.y : 640; p.poop.body.setVelocityY(0); } return JSON.stringify({ state: p.state, passed: p.pipesPassed - (p.advent?.startN ?? p.stormRun?.startN ?? 0), advent: p.advent, seen: it ? { key: it.texture.key, scale: it.scaleX, radius: it.getData('radius') } : null, level: p.stormRun?.level ?? 0, starts: p.stormRun?.starts ?? [], startN: p.stormRun?.startN ?? 0, banner: p.stormBanner.visible, flap: p.stormFlap, scroll: p.stormScroll, flakes: p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length, blizzard: Boolean(p.blizzard) }); })()`).then(JSON.parse);
+          if (last.state !== 'playing') break;
+          if (typeof stop === 'function' ? stop(last) : stop === 'found' ? last.advent?.found : false) break;
+        }
+        return last;
+      };
+      const crash = async () => {
+        await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
+        await until(`__flappy.scene.isActive('Over')`, 100);
+        await sleep(900);
+      };
+      const homeAgain = async () => {
+        await evaluate(`(__flappy.scene.stop('Over'), ${play}.scene.restart(), true)`);
+        await until(`${play}.state === 'ready' && !${play}.launching`, 60);
+      };
+
+      // --- (1) 5 Dec, a real Daily ---
+      await pinClock('2026-12-05');
+      await load({ clear: true });
+      const home0 = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ day: new Date().toISOString().slice(0, 10), test: p.isTestMode(), chip: p.adventChip?.visible ? p.adventChip.text : null, halo: Boolean(p.dailyHalo?.visible) }); })()`).then(JSON.parse);
+      ok(home0.day === '2026-12-05' && !home0.test && home0.chip === '\u{1F9E9} 0/24' && home0.halo, `5 Dec home: the chip under the 🎅 reads the count alone (${home0.chip}) and the 🎅 glows while a piece is to find (${home0.halo})`);
+      await evaluate(`(${play}.scene.launch('Daily'), true)`);
+      await until(`__flappy.scene.isActive('Daily')`, 40);
+      await sleep(400);
+      const popup = await evaluate(`JSON.stringify(__flappy.scene.getScene('Daily').children.list.filter((c) => c.type === 'Text' && c.text).map((c) => c.text))`).then(JSON.parse);
+      await evaluate(`(__flappy.scene.getScene('Daily').close(), true)`);
+      await until(`!__flappy.scene.isActive('Daily')`, 40);
+      ok(popup.includes('\u{1F9E9} 0 of 24 found · 24 left') && popup.includes("Today's piece: not found yet"), `the Daily popup's two December lines ("${popup.find((x) => x.startsWith('\u{1F9E9}'))}", "${popup.find((x) => x.startsWith("Today's piece"))}")`);
+      const run1 = await flyDaily({ rng: [0.99, 0], until: 'found' });
+      ok(run1.advent?.piece === 5 && run1.advent.pair === T17.piece.minPair && run1.advent.found && run1.passed >= run1.advent.pair - 1, `the day's own piece (5) from pair ${run1.advent?.pair}: shown in a band slot and caught ${run1.passed} pairs in`);
+      const s1 = await stored();
+      ok(JSON.stringify(s1.advent?.found) === JSON.stringify({ 5: '2026-12-05' }) && s1.queue.length === 1 && s1.queue[0].piece === 5 && s1.queue[0].day === '2026-12-05', `the piece in the found-day store and one advent queue entry (${JSON.stringify(s1.queue)})`);
+      await crash();
+      const o1 = await overTexts();
+      const s1b = await stored();
+      ok(Boolean(o1?.includes("Found today's gift!  \u{1F9E9} 1/24")) && o1.includes('New best today!') && s1b.daily.length === 1, `Over: "Found today's gift!  🧩 1/24" and "New best today!"; one 🌞 post queued (score ${s1b.daily[0]?.score})`);
+      await homeAgain();
+      const chip1 = await evaluate(`${play}.adventChip.text`);
+      // A second, lower run: one pipe, then the crash; its piece from the last pair of the window, never reached.
+      const run2 = await flyDaily({ rng: [0.99, 0.999999], until: (s) => s.passed >= 1, maxMs: 15000 });
+      await crash();
+      const o2 = await overTexts();
+      const s2 = await stored();
+      ok(chip1 === '\u{1F9E9} 1/24' && run2.passed >= 1 && !run2.advent?.found && Boolean(o2?.includes('No gift this run, play again  \u{1F9E9} 1/24')) && !o2.includes('New best today!') && s2.daily.length === 1 && s2.daily[0].score === s1b.daily[0].score && s2.queue.length === 1, `a second, lower run: "No gift this run, play again", no new best; the queued best stays ${s2.daily[0]?.score}, nothing more queued`);
+
+      // --- (2) 7 Dec, a storm ---
+      await pinClock('2026-12-07');
+      await load({ clear: true });
+      let banner = null;
+      let full = null;
+      const run3 = await flyDaily({ rng: [0.99, 0.999999], maxMs: 30000, until: (s) => {
+        if (s.banner && !banner) banner = s;
+        if (s.level >= 1 && !full) full = s;
+        return Boolean(full && s.level === 0 && s.passed > s.starts[0] - s.startN - 1 + T17.storm.pairs);
+      } });
+      const first = run3.starts[0] - run3.startN;
+      ok(Boolean(banner) && banner.passed === first - 2, `7 Dec: "Snowstorm ahead!" one pair before the storm (pairs flown ${banner?.passed}, the storm at +${first})`);
+      ok(Boolean(full) && full.flap === T17.storm.flapMul && full.scroll === T17.storm.scrollMul && full.flakes === T17.snow.count + T17.storm.extra, `in the storm: flap ${full?.flap}, scroll ${full?.scroll}, ${full?.flakes} flakes (${T17.snow.count} + ${T17.storm.extra})${full?.blizzard ? ', the blizzard looping' : ''}`);
+      ok(run3.level === 0 && run3.flap === 1 && run3.scroll === 1 && run3.flakes === T17.snow.count, `calm again after it: flap ${run3.flap}, scroll ${run3.scroll}, ${run3.flakes} flakes`);
+      await crash();
+      await homeAgain();
+
+      // --- (3) test mode on a Pretend 5 Dec: the sandbox only ---
+      await pinClock(SMOKE_PIN_DAY);
+      await load();
+      const before = await stored();
+      // The Pretend date re-skins Play and starts the December flight: let it land before the restart (a cut flight
+      // finishes into the next one and Phaser warns that the keys are in use).
+      await evaluate(`(() => { const p = ${play}; p.setTestMode(true); p.setTestSettings({ invincible: true, pretendDay: '2026-12-05' }); return true; })()`);
+      await until(`!__flappy.registry.get('lazyAudio') && __flappy.textures.exists('poop-santa')`, 100);
+      await evaluate(`(${play}.scene.restart(), true)`);
+      await until(`${play}.state === 'ready' && !${play}.launching && __flappy.textures.exists('advent')`, 60);
+      const run4 = await flyDaily({ rng: [0.99, 0], until: 'found' });
+      const sandbox = await evaluate(`JSON.stringify(__flappy.registry.get('adventSandbox')?.get(2026)?.found() ?? null)`).then(JSON.parse);
+      const after = await stored();
+      ok(run4.advent?.found && JSON.stringify(sandbox) === JSON.stringify({ 5: '2026-12-05' }) && JSON.stringify(after) === JSON.stringify(before), `a practice Daily on a Pretend 5 Dec: the piece in the sandbox (${JSON.stringify(sandbox)}), nothing queued, the real record as it was`);
+      await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.setTestMode(false); __flappy.scene.stop('Over'); p.scene.restart(); return true; })()`);
+      await until(`${play}.state === 'ready' && !${play}.launching`, 60);
+      await evaluate(`(${JSON.stringify(KEYS)}.forEach((k) => localStorage.removeItem(k)), true)`);
       ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
     });
 

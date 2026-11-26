@@ -310,3 +310,17 @@ test('the Daily window\'s two December lines (S14): the count and what is left; 
   s.refreshAdventChip('2026-12-05');
   assert.equal(text, '\u{1F9E9} 5/24');
 });
+
+test('Over\'s found line (Michael, 26 Nov: "Found a previous day\'s puzzle") and the home chip\'s box between the 🎅\'s halo and the Bowelidays image', async () => {
+  const { adventFoundText } = await import('../src/i18n.js');
+  const { readyLayout } = await import('../src/logic.js');
+  assert.equal(adventFoundText('en', { found: 5, late: false }), "Found today's gift!");
+  assert.equal(adventFoundText('en', { found: 1, late: true }), "Found a previous day's puzzle!");
+  assert.equal(adventFoundText('en', { found: null, late: false }), 'No gift this run, play again');
+  assert.equal(adventFoundText('zh-Hans', { found: 1, late: true }), '找到了往日的拼图！');
+  const L = readyLayout(720, 1280, T);
+  const c = L.adventChip;
+  assert.ok(c.y - c.height / 2 >= L.daily.y + L.daily.height / 2, 'under the 🎅 circle');
+  assert.ok(c.y + c.height / 2 <= L.bowelidays.y - L.bowelidays.height / 2, 'above the Bowelidays image');
+  assert.equal(c.x, L.daily.x, 'centred under the 🎅');
+});
