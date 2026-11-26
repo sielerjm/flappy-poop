@@ -530,6 +530,7 @@ for _name, _src, _stock, _pre in ADVENT_TWINS:
 ENTRIES["bacteria-santa"] = {"kind": "item", "src": "Bad_Bacteria-santa-aligned.png", "body_like": "bacteria.png"}
 ENTRIES["gingerbread"] = {"kind": "item", "src": "gingerbread.png", "fit_height": 185}  # the probiotic's ink height (176) + 5 % (Michael, 26 Nov, Preview B3)
 ENTRIES["candy-cane"] = {"kind": "item", "src": "candy-cane.png"}
+ENTRIES["advent"] = {"kind": "item", "src": "MysteryBox_Icon-xmas.png"}  # the Advent piece icon (plan 17, 2.6): Michael's wrapped mystery box, plain item fit; not in DEFAULT_RUN
 # Layers: no knockout, cropped to the ink (fairy-lights' ink is already the strip, y 374 to 677 of 1536 x 1024).
 # Scale 0.5 (4x art to 2x) is the layer default; the Bowelidays and fairy-light scales are not settled (see 1.2's report).
 ENTRIES["pipe-snow"] = {"kind": "layer", "src": "pipe-snow-layer.png", "scale": 0.5, "anchor": (96, 128)}
