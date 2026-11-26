@@ -93,7 +93,7 @@ test("the smoke's Date stub: now, new Date() and Date() shift by the offset and 
   const vm = await import('node:vm');
   const ctx = vm.createContext({});
   const RealInCtx = vm.runInContext('Date', ctx);
-  const offset = pinMs('2026-12-05') - Date.now();
+  const offset = pinMs('2026-12-05') - vm.runInContext('Date.now()', ctx); // the context's own clock, whatever this process's says
   vm.runInContext(clockStubSource(offset), ctx);
   const r = JSON.parse(vm.runInContext(`JSON.stringify({
     day: new Date().toISOString().slice(0, 10), nowDay: new Date(Date.now()).toISOString().slice(0, 10),
