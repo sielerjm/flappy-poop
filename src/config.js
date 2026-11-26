@@ -552,6 +552,11 @@ export const TUNING = {
     chipPx: 26, // px font of the home screen's Advent chip (the count alone, "🧩 5/24": Michael, 26 Nov; readyLayout's adventChip box)
     chipWidth: 320, // px width of that box (drawn only, never hit)
     chipGapPx: 46, // px from the 🎅 circle's bottom to the chip's centre (clear of its halo; above the Bowelidays image)
+    // The Advent book's picture (Stage 2c, 2.13): Michael's picture cut by tools/advent_puzzle.py into cols x rows square
+    // cells of cellPx texture px (2x, drawn at half: 166 logical px), frames in reading order (cell c at column c mod cols,
+    // row floor(c / cols)). Piece k (out on k Dec) fills cell order[k − 1]: one plain shuffle shared by every player
+    // (Michael, S7, 26 Nov), made once with createRng(20261201) and Fisher-Yates and fixed here as data.
+    puzzle: { cols: 4, rows: 6, cellPx: 332, order: [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6] },
     // Snow storms (Stage 2, 2.7): December Daily runs only, from the day's shared course (course.storm), so every run of a
     // day meets the same storms at the same pairs. A pair at least firstPair pairs into the run, and pairs + gapPairs after
     // the last storm's first pair, starts one when its draw is under `chance`; a banner shows one pair ahead; the storm

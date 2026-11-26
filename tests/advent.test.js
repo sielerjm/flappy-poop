@@ -84,6 +84,16 @@ test('adventSeason: all of December, by the window edges', () => {
   assert.equal(adventSeason(undefined, T), false);
 });
 
+test('TUNING.advent.puzzle: 4 x 6 cells, one per piece, and the release order a fixed permutation of the cells (plan 17, 2.13; S7)', () => {
+  const p = T.advent.puzzle;
+  assert.deepEqual({ cols: p.cols, rows: p.rows, cellPx: p.cellPx }, { cols: 4, rows: 6, cellPx: 332 });
+  assert.equal(p.cols * p.rows, T.advent.piece.count, 'one cell per piece');
+  assert.equal(p.cellPx % 2, 0, 'cellPx is even, so a cell draws on whole logical px at half size');
+  assert.deepEqual([...p.order].sort((a, b) => a - b), [...Array(p.cols * p.rows).keys()], 'order is a permutation of the cells');
+  // Pinned: every player's book puts piece k in the same cell, all season (Michael's S7: one plain shuffle).
+  assert.deepEqual(p.order, [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6]);
+});
+
 test('TUNING.advent.santas: the 18 variants, each once, the plain 🎅 first', () => {
   const s = T.advent.santas;
   assert.equal(s.length, 18);
