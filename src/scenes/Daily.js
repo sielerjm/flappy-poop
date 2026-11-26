@@ -52,8 +52,8 @@ export class Daily extends Phaser.Scene {
     const advent = this.scene.get('Play')?.adventNow?.(this.day) ?? null;
     if (advent) {
       const [count, today] = adventDailyLines(locale, advent, T.advent.piece.count);
-      this.add.text(cx, cy + 14, count, { ...STYLE, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5);
-      if (today) this.add.text(cx, cy + 56, today, { ...MUTED, fontSize: '24px' }).setOrigin(0.5);
+      this.add.text(cx, cy + 24, count, { ...STYLE, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5); // clear of the December body's seven English lines (it ends near cy − 11)
+      if (today) this.add.text(cx, cy + 62, today, { ...MUTED, fontSize: '24px' }).setOrigin(0.5);
     } else this.add.text(cx, cy + 30, `${this.glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`, { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
     // Under the button's row: why a name is needed, or that practice is not saved.
     this.note = this.add.text(cx, cy + 105, '', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5);
