@@ -542,14 +542,15 @@ export const TUNING = {
     bowelidays: { widthFrac: 0.6, y: 290, aspect: 170 / 947 },
     countdownPx: 30, // px font of the countdown line under the title (1–25 Dec; readyLayout's countdown box)
     // Home snowfall (src/ui/snowfall.js): white dots drifting down the ready screen; none under reduced motion (D6).
-    snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9 },
+    snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9, windMin: 0.7, windMax: 1.3 }, // windMin / windMax: each flake's share of a wind (2.7), drawn once
     snowCap: { ox: -6.5, oy: -14.5 }, // px from a bottom pipe's cap top-left to the snow layer's top-left (process_art's --anchor report)
     // Advent pieces (Stage 2, 2.6): piece k comes out on k Dec, up to `count` (submit_advent_piece's 24); a December Daily run
     // offers one, rolled from the pieces out that the device has not found (today's weighs todayWeight, each other 1), in the
     // first band slot nothing else took from a pair in [minPair, maxPair] pairs into the run (per-attempt RNG, never the
     // course). Each run of the day that ends without it takes pityStep pairs off maxPair, down to floorPair.
     piece: { count: 24, minPair: 3, maxPair: 20, pityStep: 3, floorPair: 6, todayWeight: 3 },
-    chipPx: 26, // px font of the home screen's Advent chip ("🧩 N/24 · 🎄 on track", readyLayout's adventChip box)
+    chipPx: 26, // px font of the home screen's Advent chip (the count alone, "🧩 5/24": Michael, 26 Nov; readyLayout's adventChip box)
+    chipWidth: 320, // px width of that box (drawn only, never hit)
     chipGapPx: 46, // px from the 🎅 circle's bottom to the chip's centre (clear of its halo; above the Bowelidays image)
     // Snow storms (Stage 2, 2.7): December Daily runs only, from the day's shared course (course.storm), so every run of a
     // day meets the same storms at the same pairs. A pair at least firstPair pairs into the run, and pairs + gapPairs after
@@ -564,6 +565,10 @@ export const TUNING = {
       firstPair: 6, chance: 0.15, pairs: 4, gapPairs: 8, rampMs: 600, flapMul: 0.92, scrollMul: 1.08,
       extra: 144, fallMul: 2, minPx: 5, maxPx: 14, gust: 0.35, swirls: 2, swirlR: 160, swirlS: 180,
       fartWind: 420, fartRampMs: 250, bannerPx: 48, bannerY: 320,
+      // The gusts' wobble: two sines in [−1, 1] (share, period in s, phase), and how far from the field's edges a swirl's
+      // centre may sit (px) and how fast it drifts (a share of the wind). Gate A's model (tools/advent_preview.py).
+      gustWaves: [{ share: 0.65, periodS: 2.6, phase: 0 }, { share: 0.35, periodS: 1.1, phase: 1.3 }],
+      swirlMargin: { x: 100, top: 300, bottom: 280 }, swirlDrift: 0.5,
     },
     // December's sounds (2.7a; Michael's Pixabay clips, CREDITS.md): the twinkle when a piece is caught, and the blizzard
     // looped under a storm, faded in from the banner (blizzardFadeMs) and out as the storm ends. Levels for his listen check.

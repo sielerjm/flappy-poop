@@ -1883,9 +1883,9 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   // The Bowelidays image (plan 17, 1.14; D16 (b)): above the title, under the top row's halos. Drawn only.
   const bw = width * t.advent.bowelidays.widthFrac;
   const bowelidays = { id: 'bowelidays', x: cx, y: t.advent.bowelidays.y, width: bw, height: bw * t.advent.bowelidays.aspect };
-  // The Advent chip (plan 17, 2.6): "🧩 N/24 · 🎄 on track" under the 🎅, between its circle's halo and the Bowelidays
-  // image's top. Drawn only, never hit.
-  const adventChip = { id: 'adventChip', x: cx, y: daily.y + boxH / 2 + t.advent.chipGapPx, width: 320, height: t.advent.chipPx + 8 };
+  // The Advent chip (plan 17, 2.6): the count alone, "🧩 5/24" (Michael, 26 Nov), under the 🎅, between its circle's halo
+  // and the Bowelidays image's top. Drawn only, never hit. Stage 2c moves it onto the Advent button (S14).
+  const adventChip = { id: 'adventChip', x: cx, y: daily.y + boxH / 2 + t.advent.chipGapPx, width: t.advent.chipWidth, height: t.advent.chipPx + 8 };
   return { title, poop, toilet, howto, daily, profile, countdown, bowelidays, adventChip, ...switches };
 }
 
@@ -2521,9 +2521,12 @@ export function stormPhase(passed, starts, t) {
   return { phase: null, start: null };
 }
 
-/** Is pair `n` one of a storm's pairs? (No Advent piece shows on them.) */
+/**
+ * Is pair `n`'s band slot flown inside a storm? (No Advent piece shows there.) A band item rides half a spacing after
+ * its pair, so pair n's slot is flown at n pairs passed: inside storm s for n in [s − 1, s − 1 + pairs), as stormPhase.
+ */
 export function stormCovers(starts, n, t) {
-  return starts.some((s) => n >= s && n < s + t.advent.storm.pairs);
+  return starts.some((s) => n >= s - 1 && n < s - 1 + t.advent.storm.pairs);
 }
 
 /** The flap's share at storm level 0 (calm) to 1 (full): 1 down to advent.storm.flapMul, linearly. */
@@ -2544,7 +2547,7 @@ export function stormWind(level, tSec, t) {
   if (!level) return 0;
   const s = t.advent.storm;
   const mean = ((t.advent.snow.minSpeed + t.advent.snow.maxSpeed) / 2) * s.fallMul;
-  const wobble = 0.65 * Math.sin((2 * Math.PI * tSec) / 2.6) + 0.35 * Math.sin((2 * Math.PI * tSec) / 1.1 + 1.3);
+  const wobble = s.gustWaves.reduce((sum, w) => sum + w.share * Math.sin((2 * Math.PI * tSec) / w.periodS + w.phase), 0);
   return level * mean * (1 + s.gust * wobble);
 }
 
@@ -2562,7 +2565,8 @@ export function fartWind(elapsedMs, durationMs, t) {
  */
 export function swirlCentres(rng, area, t) {
   const s = t.advent.storm;
-  const box = { x0: area.x + 100, x1: area.x + area.width - 100, y0: area.y + 300, y1: area.y + area.height - 280 };
+  const m = s.swirlMargin;
+  const box = { x0: area.x + m.x, x1: area.x + area.width - m.x, y0: area.y + m.top, y1: area.y + area.height - m.bottom };
   const out = [];
   for (let tries = 0; out.length < s.swirls && tries < 400; tries += 1) {
     const c = { x: box.x0 + rng() * (box.x1 - box.x0), y: box.y0 + rng() * (box.y1 - box.y0) };

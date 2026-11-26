@@ -16,7 +16,7 @@ export function prefersReducedMotion(win = globalThis.window) {
 
 /**
  * `n` flakes spread over `area` ({ x, y, width, height }): position, size, fall speed and drift phase from `rng`,
- * then each flake's share of the wind, m in [0.7, 1.3] (drawn after the rest, 2.7).
+ * then each flake's share of the wind, m in [snow.windMin, snow.windMax] (drawn after the rest, 2.7).
  */
 export function makeFlakes(n, rng, area, snow) {
   const flakes = Array.from({ length: n }, () => ({
@@ -26,7 +26,9 @@ export function makeFlakes(n, rng, area, snow) {
     vy: snow.minSpeed + rng() * (snow.maxSpeed - snow.minSpeed),
     phase: rng() * Math.PI * 2,
   }));
-  for (const f of flakes) f.m = 0.7 + rng() * 0.6;
+  const lo = snow.windMin ?? 1;
+  const hi = snow.windMax ?? 1;
+  for (const f of flakes) f.m = lo + rng() * (hi - lo);
   return flakes;
 }
 

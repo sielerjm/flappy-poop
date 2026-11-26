@@ -160,7 +160,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, createDailyStore, createDailyQueue, createAdventStore, createAdventQueue, submitAdventPiece, fetchAdventProgress, waitsForDailyRun, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchBoardName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, createDailyStore, createDailyQueue, createAdventStore, createAdventQueue, clearAdventStores, submitAdventPiece, fetchAdventProgress, waitsForDailyRun, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchBoardName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -1863,7 +1863,7 @@ export class Play extends Phaser.Scene {
     }
     if (!this.snowfall) return;
     const wind = farting ? fartWind(this.effects.powerElapsed(), this.fartDurationMs, T) : stormWind(level, (st?.ms ?? 0) / 1000, T);
-    if (level > 0) for (const s of st.swirls) s.x = ((((s.x + (0.5 * wind * delta) / 1000) % this.fieldW) + this.fieldW) % this.fieldW); // the whirls drift with half the wind
+    if (level > 0) for (const s of st.swirls) s.x = ((((s.x + (T.advent.storm.swirlDrift * wind * delta) / 1000) % this.fieldW) + this.fieldW) % this.fieldW); // the whirls drift with a share of the wind
     this.snowfall.setAir(wind || level ? { wind, swirls: level > 0 ? st.swirls.map((s) => ({ ...s, S: s.S * level })) : [] } : null);
     this.snowfall.setStorm(level, T.advent.storm);
   }
@@ -2110,6 +2110,11 @@ export class Play extends Phaser.Scene {
     this.consentStore.clear(); // and stops recording for the pilot: answers already sent stay on the server until the tester withdraws
     this.settings?.set?.({ eduInvited: false }); // the invitation belonged to the player signed out (plan 28, 2.4)
     this.researchQueue.clear();
+    // December's pieces go with the player too (plan 17, 2.11): the next player here starts empty and asks the board for theirs.
+    for (const store of this.adventStores?.values?.() ?? []) store.clear();
+    clearAdventStores();
+    this.adventStores = new Map();
+    this.registry?.remove?.('adventProgressFor');
     this.refreshTestBadge();
     this.refreshEduDue();
     this.best.clear();
@@ -4157,7 +4162,9 @@ export class Play extends Phaser.Scene {
     // December's storms (plan 17, 2.7): pair n starts one when its course draw says so; no Advent piece on a storm's pairs.
     const st = this.stormRun;
     if (st && stormStartsHere(this.course.storm(n), n, st.starts.at(-1) ?? null, st.startN, T)) st.starts.push(n);
-    if (adventSpawnHere(this.advent, n, slotTaken || Boolean(st && stormCovers(st.starts, n, T)), this.textures.exists(ADVENT_ART.piece))) {
+    // Pair n's slot is flown inside a storm that starts at pair n + 1 too: look one pair ahead (2.11).
+    const stormy = Boolean(st && (stormCovers(st.starts, n, T) || stormStartsHere(this.course.storm(n + 1), n + 1, st.starts.at(-1) ?? null, st.startN, T)));
+    if (adventSpawnHere(this.advent, n, slotTaken || stormy, this.textures.exists(ADVENT_ART.piece))) {
       this.advent.spawned = true;
       this.spawnBandItem(ADVENT_ART.piece, still ? stillY() : null, shift);
     }
@@ -5783,7 +5790,9 @@ export class Play extends Phaser.Scene {
    * Over (this.runBadges), their claims queued. A run that crossed no pipe adds nothing (plan 47).
    */
   recordCareer(mode) {
-    const day = utcDayKey();
+    // A Daily run's own day (plan 17, 2.11): a 31 Dec run that ends after midnight still earns its tree, as the server's
+    // grace takes its claim; every other run, the real day.
+    const day = mode === 'daily' && isDayKey(this.dailyRunDay) ? this.dailyRunDay : utcDayKey();
     // Pipes passed: fart and skipped pairs included (as for levels); a Daily Dump counts only the pairs flown that day.
     const pipes = mode === 'daily' && this.daily ? Math.max(0, this.pipesPassed - this.daily.startPipes) : this.pipesPassed;
     // Not a run (plan 47, call A): no counter, no run time (🧱 / 🏃), no streak day, no badge.

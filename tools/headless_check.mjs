@@ -8439,10 +8439,13 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         await until(`__flappy.scene.isActive('Over')`, 100);
         await sleep(900);
       };
-      const homeAgain = async () => {
-        await evaluate(`(__flappy.scene.stop('Over'), ${play}.scene.restart(), true)`);
-        await until(`${play}.state === 'ready' && !${play}.launching`, 60);
+      // Phaser runs a scene.restart() on its next step, so wait for the restarted scene's 'create' before reading it:
+      // the old scene still reads 'ready', and a run started on it is wiped by the queued restart.
+      const restartPlay = async () => {
+        await evaluate(`(() => { const p = ${play}; globalThis.__adventCreated = false; p.events.once('create', () => { globalThis.__adventCreated = true; }); __flappy.scene.stop('Over'); p.scene.restart(); return true; })()`);
+        await until(`globalThis.__adventCreated === true && ${play}.state === 'ready' && !${play}.launching`, 80);
       };
+      const homeAgain = restartPlay;
 
       // --- (1) 5 Dec, a real Daily ---
       await pinClock('2026-12-05');
@@ -8498,12 +8501,12 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       // finishes into the next one and Phaser warns that the keys are in use).
       await evaluate(`(() => { const p = ${play}; p.setTestMode(true); p.setTestSettings({ invincible: true, pretendDay: '2026-12-05' }); return true; })()`);
       await until(`!__flappy.registry.get('lazyAudio') && __flappy.textures.exists('poop-santa')`, 100);
-      await evaluate(`(${play}.scene.restart(), true)`);
-      await until(`${play}.state === 'ready' && !${play}.launching && __flappy.textures.exists('advent')`, 60);
+      await restartPlay();
+      await until(`__flappy.textures.exists('advent')`, 60);
       const run4 = await flyDaily({ rng: [0.99, 0], until: 'found' });
       const sandbox = await evaluate(`JSON.stringify(__flappy.registry.get('adventSandbox')?.get(2026)?.found() ?? null)`).then(JSON.parse);
       const after = await stored();
-      ok(run4.advent?.found && JSON.stringify(sandbox) === JSON.stringify({ 5: '2026-12-05' }) && JSON.stringify(after) === JSON.stringify(before), `a practice Daily on a Pretend 5 Dec: the piece in the sandbox (${JSON.stringify(sandbox)}), nothing queued, the real record as it was`);
+      ok(run4.advent?.found && JSON.stringify(sandbox) === JSON.stringify({ 5: '2026-12-05' }) && JSON.stringify(after) === JSON.stringify(before), `a practice Daily on a Pretend 5 Dec: the piece in the sandbox (${JSON.stringify(sandbox)}), nothing queued, the real record as it was (run ${JSON.stringify({ state: run4.state, passed: run4.passed, advent: run4.advent, seen: Boolean(run4.seen) })})`);
       await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.setTestMode(false); __flappy.scene.stop('Over'); p.scene.restart(); return true; })()`);
       await until(`${play}.state === 'ready' && !${play}.launching`, 60);
       await evaluate(`(${JSON.stringify(KEYS)}.forEach((k) => localStorage.removeItem(k)), true)`);

@@ -643,7 +643,26 @@ export function createAdventStore(storage = browserStorage(), season, { prefix =
       rec.miss = { day, n: (rec.miss?.day === day ? rec.miss.n : 0) + 1 };
       box.write(rec);
     },
+    clear: () => box.clear(),
   };
+}
+
+/**
+ * Forget this device's Advent pieces for every season (Sign out, 2.11: they are the signed-out player's, so the next
+ * player on this device starts empty and is never credited a tree for them). The queue keeps its entries: each carries
+ * the id of the player who found it, as the daily queue's do. Nothing here throws.
+ */
+export function clearAdventStores(storage = browserStorage(), { prefix = LEADERBOARD.adventKey } = {}) {
+  try {
+    const keys = [];
+    for (let i = 0; i < (storage?.length ?? 0); i += 1) {
+      const k = storage.key(i);
+      if (typeof k === 'string' && k.startsWith(`${prefix}.`)) keys.push(k);
+    }
+    for (const k of keys) storage.removeItem(k);
+  } catch {
+    /* storage unavailable: nothing to forget */
+  }
 }
 
 /** A queued piece, or null: { playerId, season, piece, day } (day: the Daily's day the run started on). */

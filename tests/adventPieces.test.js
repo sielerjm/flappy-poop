@@ -117,6 +117,28 @@ test('the found-day store: one record per season, a piece once with its earliest
   assert.deepEqual(sandbox.found(), { 1: '2026-12-01' });
 });
 
+test('Sign out forgets the pieces (2.11): clearAdventStores empties every season\'s record and nothing else; a store can clear itself', async () => {
+  const { clearAdventStores } = await import('../src/leaderboard.js');
+  const map = new Map();
+  const storage = fakeStorage(map);
+  Object.defineProperty(storage, 'length', { get: () => map.size }); // live, as localStorage's
+  storage.key = (i) => [...map.keys()][i] ?? null;
+  createAdventStore(storage, 2026).add(3, '2026-12-03');
+  createAdventStore(storage, 2027).add(1, '2027-12-01');
+  storage.setItem(LEADERBOARD.adventQueueKey, '[]');
+  storage.setItem('flappyPoop.settings', '{}');
+  clearAdventStores(storage);
+  assert.deepEqual(createAdventStore(storage, 2026).found(), {});
+  assert.deepEqual(createAdventStore(storage, 2027).found(), {});
+  assert.equal(storage.getItem(LEADERBOARD.adventQueueKey), '[]', 'the queue keeps its entries (each carries its player id)');
+  assert.equal(storage.getItem('flappyPoop.settings'), '{}');
+  assert.doesNotThrow(() => clearAdventStores(null));
+  const one = createAdventStore(storage, 2026);
+  one.add(2, '2026-12-02');
+  one.clear();
+  assert.deepEqual(one.found(), {});
+});
+
 const TODAY = '2026-12-05';
 const YESTERDAY = shiftDayKey(TODAY, -1);
 

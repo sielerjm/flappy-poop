@@ -62,7 +62,7 @@ test('a day\'s schedule: the same for every run of that day, apart for other day
   assert.ok(perRun >= 0.8 && perRun <= 2.5, `storms in a 40-pair run: ${perRun.toFixed(2)} on average`);
 });
 
-test('stormPhase: the banner one pair ahead, the storm over its pairs, nothing else; stormCovers names its pairs (no piece there)', () => {
+test('stormPhase: the banner one pair ahead, the storm over its pairs, nothing else; stormCovers names the band slots flown inside it (no piece there)', () => {
   const starts = [30, 50];
   assert.deepEqual(stormPhase(27, starts, T), { phase: null, start: null });
   assert.deepEqual(stormPhase(28, starts, T), { phase: 'banner', start: 30 }, 'the pair before the storm\'s first');
@@ -70,9 +70,12 @@ test('stormPhase: the banner one pair ahead, the storm over its pairs, nothing e
   assert.deepEqual(stormPhase(29 + S.pairs - 1, starts, T), { phase: 'storm', start: 30 });
   assert.deepEqual(stormPhase(29 + S.pairs, starts, T), { phase: null, start: null });
   assert.deepEqual(stormPhase(48, starts, T), { phase: 'banner', start: 50 });
-  assert.equal(stormCovers(starts, 29, T), false);
-  for (let n = 30; n < 30 + S.pairs; n += 1) assert.equal(stormCovers(starts, n, T), true, `pair ${n}`);
-  assert.equal(stormCovers(starts, 30 + S.pairs, T), false);
+  // A band item rides half a spacing after its pair, so pair n's slot is flown at n pairs passed (2.11): the slots
+  // covered are exactly those flown in the storm phase.
+  assert.equal(stormCovers(starts, 28, T), false, 'the banner\'s slot is calm');
+  for (let n = 29; n < 29 + S.pairs; n += 1) assert.equal(stormCovers(starts, n, T), true, `pair ${n}'s slot`);
+  assert.equal(stormCovers(starts, 29 + S.pairs, T), false);
+  for (let passed = 0; passed < 80; passed += 1) assert.equal(stormCovers(starts, passed, T), stormPhase(passed, starts, T).phase === 'storm', `slot ${passed}`);
 });
 
 test('the storm\'s pull: flap and scroll multipliers ramp with the storm\'s level; at full strength the climb per pair keeps 85 % or more (the clearance invariant)', () => {
