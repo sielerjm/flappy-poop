@@ -20,9 +20,9 @@
 // worker for that browser (src/swClient.js).
 
 // --- stamp (tools/sw_stamp.mjs; written by npm run push, empty in the committed file) ---
-const BUILD = '0.32.0-06e359d05e';
+const BUILD = '0.32.0-66cdf8e24f';
 const FILES = [
-  ["index.html","8ca6d01e8ea4b1bc6708ddbd1ccadf8d77a0eaf76699bbfd97274888c02a4f9a"],
+  ["index.html","3ccdb4c42fb12279becaf171a41a106e81158ec0f076a24b357c031c279e5c7a"],
   ["src/achievements.js?h=a598390119","a5983901190503f9d81306082792f5d2ece31232a8269090219ea8f709b1fa86"],
   ["src/advent.js?h=792441568c","792441568cecbf6f843d89925bc5a392e7f3c87f8300e2b3ac73c1d5126194af"],
   ["src/changelog.js?h=af96ae32b6","af96ae32b6cb528ee0a54bd1a428d4a6729e3d54ffd79ab0f195c0be8c5e9f0e"],
@@ -32,14 +32,14 @@ const FILES = [
   ["src/i18n.js?h=0b3d4692cc","0b3d4692cc9fbe047f4c4286426614ff26907f18931ce18203208af5805d6204"],
   ["src/input/pad.js?h=e5def632b0","e5def632b0facc1e20e02b24c55d2b36e15ab42724c384e69fe60d6d677ae485"],
   ["src/leaderboard.js?h=f4d895fd4e","f4d895fd4e7c31894372421c877fb91fb9b0b4b81842bd7278f13da27175749f"],
-  ["src/logic.js?h=664ccf3764","664ccf37648c070c42406c6700d8f6e60e7d724fb6eba948526a5c2deb659b96"],
-  ["src/main.js?h=08aad77068","08aad7706837efb4d0cedfef88661b98c020e7d923afe60c61d9cfe57822a7c4"],
+  ["src/logic.js?h=3e25ff5f7c","3e25ff5f7c1df2e1d742d5b0535e7be89f6baacb1b93d03077e5277bc2aaf6c0"],
+  ["src/main.js?h=5e8c86e15e","5e8c86e15ecf082f69149f64b74ca74fe6425e985afe8fe0de0f66644c7ac5a1"],
   ["src/online.js?h=1acfbb4bdf","1acfbb4bdfa38e292d99c2199be795d7ce7811170f4cddbfd2b6bf6187ce45de"],
   ["src/onlineAccount.js?h=08f891661f","08f891661fb487b888e9e96a43e2484181dd22cb0b16f54e5986a751a7f7f4b8"],
   ["src/onlineFriends.js?h=2a90f8cee7","2a90f8cee7ce80e736441cb1c8c4c9d926dfe83e1f2ed757c81d39b5b5194b71"],
   ["src/onlineInvites.js?h=0d82279272","0d82279272dcc13af93b771ab746067446077231872924c0393f9b2e22f2bd26"],
   ["src/onlineLobby.js?h=a20fe76554","a20fe7655495ee6d890a894500432bf6eeddf67201875160370b9050b8eec03e"],
-  ["src/onlineNet.js?h=a1906caa41","a1906caa416187d1bbb7aa177be3d001b3e779d1bc608dfd349cc78db2e1fc6f"],
+  ["src/onlineNet.js?h=5d3f5b5c67","5d3f5b5c67865d8b8439d76e88a82c5a9a5c73ef95c993c644427dd9c997f95d"],
   ["src/onlineRace.js?h=c78f078810","c78f0788105157c585945f52ef3387844d5a33998a8009596c70059014ade14e"],
   ["src/phaserReady.js?h=d559e89fb3","d559e89fb39306b32742ac169280deaf4ea920e2d1a09f4e13d6a7a6db94b3b2"],
   ["src/questionAudits.js?h=a69641a809","a69641a809967fc756041dab811f7ab342a2f583c9bd219c79e51a0a5f12bacf"],

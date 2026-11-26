@@ -14,14 +14,14 @@
     "./src/i18n.js": "./src/i18n.js?h=0b3d4692cc",
     "./src/input/pad.js": "./src/input/pad.js?h=e5def632b0",
     "./src/leaderboard.js": "./src/leaderboard.js?h=f4d895fd4e",
-    "./src/logic.js": "./src/logic.js?h=664ccf3764",
-    "./src/main.js": "./src/main.js?h=08aad77068",
+    "./src/logic.js": "./src/logic.js?h=3e25ff5f7c",
+    "./src/main.js": "./src/main.js?h=5e8c86e15e",
     "./src/online.js": "./src/online.js?h=1acfbb4bdf",
     "./src/onlineAccount.js": "./src/onlineAccount.js?h=08f891661f",
     "./src/onlineFriends.js": "./src/onlineFriends.js?h=2a90f8cee7",
     "./src/onlineInvites.js": "./src/onlineInvites.js?h=0d82279272",
     "./src/onlineLobby.js": "./src/onlineLobby.js?h=a20fe76554",
-    "./src/onlineNet.js": "./src/onlineNet.js?h=a1906caa41",
+    "./src/onlineNet.js": "./src/onlineNet.js?h=5d3f5b5c67",
     "./src/onlineRace.js": "./src/onlineRace.js?h=c78f078810",
     "./src/phaserReady.js": "./src/phaserReady.js?h=d559e89fb3",
     "./src/questionAudits.js": "./src/questionAudits.js?h=a69641a809",
@@ -94,9 +94,9 @@
   <!-- Phaser's CDN: the connection opens while the page parses (plan 35, 1.2). -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <!-- The module graph is four levels deep, and a browser only learns a level once the one above has arrived: these start the big first-run modules at once (plan 35, 2.4). The hrefs are exactly the URLs the imports use, or the preload is wasted: bare in the tree, and `npm run push` writes the import map's ?h= into them and into the main tag (tools/sw_stamp.mjs, plan 35, 3.1). -->
-  <link rel="modulepreload" href="src/main.js?h=08aad77068">
+  <link rel="modulepreload" href="src/main.js?h=5e8c86e15e">
   <link rel="modulepreload" href="src/config.js?h=e6d2142a18">
-  <link rel="modulepreload" href="src/logic.js?h=664ccf3764">
+  <link rel="modulepreload" href="src/logic.js?h=3e25ff5f7c">
   <link rel="modulepreload" href="src/i18n.js?h=0b3d4692cc">
   <link rel="modulepreload" href="src/scenes/Boot.js?h=7b5151e34c">
   <link rel="modulepreload" href="src/scenes/Play.js?h=2366df9cc2">
@@ -486,6 +486,6 @@
   </script>
   <!-- async: a stalled CDN must not hold the page; src/phaserReady.js orders the modules instead. -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.min.js" async onload="__flappyBoot.cdn(true)" onerror="__flappyBoot.cdn(false)"></script>
-  <script type="module" src="src/main.js?h=08aad77068"></script>
+  <script type="module" src="src/main.js?h=5e8c86e15e"></script>
 </body>
 </html>
