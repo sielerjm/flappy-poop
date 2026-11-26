@@ -35,6 +35,9 @@ export class Advent extends Phaser.Scene {
     // book opened any other way does not inherit it.
     this.onBack = play?.adventOnClose ?? null;
     if (play) play.adventOnClose = null;
+    // A scene is one object across opens: a flight cut short by a close must not reach this open (2.19 review).
+    this.flight = null;
+    this.flightTimer = null;
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
     const W = this.scale.width; // the live field: the book stays centred
@@ -85,7 +88,12 @@ export class Advent extends Phaser.Scene {
     this.input.on('pointerdown', (pointer) => {
       if (this.flight && !overlayOutsideHit(pointer.x, pointer.y, L.panel)) this.flight.finish();
     });
-    this.events.once('shutdown', () => this.flight?.finish(true));
+    this.events.once('shutdown', () => {
+      this.flight?.finish(true);
+      this.flight = null;
+      this.flightTimer?.remove();
+      this.flightTimer = null;
+    });
     this.startArrivals();
   }
 

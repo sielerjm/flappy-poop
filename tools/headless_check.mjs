@@ -145,7 +145,7 @@ export const SECTIONS = [
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
   { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
   { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the stock dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
-  { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the home chip's count, the Daily popup's two lines, the day's piece shown, caught, stored and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run that misses its piece and queues nothing better; the book (2.18): the glowing button opens it, the piece flies into its cell, the glow is off after it closes, the Daily window's 🧩 line opens it and closes back, the 🧩 board tab on a stubbed advent_board); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after); test mode on a Pretend 5 Dec (the piece in the sandbox only)" },
+  { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the Advent button's count, the Daily popup's two lines, the day's piece shown, caught, stored and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run that misses its piece and queues nothing better; the book (2.18): the glowing button opens it, the piece flies into its cell, the glow is off after it closes, the Daily window's 🧩 line opens it and closes back, the 🧩 board tab on a stubbed advent_board); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after); test mode on a Pretend 5 Dec (the piece in the sandbox only)" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -8483,6 +8483,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       await homeAgain();
       const B = `__flappy.scene.getScene('Advent')`;
       const bookNow = () => evaluate(`JSON.stringify((() => { const b = ${B}; const s = JSON.parse(localStorage.getItem('flappyPoop.advent.2026') || 'null'); return { active: __flappy.scene.isActive('Advent'), arrivals: (b.arrivals ?? []).map((p) => p.piece), flight: Boolean(b.flight), locks: b.locks?.size ?? null, count: b.countText?.text ?? null, art: b.children.list.filter((c) => c.texture?.key === 'advent-puzzle').map((c) => c.frame.name), seen: s?.seen ?? null, glow: Boolean(${play}.adventHalo?.visible), chip: ${play}.adventShown ? ${play}.adventCount.text : null }; })())`).then(JSON.parse);
+      // The sounds the book asks Play for (a flight's chimes, a landing's click), whether or not their files have landed.
+      await evaluate(`(() => { const p = ${play}; globalThis.__adSounds = []; const ps = p.playSample.bind(p); p.playSample = (key, ...rest) => (globalThis.__adSounds.push(key), ps(key, ...rest)); return true; })()`);
       await evaluate(`(${play}.handleChrome('advent'), true)`);
       await until(`__flappy.scene.isActive('Advent') && __flappy.textures.exists('advent-puzzle')`, 60);
       await sleep(200);
@@ -8491,6 +8493,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       await until(`!${B}.flight`, 80);
       await sleep(300);
       const b1 = await bookNow();
+      const sounds = await evaluate(`JSON.stringify(globalThis.__adSounds)`).then(JSON.parse);
+      ok(!b0.flight || JSON.stringify(sounds) === '["advent-add","advent-lock"]', `the flight asks for its chimes and the landing for its click (${JSON.stringify(sounds)})`);
       ok(b0.active && JSON.stringify(b0.arrivals) === '[5]' && b0.locks === 24 && b0.count === '0 of 24 found' && JSON.stringify(b0.seen) === '[5]' && b1.locks === 23 && b1.count === '1 of 24 found' && JSON.stringify(b1.art) === JSON.stringify([cell5]), `the glowing button opens the book: piece 5 arrives${b0.flight ? ' in flight' : ' (reduced motion: no flight)'} into cell ${cell5} (${b0.count} → ${b1.count}, locks ${b0.locks} → ${b1.locks}), marked seen on open (${JSON.stringify(b0.seen)})`);
       await evaluate(`(${B}.close(), true)`);
       await until(`!__flappy.scene.isActive('Advent')`, 40);
@@ -8519,6 +8523,28 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       await evaluate(`(globalThis.fetch = globalThis.__fetchAd, __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__apiAd; return true; }))`);
       const tx = (s) => board.texts.includes(s);
       ok(board.tab === 'advent' && board.tabs?.at(-1) === 'advent' && board.title === (await evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'adventBoardTitle'))`)) && tx('ElfOne') && tx('RudiTwo') && tx('\u{1F384}') && tx('\u{1F332}') && tx('24') && board.footer === 'You: #3 of 3 · 1' && board.asks.some((b) => b.p_season === 2026), `the 🧩 board tab (last of ${board.tabs?.length}): "${board.title}", 🎄 and 🌲 by the names, footer "${board.footer}", asked advent_board for ${board.asks[0]?.p_season}`);
+      // A book closed mid-flight leaves nothing behind (the 2.19 review): a second unseen piece (3, found 3 Dec) flies,
+      // the book closes during it, and on the next open the piece is in place and a tap inside the panel lands nothing twice.
+      await evaluate(`(() => { const k = 'flappyPoop.advent.2026'; const s = JSON.parse(localStorage.getItem(k)); s.found[3] = '2026-12-03'; localStorage.setItem(k, JSON.stringify(s)); return true; })()`);
+      await evaluate(`(${play}.handleChrome('advent'), true)`);
+      await until(`__flappy.scene.isActive('Advent') && Boolean(${B}.flight)`, 60);
+      await sleep(300);
+      await evaluate(`(${B}.close(), true)`);
+      await until(`!__flappy.scene.isActive('Advent')`, 40);
+      await evaluate(`(${play}.handleChrome('advent'), true)`);
+      await until(`__flappy.scene.isActive('Advent')`, 60);
+      await sleep(300);
+      const b3 = await bookNow();
+      await evaluate(`(() => { const L = ${B}.layout; ${B}.input.emit('pointerdown', { x: L.centre.x, y: L.centre.y }); return true; })()`);
+      await sleep(1500);
+      const b4 = await bookNow();
+      await evaluate(`(${B}.close(), true)`);
+      await until(`!__flappy.scene.isActive('Advent')`, 40);
+      const cell3 = T17.puzzle.order[2];
+      const cells = (b) => JSON.stringify([...b.art].sort((x, y) => x - y));
+      const want2 = JSON.stringify([cell3, cell5].sort((x, y) => x - y));
+      ok(!b3.flight && b3.arrivals.length === 0 && b3.count === '2 of 24 found' && cells(b3) === want2 && b4.count === '2 of 24 found' && cells(b4) === want2 && b4.locks === 22 && !b4.glow, `closed mid-flight, the book reopens with piece 3 in place (${b3.count}, cells ${cells(b3)}); a tap inside lands nothing twice (${b4.count}, cells ${cells(b4)}, locks ${b4.locks})`);
+      await evaluate(`(delete ${play}.playSample, true)`);
 
       // --- (2) 7 Dec, a storm ---
       await pinClock('2026-12-07');
