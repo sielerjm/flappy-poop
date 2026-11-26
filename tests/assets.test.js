@@ -92,6 +92,7 @@ const adventSquares = {
   'poop-dead-santa.png': 272,
   'poop-speech-santa.png': 510,
   'bacteria-santa.png': 196, // built at 1.11 (plan 17)
+  'bean-holly.png': 346, // the bean with holly: the bean at the stock size, the canvas grown for the leaves
 };
 
 test('the assets/advent/ art named in the size table has the listed square (plan 17, 1.3)', () => {

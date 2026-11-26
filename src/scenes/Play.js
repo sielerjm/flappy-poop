@@ -3860,13 +3860,13 @@ export class Play extends Phaser.Scene {
       this.beanSpawned = true;
       const phase = this.course.phase(n, 'bean');
       const y = still ? stillY() : beanY(0, phase, this.beanBounds, T);
-      const bean = this.beans.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, 'bean');
+      const bean = this.beans.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, this.itemTexture('bean'));
       bean.setDepth(8);
       bean.setScale(T.spriteDisplayScale);
       const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
       bean.body.setCircle(beanBody.radius, beanBody.offset, beanBody.offset);
       bean.setVelocityX(-this.scrollSpeed());
-      bean.setData({ phase, still, baseScale: T.spriteDisplayScale, radius: T.beans.beanRadius });
+      bean.setData({ kind: 'bean', phase, still, baseScale: T.spriteDisplayScale, radius: T.beans.beanRadius });
       bean.clockMs = 0; // its bob / pulse clock (update())
     }
   }
@@ -4152,6 +4152,7 @@ export class Play extends Phaser.Scene {
   reapplySkin() {
     if (this.poop?.active && this.poopStockKey) this.setPoopTexture(this.poopStockKey);
     for (const item of this.items?.getChildren() ?? []) this.skinItem(item);
+    for (const bean of this.beans?.getChildren() ?? []) this.skinItem(bean); // the world bean's holly twin (same circle)
     this.refreshSeasonHome(); // the Bowelidays image, once its file is in
     for (const pipe of this.pipes?.getChildren() ?? []) {
       if (pipe.originY !== 0) continue; // a bottom pipe stands up from its gap (origin at its top)
@@ -4232,7 +4233,7 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing' || !bean.active) return;
     if (this.effects.holdingBean()) return; // already carrying one: let it float past
     perfMark(PERF_TAGS.pickup);
-    const ghost = this.add.image(bean.x, bean.y, 'bean').setScale(T.spriteDisplayScale).setDepth(12);
+    const ghost = this.add.image(bean.x, bean.y, bean.texture.key).setScale(T.spriteDisplayScale).setDepth(12);
     this.tweens.add({
       targets: ghost,
       scale: T.spriteDisplayScale * 1.4,

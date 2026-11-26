@@ -24,6 +24,7 @@ export const ADVENT_ART = {
     // The world pickups only (D2; 1.11): the HUD, the cards, Over and Stats keep the stock items.
     fiber: 'candy-cane',
     probiotic: 'gingerbread',
+    bean: 'bean-holly', // the world bean only (Michael, 26 Nov): same bean size and the same hitbox circle, the holly sticks out
     bacteria: 'bacteria-santa',
   },
   fartFrames: ['poop-fart-santa1', 'poop-fart-santa2'],
@@ -45,6 +46,7 @@ export const ADVENT_ART = {
     'candy-cane': 'assets/advent/candy-cane.png',
     gingerbread: 'assets/advent/gingerbread.png',
     'bacteria-santa': 'assets/advent/bacteria-santa.png',
+    'bean-holly': 'assets/advent/bean-holly.png',
     'pipe-snow': 'assets/advent/pipe-snow.png',
     bowelidays: 'assets/advent/bowelidays.png', // all December over the title (countdownLine's image)
   },

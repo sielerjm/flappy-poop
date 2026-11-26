@@ -400,8 +400,9 @@ day through the game registry.
   send, and each side maps it through its own skin, so a December player and an off-season rival see each other correctly.
   The twins are cut on the stock body's centre and scale (`tools/process_art.py`, same-body-scale mode), so the hitbox circle is the stock one.
   The fart (and a start boost) alternates `fartFrames` on one loop clock (`Play.ensureFartClock`, the stink frames' rate, paused with the run).
-  There is no dead-frame twin (D13): `tests/advent.test.js` pins it. Pickups swap on the world only (`itemTexture`, `skinItem`: candy cane, gingerbread
-  drawn 5 % taller than the probiotic at 185 px ink height, hatted bacterium); the HUD, cards, Over and Stats keep the stock items. Each bottom pipe
+  The crash shows `poop-dead-santa` too (the stock key `poop-dead` stays the state). Pickups swap on the world only (`itemTexture`, `skinItem`: candy cane, gingerbread
+  drawn 5 % taller than the probiotic at 185 px ink height, hatted bacterium, and the bean with holly: a 346 px canvas on the stock bean's centre, set with `kind: 'bean'` in the bean's data, so
+  the 48 px hitbox circle stays on the bean and the leaves add nothing); the HUD, cards, Over and Stats keep the stock items. Each bottom pipe
   gets a snow layer on its cap (`addSnowCap`, `placeSnowCaps` on `postupdate`; offset `TUNING.advent.snowCap`).
 - **Loading.** In season the twins join `loadLazyAudio`'s one flight (never Boot; art under new names needs no `?v=` bump). When it lands, the game
   emits `advent-art` and every Play instance re-applies its skin (`reapplySkin`), so the stock frame shows until then. The new PNG

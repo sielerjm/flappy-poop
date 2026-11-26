@@ -215,7 +215,8 @@ test('reapplySkin, on the flight\'s landing: the poop\'s current stock key shows
         it.texture.key = k;
         return it;
       },
-      body: { setCircle() {} },
+      body: { setCircle: (...a) => it.circles.push(a) },
+      circles: [],
     };
     return it;
   };
@@ -230,7 +231,8 @@ test('reapplySkin, on the flight\'s landing: the poop\'s current stock key shows
   const bottom = pipe(0);
   const { s, have } = scene({
     key: 'poop-stink1',
-    items: { getChildren: () => [fiber, bean] },
+    items: { getChildren: () => [fiber] },
+    beans: { getChildren: () => [bean] },
     pipes: { getChildren: () => [top, bottom] },
     add: {
       image: (x, y, k) => {
@@ -249,7 +251,9 @@ test('reapplySkin, on the flight\'s landing: the poop\'s current stock key shows
   assert.equal(s.poopStockKey, 'poop-stink1');
   assert.equal(s.poop.texture.key, 'poop-stink1-santa', 'the frame the poop wears now, not the ready frame');
   assert.equal(fiber.texture.key, 'candy-cane');
-  assert.equal(bean.texture.key, 'bean', 'a bean has no twin');
+  assert.equal(bean.texture.key, 'bean-holly', 'the world bean wears the holly twin');
+  assert.equal(bean.getData('kind'), 'bean');
+  assert.deepEqual(bean.circles.at(-1)[0], T.beans.beanRadius / 0.5, 'the hitbox circle is still the bean\'s own radius, whatever the canvas holds');
   assert.equal(fiber.getData('kind'), 'fiber', 'the kind stays the item\'s data');
   assert.deepEqual(snows.map((im) => im.key), ['pipe-snow'], 'one snow layer, on the bottom pipe only');
   assert.equal(bottom.getData('snow'), snows[0]);

@@ -273,6 +273,47 @@ def process_twin(name: str, spec: dict):
     print(f"{name}.png: {out.size}  ({what} {shown} of {im.size}, k {k:.5f}, half {half})")
 
 
+def bean_interior(im: Image.Image, step: int = 4):
+    """The red (interior) area and centroid of a kidney bean drawing, in source px, measured on an image
+    shrunk by `step`: pixels clearly redder than green and blue. Leaves, outline and the white hilum fall out
+    or fill in evenly, so the same measure on the stock bean and on a holly-wreathed one compares bean to bean."""
+    small = im.convert("RGBA").reduce(step)
+    n = sx = sy = 0
+    raw = small.tobytes()
+    for i in range(0, len(raw), 4):
+        r, g, b, a = raw[i : i + 4]
+        if a > 200 and r > g + 40 and r > b + 25:
+            n += 1
+            sx += (i // 4) % small.width
+            sy += (i // 4) // small.width
+    if not n:
+        raise SystemExit("no red bean interior found")
+    return n * step * step, ((sx / n + 0.5) * step, (sy / n + 0.5) * step)
+
+
+def process_bean_twin(name: str, spec: dict):
+    """A December bean (plan 17: the bean with holly). The red bean is scaled to the stock bean's size (equal
+    interior area, so a tilted bean matches an upright one) and placed on the stock bean's centroid; the canvas
+    is centred on the stock bean's crop-square centre, where the hitbox circle sits, and grows to hold the holly.
+    So the leaves add no hitbox: the circle stays on the bean (config beans.beanRadius, drawn at the stock scale)."""
+    im = knock_background(Image.open(SRC / spec["src"]))
+    stock = knock_background(Image.open(STOCK_SRC / item_source_for("bean.png")))
+    (sl, st, side), sq_centre = item_square(stock)
+    k = SIZE / side  # the stock bean's output scale
+    a_stock, c_stock = bean_interior(stock)
+    a_new, c_new = bean_interior(im)
+    f = (a_stock / a_new) ** 0.5  # new source px -> stock source px
+    s = f * k  # new source px -> output px
+    # the stock centroid sits (c_stock - sq_centre) from the canvas centre; give the new bean's centroid that offset
+    centre = (c_new[0] - (c_stock[0] - sq_centre[0]) * k / s, c_new[1] - (c_stock[1] - sq_centre[1]) * k / s)
+    cut = cut_same_body_scale(im, centre, s)
+    if not cut:
+        raise SystemExit(f"{spec['src']} has no visible ink")
+    out, half = cut
+    save_png(out, OUT / f"{name}.png")
+    print(f"{name}.png: {out.size}  (bean scale {s:.5f} = x{f:.3f} on the stock bean, centre {tuple(round(v, 1) for v in centre)}, half {half})")
+
+
 def process_body_frame(name: str, spec: dict):
     """poop.png / poop-dead.png: cut on the body box itself (size SIZE)."""
     body = poop_body(SRC)
@@ -529,6 +570,7 @@ for _name, _src, _stock, _pre in ADVENT_TWINS:
     ENTRIES[_name] = {"kind": "twin", "src": _src, "stock": _stock, **({"pre": _pre} if _pre else {})}
 # The hatted bacterium is Michael's aligned file (meta/advent-previews/art-out/), copied into assets/src/ at 1.11 (D14).
 ENTRIES["bacteria-santa"] = {"kind": "item", "src": "Bad_Bacteria-santa-aligned.png", "body_like": "bacteria.png"}
+ENTRIES["bean-holly"] = {"kind": "bean-twin", "src": "bean-holly.png"}  # the December bean: bean to bean size, hitbox unchanged (plan 17)
 ENTRIES["gingerbread"] = {"kind": "item", "src": "gingerbread.png", "fit_height": 185}  # the probiotic's ink height (176) + 5 % (Michael, 26 Nov, Preview B3)
 ENTRIES["candy-cane"] = {"kind": "item", "src": "candy-cane.png"}
 # Layers: no knockout, cropped to the ink (fairy-lights' ink is already the strip, y 374 to 677 of 1536 x 1024).
@@ -538,6 +580,7 @@ ENTRIES["bowelidays"] = {"kind": "layer", "src": "Bowelidays-straight.png", "sca
 ENTRIES["fairy-lights"] = {"kind": "layer", "src": "fairy-lights.png", "scale": 0.5}
 
 RUNNERS = {
+    "bean-twin": process_bean_twin,
     "body": process_body_frame,
     "twin": process_twin,
     "item": lambda name, s: process_item(SRC / s["src"], f"{name}.png", s.get("size", SIZE), s.get("body_like"), s.get("fit_height")),
