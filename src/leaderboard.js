@@ -317,6 +317,20 @@ function createPostQueue(storage, { key, max, normalize, idOf }) {
       shared.outcomes.delete(idOf(e));
       return e;
     },
+    /**
+     * Queue an entry, or put it in the place of the queued entry with its id when `wins(queued, entry)`
+     * (plan 17, 2.3: a better December score). Returns the entry that stays queued, or null.
+     */
+    replace(raw, wins) {
+      const e = normalize(raw);
+      if (!e) return null;
+      const all = queue.load();
+      const at = all.findIndex((q) => idOf(q) === idOf(e));
+      if (at >= 0 && !wins(all[at], e)) return all[at];
+      write(at >= 0 ? all.map((q, i) => (i === at ? e : q)) : [...all, e].slice(-Math.max(1, max)));
+      shared.outcomes.delete(idOf(e));
+      return e;
+    },
     /** 'queued' (or 'nameTaken' after that answer) while waiting, 'sent' / 'rejected' once answered (this page load), else null. */
     outcome(id) {
       const last = shared.outcomes.get(id) ?? null;
@@ -337,7 +351,9 @@ function createPostQueue(storage, { key, max, normalize, idOf }) {
           }
           if (res === 'nameTaken') shared.outcomes.set(idOf(entry), 'nameTaken');
           if (res !== 'ok' && res !== 'rejected') break;
-          write(queue.load().filter((q) => idOf(q) !== idOf(entry)));
+          // Only the entry sent leaves: one that replaced it meanwhile (replace) still waits.
+          const sent = JSON.stringify(entry);
+          write(queue.load().filter((q) => idOf(q) !== idOf(entry) || JSON.stringify(q) !== sent));
           shared.outcomes.set(idOf(entry), res === 'ok' ? 'sent' : 'rejected');
           done += 1;
         }
@@ -402,7 +418,18 @@ export function createRacePostQueue(storage = browserStorage(), { key = LEADERBO
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const nonNegInt = (n) => Number.isInteger(n) && n >= 0;
 
-/** A daily attempt record, or null: { day, playerId, level, score, pipes, collected, final }. */
+/** A day's best (plan 17, 2.3), or null: { score, pipes, collected }. */
+function normalizeBest(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { score, pipes, collected } = raw;
+  if (!nonNegInt(score) || !nonNegInt(pipes)) return null;
+  return { score, pipes, collected: collected && typeof collected === 'object' && !Array.isArray(collected) ? collected : {} };
+}
+
+/**
+ * A daily attempt record, or null: { day, playerId, level, score, pipes, collected, final, best? }. `best`
+ * (plan 17, 2.3) is the day's best on this device; a record from before it has none (bestOf).
+ */
 function normalizeDaily(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const { day, playerId, level, score, pipes, collected, final } = raw;
@@ -410,8 +437,18 @@ function normalizeDaily(raw) {
   if (typeof playerId !== 'string' || !ID_RE.test(playerId)) return null;
   if (!Number.isInteger(level) || !nonNegInt(score) || !nonNegInt(pipes)) return null;
   const counts = collected && typeof collected === 'object' && !Array.isArray(collected) ? collected : {};
-  return { day, playerId, level, score, pipes, collected: counts, final: Boolean(final) };
+  const best = normalizeBest(raw.best);
+  return { day, playerId, level, score, pipes, collected: counts, final: Boolean(final), ...(best ? { best } : {}) };
 }
+
+/** A record's day's best: its `best`, or, for a final record from before 2.3, its own score; null for none. */
+function bestOf(rec) {
+  if (!rec) return null;
+  return rec.best ?? (rec.final ? { score: rec.score, pipes: rec.pipes, collected: rec.collected } : null);
+}
+
+/** The higher of two bests (a tie keeps the first, the earlier). */
+const higherBest = (a, b) => (!a || (b && b.score > a.score) ? b : a);
 
 export function createDailyStore(storage = browserStorage(), { key = LEADERBOARD.dailyKey } = {}) {
   const read = () => {
@@ -427,8 +464,45 @@ export function createDailyStore(storage = browserStorage(), { key = LEADERBOARD
     const rec = read();
     return rec && rec.day === day && rec.playerId === playerId ? rec : null;
   };
+  const write = (rec) => {
+    try {
+      storage?.setItem(key, JSON.stringify(rec));
+    } catch {
+      /* storage unavailable: the attempt still posts from memory this page load */
+    }
+    return rec;
+  };
+  /**
+   * Store the attempt (junk is ignored). Returns the stored record or null. The day's best (plan 17, 2.3)
+   * rides along: kept from the stored record of the same day and player, raised by a final attempt.
+   */
+  const save = (rec) => {
+    const r = normalizeDaily(rec);
+    if (!r) return null;
+    const prev = read();
+    const carried = r.best ?? (prev && prev.day === r.day && prev.playerId === r.playerId ? bestOf(prev) : null);
+    const best = r.final ? higherBest(carried, { score: r.score, pipes: r.pipes, collected: r.collected }) : carried;
+    return write({ ...r, ...(best ? { best } : {}) });
+  };
   return {
     load,
+    /** This player's best for `day` on this device (plan 17, 2.3): { score, pipes, collected }, or null. */
+    best(day, playerId) {
+      return bestOf(load(day, playerId));
+    },
+    /**
+     * The 🌞 board's row for this player and `day` ({ level, score, pipes }; another device's best,
+     * plan 17, 2.3): raises the stored best, never an attempt in the air; with no record for the day
+     * it stands as the day's result (final), as the server check stored it before. Returns the record.
+     */
+    mergeBest(day, playerId, row) {
+      if (!nonNegInt(row?.score) || !nonNegInt(row?.pipes)) return null;
+      const rec = load(day, playerId);
+      if (!rec) return save({ day, playerId, level: row.level, score: row.score, pipes: row.pipes, collected: {}, final: true });
+      const cur = bestOf(rec);
+      if (cur && cur.score >= row.score) return rec;
+      return save({ ...rec, best: { score: row.score, pipes: row.pipes, collected: {} } });
+    },
     /** Whatever record is stored, any day or player (the sync finalises an unfinished one). */
     peek() {
       return read();
@@ -443,31 +517,23 @@ export function createDailyStore(storage = browserStorage(), { key = LEADERBOARD
       return Boolean(rec && (rec.final || rec.pipes > 0));
     },
     /**
-     * Give the attempt back (plan 47, calls D and G): remove the stored record only when it is this
-     * player's unfinished record for `day` with no pipe crossed. Anything else stays (clear() drops
-     * any record). Returns whether a record was removed.
+     * Give the attempt back (plan 47, calls D and G): only this player's unfinished record for `day`
+     * with no pipe crossed. It is removed, or, when the day already has a best (a December replay,
+     * plan 17, 2.3), put back to that best, final, so the best is never lost. Anything else stays
+     * (clear() drops any record). Returns whether the attempt was given back.
      */
     release(day, playerId) {
       const rec = load(day, playerId);
       if (!rec || rec.final || rec.pipes !== 0) return false;
       try {
-        storage?.removeItem(key);
+        if (rec.best) storage?.setItem(key, JSON.stringify({ ...rec, score: rec.best.score, pipes: rec.best.pipes, collected: rec.best.collected, final: true }));
+        else storage?.removeItem(key);
       } catch {
         return false;
       }
       return true;
     },
-    /** Store the attempt (junk is ignored). Returns the stored record or null. */
-    save(rec) {
-      const r = normalizeDaily(rec);
-      if (!r) return null;
-      try {
-        storage?.setItem(key, JSON.stringify(r));
-      } catch {
-        /* storage unavailable: the attempt still posts from memory this page load */
-      }
-      return r;
-    },
+    save,
     clear() {
       try {
         storage?.removeItem(key);
@@ -496,7 +562,10 @@ export function dailyEntryId(entry) {
 }
 
 export function createDailyQueue(storage = browserStorage(), { key = LEADERBOARD.dailyQueueKey, max = LEADERBOARD.dailyQueueMax } = {}) {
-  return createPostQueue(storage, { key, max, normalize: normalizeDailyEntry, idOf: dailyEntryId });
+  const q = createPostQueue(storage, { key, max, normalize: normalizeDailyEntry, idOf: dailyEntryId });
+  /** December (plan 17, 2.3): queue a final score, in place of the one waiting for that player and day only when higher. */
+  q.addBetter = (raw) => q.replace(raw, (queued, e) => e.score > queued.score);
+  return q;
 }
 
 /** A queued run summary: { playerId (the id it was flown under, or null before the device had one), row }. */

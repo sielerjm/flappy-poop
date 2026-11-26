@@ -927,7 +927,7 @@ export class Play extends Phaser.Scene {
    */
   startAgain(kind) {
     if (this.match) return false;
-    if (kind === 'daily') return Boolean(this.save?.name && !this.dailyPlayedToday() && this.startDaily());
+    if (kind === 'daily') return Boolean(this.save?.name && this.dailyOpen() && this.startDaily());
     this.launch({ solo: true });
     return true;
   }
@@ -978,6 +978,7 @@ export class Play extends Phaser.Scene {
     this.personalBest = false; // endRun decides
     this.dailyRunDay = daily?.day ?? null; // the day on the result panel (practice too)
     this.dailySync = null;
+    this.dailyResult = null; // endRun's { replay, best, newBest } for Over (plan 17, 2.3)
     this.scaredMs = 0;
     if (daily) {
       this.toilet = false; // this run only: create() reads the toggle again for the next one
@@ -1740,6 +1741,25 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * December (plan 17, 2.3): is `day`'s Daily Dump replayable, with the day's best on the board? On the
+   * real UTC day by default; a run passes its own day (dailyRunDay), so a 31 Dec run that ends on 1 Jan
+   * keeps December's rule, as the server keys on the posted day.
+   */
+  dailyReplay(day = utcDayKey()) {
+    return adventSeason(day, T);
+  }
+
+  /** Can today's Daily Dump start (the popup's Play, Over's Play again)? Off season while the day is unused; all December. */
+  dailyOpen() {
+    return !this.dailyPlayedToday() || this.dailyReplay();
+  }
+
+  /** This player's best of today's Daily Dump on this device (plan 17, 2.3): { score, pipes, collected }, or null. */
+  dailyBest() {
+    return this.save?.id ? this.dailyStore.best(utcDayKey(), this.save.id) : null;
+  }
+
+  /**
    * One play per player per day, across devices: ask the 🌞 board whether this user code already has
    * today's score (from any device). When it does, that becomes this device's attempt, final (so the
    * popup offers today's result and the 🌞 stops glowing). Resolves true when today is played here
@@ -1748,8 +1768,18 @@ export class Play extends Phaser.Scene {
   async checkDailyOnServer() {
     const id = this.save?.id;
     if (!id || !this.save?.name) return false;
-    if (this.dailyPlayedToday()) return true;
     const day = utcDayKey(); // the real day, never the Pretend date: the device keeps one record (plan 17, 2.2)
+    if (this.dailyReplay(day)) {
+      // December (plan 17, 2.3): Play stays open all day; the board's row (another device's best) raises this one's.
+      const rows = await this.fetchDailyRows(id, day);
+      const me = rows?.find((r) => r.me);
+      if (me && this.save?.id === id) {
+        this.dailyStore.mergeBest(day, id, { level: me.level, score: me.score, pipes: me.pipes });
+        this.refreshDailyPrompt();
+      }
+      return this.dailyPlayedToday();
+    }
+    if (this.dailyPlayedToday()) return true;
     const rows = await this.fetchDailyRows(id, day);
     const me = rows?.find((r) => r.me);
     if (this.dailyStore.load(day, id)) return true; // a run here claimed the day while the board answered
@@ -5367,8 +5397,13 @@ export class Play extends Phaser.Scene {
         // streak day was never counted (it waits for the first pipe), so nothing is taken back.
         if (this.daily) this.dailyStore.release(this.daily.day, this.daily.playerId);
       } else {
+        // December (plan 17, 2.3): every final goes to the board, which keeps the day's best (the queue
+        // swaps in a better one not yet sent); off season the day's one attempt, queued once.
+        const replay = this.dailyReplay(this.daily?.day);
+        const before = this.daily ? this.dailyStore.best(this.daily.day, this.daily.playerId) : null;
         const rec = this.saveDailyAttempt(true);
-        if (rec) this.dailyQueue.add({ ...rec, name: this.save?.name ?? null });
+        if (rec) this.queueDaily(rec, this.save?.name ?? null, replay);
+        this.dailyResult = { replay, best: rec?.best?.score ?? rec?.score ?? null, newBest: Boolean(rec && (!before || rec.score > before.score)) };
         this.recordCareer('daily');
       }
       this.dailySync = this.syncLeaderboard();
@@ -5957,8 +5992,8 @@ export class Play extends Phaser.Scene {
       this.dailyStore.release(rec.day, rec.playerId);
       return;
     }
-    const done = this.dailyStore.save({ ...rec, final: true });
-    if (done) this.dailyQueue.add({ ...done, name: done.playerId === this.save?.id ? (this.save?.name ?? null) : null });
+    const done = this.dailyStore.save({ ...rec, final: true }); // the day's best is kept (plan 17, 2.3)
+    if (done) this.queueDaily(done, done.playerId === this.save?.id ? (this.save?.name ?? null) : null, this.dailyReplay(done.day));
     // Its summary was lost with the page: a short row stands behind the score (plan 30).
     if (done && done.playerId) {
       try {
@@ -5969,12 +6004,19 @@ export class Play extends Phaser.Scene {
     }
   }
 
+  /** Queue a final Daily Dump score: in December (`replay`) in place of a lower one not yet sent, else once a day (plan 17, 2.3). */
+  queueDaily(rec, name, replay) {
+    const entry = { ...rec, name };
+    return replay ? this.dailyQueue.addBetter(entry) : this.dailyQueue.add(entry);
+  }
+
   /** The game-over panel after deathToOverMs; `won` swaps its headline, `test` hides Share. A match has no Over: the Versus scene shows the result. */
   showOver(won = false) {
     if (this.match) return;
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      const daily = this.runIsDaily ? { day: this.dailyRunDay ?? null, level: this.level, playerId: this.save?.id ?? null, practice: this.runIsTest, sync: this.dailySync ?? null } : null;
+      // replay (plan 17, 2.3): a December Daily, open again; best / newBest: the day's best after this run (none for practice).
+      const daily = this.runIsDaily ? { day: this.dailyRunDay ?? null, level: this.level, playerId: this.save?.id ?? null, practice: this.runIsTest, sync: this.dailySync ?? null, replay: this.dailyReplay(this.dailyRunDay), best: this.dailyResult?.best ?? null, newBest: Boolean(this.dailyResult?.newBest) } : null;
       const pipes = this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed;
       const personalBest = Boolean(this.personalBest && !this.runIsTest && !this.runIsDaily);
       const badges = this.runIsTest ? [] : [...(this.runBadges ?? [])];

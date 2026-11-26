@@ -1,6 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, dailyDay, dailyLevel, msUntilUtcMidnight, countdownText, dailyGlyphNow } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, dailyDay, dailyLevel, msUntilUtcMidnight, countdownText, dailyGlyphNow, adventSeason } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createButton } from '../ui/button.js';
@@ -44,7 +44,8 @@ export class Daily extends Phaser.Scene {
     this.todayText = this.add
       .text(cx, cy - 290, t(locale, 'dailyToday').replace('{level}', levelLabel(locale, dailyLevel(this.day, T))), { ...STYLE, fontSize: '34px', color: '#ffd700' })
       .setOrigin(0.5);
-    this.add.text(cx, cy - 130, fillDaily(t(locale, 'dailyBody'), this.glyph), { ...MUTED, fontSize: '28px', wordWrap: wrap, lineSpacing: 6 }).setOrigin(0.5);
+    // December (plan 17, 2.3): play as often as you like, the day's best counts (on the decorations' clock, so a Pretend date shows it).
+    this.add.text(cx, cy - 130, fillDaily(t(locale, adventSeason(this.day, T) ? 'dailyBodyDec' : 'dailyBody'), this.glyph), { ...MUTED, fontSize: '28px', wordWrap: wrap, lineSpacing: 6 }).setOrigin(0.5);
     // The day in four pictures (no words, so nothing to translate): sun up, poop, sleep, repeat.
     this.add.text(cx, cy + 30, `${this.glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`, { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
     // Under the button's row: why a name is needed, or that practice is not saved.
@@ -94,11 +95,16 @@ export class Daily extends Phaser.Scene {
     Promise.resolve(this.scene.get('Play')?.checkDailyOnServer?.()).then(done, done);
   }
 
-  /** What the button does now: 'practice' (test mode), 'create' (no username), 'result' (today played), 'checking' (asking the board), else 'play'. */
+  /**
+   * What the button does now: 'practice' (test mode), 'create' (no username), 'result' (today played),
+   * 'checking' (asking the board), else 'play'. All December (plan 17, 2.3) it is 'play': the board's
+   * check runs behind it and only raises the day's best.
+   */
   mode() {
     const play = this.scene.get('Play');
     if (play?.isTestMode?.()) return 'practice';
     if (!play?.save?.name) return 'create';
+    if (play.dailyReplay?.()) return 'play';
     if (play.dailyPlayedToday?.()) return 'result';
     if (this.checking) return 'checking';
     return 'play';
@@ -125,9 +131,14 @@ export class Daily extends Phaser.Scene {
 
   tick() {
     if (!this.countdown) return;
-    const played = this.mode() === 'result';
-    this.countdown.setVisible(played);
+    const mode = this.mode();
+    const played = mode === 'result';
+    // December (plan 17, 2.3): the day's best on this device takes the countdown's place while Play stays open.
+    const play = this.scene.get('Play');
+    const best = mode === 'play' && play?.dailyReplay?.() ? play.dailyBest?.() : null;
+    this.countdown.setVisible(played || Boolean(best));
     if (played) this.countdown.setText(t(this.locale, 'dailyNext').replace('{time}', countdownText(msUntilUtcMidnight(new Date()))));
+    else if (best) this.countdown.setText(t(this.locale, 'dailyTodaysBest').replace('{n}', String(best.score)));
   }
 
   press() {

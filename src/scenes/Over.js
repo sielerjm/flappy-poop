@@ -66,7 +66,10 @@ export class Over extends Phaser.Scene {
     // countdown's place.
     const notCounted = Boolean(data?.notCounted) && !testRun && !education;
     const freeDaily = Boolean(daily && notCounted);
-    this.freeDaily = freeDaily;
+    // December (plan 17, 2.3): a counted Daily Dump is open again too: Play again starts today's again,
+    // while its rank shows and its score was posted as usual (freeDaily alone blanks the rank).
+    const replayDaily = Boolean(daily?.replay && !notCounted);
+    this.freeDaily = freeDaily || replayDaily;
     // The game loop's time, not this.time.now: a relaunched scene's clock still holds the time it
     // last ran (Phaser syncs it on boot only), which made the retry lockout a no-op.
     this.openedAt = this.game.loop.time;
@@ -80,7 +83,7 @@ export class Over extends Phaser.Scene {
     const cx = W / 2;
     // A normal or test run offers Play again under Share | Home: the panel sits over.againLiftPx higher
     // and grows downward, so its bottom stays clear of the ⏸ button above the cog.
-    const again = !this.daily || freeDaily;
+    const again = !this.daily || freeDaily || replayDaily;
     const cy = GAME_HEIGHT / 2 - (again ? T.over.againLiftPx : 0);
     // The top of the input stack: Phaser's top-only input stops at the first scene with an interactive
     // object under the pointer, and this panel's taps are scene-level events. Without this zone every
@@ -223,6 +226,10 @@ export class Over extends Phaser.Scene {
       // Hung from its top just under the pipes | coins row (rankBox.dy), so a second line grows toward
       // the buttons, never over the cells: two lines fit above them.
       line(this.add.text(cx, cy + 130, t(locale, freeDaily ? 'dailyNotCounted' : 'runNotCounted'), { ...style, fontSize: '26px', color: '#c9b8dc', fontStyle: 'normal', align: 'center', wordWrap: { width: 500, useAdvancedWrap: true } }).setOrigin(0.5, 0));
+    } else if (replayDaily && Number.isInteger(daily.best)) {
+      // December (plan 17, 2.3): the day's best in the countdown's place, the day still open.
+      const text = daily.newBest ? t(locale, 'dailyNewBest') : t(locale, 'dailyTodaysBest').replace('{n}', String(daily.best));
+      line(this.add.text(cx, cy + 150, text, { ...style, fontSize: '28px', color: daily.newBest ? '#ffd700' : '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5));
     } else if (daily) {
       // The countdown to the next course, on the wall clock (this scene's clock is stale after a relaunch).
       this.countdown = line(this.add.text(cx, cy + 150, '', { ...style, fontSize: '28px', color: '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5));
