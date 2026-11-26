@@ -143,7 +143,7 @@ export const SECTIONS = [
   { name: 'online-invites', needs: [], about: "invites, the ✉️ (plan 39, 4.2, Preview I), on a stand-in transport under Play (no network) on a 320 phone: invite_list once linked and the topic it names; ✉️ 1 on 🤝 Friends; the inviting 🟢 friend first with the ✉️ and its time, the buttons inside the row under a 16-character name (Michael's ask); a topic invite adds one; the ✉️ tapped: the ready screen as the guest; Invite on a 🟢 friend: the room screen waiting, their no with Resend, Resend in the same room" },
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
   { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
-  { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the stock dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
+  { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the hatted dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -8333,10 +8333,10 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       }
       const shownFarts = new Set(farts.filter((f) => f.startsWith('poop-fart|')).map((f) => f.split('|')[1]));
       ok(farts.every((f) => f.startsWith('poop-fart|')) && shownFarts.size === 2 && [...shownFarts].every((k) => ART.fartFrames.includes(k)), `a fart alternates the two hatted fart frames, the state poop-fart throughout (${[...shownFarts].join(', ')})`);
-      // The crash: the stock dead frame (D13), then the hatted bubble frame on the home screen again.
+      // The crash: the hatted dead frame (the stock key stays the state), then the hatted bubble frame on the home screen again.
       await evaluate(`(() => { const p = ${play}; p.setTestSettings({ invincible: false }); if (p.effects.cancelPower()) p.endPower(); p.effects.clearPowerups(); p.graceLeftMs = 0; p.die(); return true; })()`);
       const dead = await evaluate(`${play}.poopStockKey + '|' + ${play}.poop.texture.key`);
-      ok(dead === 'poop-dead|poop-dead', `the crash shows the stock dead frame (D13: no twin yet) (${dead})`);
+      ok(dead === 'poop-dead|poop-dead-santa', `the crash shows the hatted dead frame, the state still poop-dead (${dead})`);
       await waitOver(300);
       await evaluate(`__flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
       for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
