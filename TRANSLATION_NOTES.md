@@ -70,6 +70,7 @@ formal medical language.
 - **Play again** (再玩一次) = the game-over button that starts the next run at once; **New personal best** (新的个人最佳) shows when a run beats every earlier score on this device.
 - **Daily Dump** (每日一拉, 🌞) = the once-a-day challenge behind the 🌞 at the top of the home screen: everyone flies the same endless course that day (赛道, at one level, 关), with one try (一次机会); a new course starts at 00:00 UTC. The name is a pun (a "dump" is a poop); 每日一拉 keeps the joke ("one poop a day"). Its popup's button reads **Create user** (创建用户, no username yet), **Play** (开始), **See today's result** (查看今日成绩) or, in test mode, **Practice** (练习: never saved). `{level}` is a level label such as "LV 5" / "第5关", `{time}` a countdown hh:mm:ss, `{day}` a short date written by the browser for the locale ("10 Nov" / "11月10日"), `{rank}` / `{total}` / `{score}` numbers; keep them verbatim. The zh body text carries explicit line breaks so the game's wrap never starts a line with punctuation.
 - **Two players** (双人模式) = the 👥 switch under the toilet toggle, offered only on a landscape screen wide enough for two halves (desktop, tablet). P1 is the left half, P2 the right; `{n}` is the player number, and `{name}` is "P1" / "P2" (versusPlayer) or, in a tournament race, the competitor's name. A crash does not end a two-player run (the poop is put back mid-screen). Levels start together: the first one over a finish line waits under **Waiting for {name}…** until the other arrives; then each player taps ready (**Tap when ready**, then **Ready! Waiting for {name}…** with a smaller **Tap again to un-ready** under it), and once both are ready a shared 3-2-1-GO starts the level as **GO!** appears (with a toilet flush). The match is decided on points once both players have cleared the last level, and the first one out waits under **Made it out!** / **Waiting for P{n}…**. Two-player runs never reach the leaderboard or the save code.
+- **{daily}** (plan 17, Christmas) = a placeholder in the seven strings that name the Daily Dump's glyph (itemDailyDetail, itemLeaderboardDetail, dailyTitle, dailyBody, dailyNeedName, dailyBoardJoin, statsDaily). The game fills it with the 🌞, or in December with that visit's 🎅 (Santa, Mrs. Claus or Mx Claus, any skin tone). Keep `{daily}` verbatim in both columns, exactly where the 🌞 stood. The loading splash keeps its literal 🌞. "Happy Bowelidays!" (the pun on bowel and holidays) is an image in English for every locale; do not translate it.
 - **Profile** (个人资料, 👤) and **achievements** (成就, 2026-11-11) = every player's public page: the save panel's 👤 Profile opens your own, a name on any board opens theirs. Sections: **Singleplayer** (单人模式), **Daily Dump** podiums (领奖台), **Tournaments** medals and **Biggest rival** (最大对手: the player they lost to most), **Career** (生涯: lifetime totals as emoji and numbers: #️⃣ pipes, 💨 farts, 🌈 super farts, 🥦 fiber, 💊 probiotics, ✨ postbiotics, 🦠 bacteria, 🫘 beans, 📦 boxes, 🟡 coins, 💀 deaths; a tap opens a card with a short note, `career*`) and **Achievements** (成就): badges (徽章) for a score or level in one run, for making it out, and lifetime milestones; some are time-limited **quests** that close on a date (`statsQuestOpen`). Badge titles are short puns, keep them playful rather than literal (e.g. 一泻千里 for Express Transit, 彩虹屁 for Rainbow Blast); the seven level badges reuse the gut-segment names. `{n}`, `{total}`, `{glyph}`, `{name}`, `{losses}`, `{meetings}`, `{day}` and `{badges}` are filled at runtime; keep them verbatim. The save panel's note now says scores, stats and achievements are all public (`saveLeaderboardNote`). Without a username a profile opens as a gate (`statsGateTitle` / `statsGateBody`) with **Create user** (创建用户, the 🌞 popup's string).
 - **Education mode** (教育模式, 📚, plan 21) = quiz cards about the gut and its microbes, asked in level breaks (for coins) and after a crash (to keep flying). For everyone since 0.19.0 (plan 28): the 📚 switch on the home screen (off by default); the old unlock word typed as a username is still never stored as a name, and `eduWordRetired` says 📚 is on the home screen now. `eduIntroNotMedical` is the 📚 popup's line that the cards are not medical advice (医疗建议). The 📚 glyph is not translated. Card text lives in `src/questions.js`, not in this catalog; every live card has its `zh` version (plan 28, 2.1; terms in the card glossary below the items glossary), so a zh-Hans player sees the whole card in Chinese, and a pilot event's language (the game's) is the card's too. **Backup** (备份) and **restore** (恢复), plan 28 3.1b: the 💾 part of 📚 Education data (`eduBackup*`, `eduRestore*`) saves the cards as a file (文件) or as text (文本) and brings them back on this or another device; the cards (卡片) are the player's answered quiz cards. The explanation's Wikipedia links are English only: a Chinese explanation shows none, and keeps 📄 了解更多 (the paper's DOI). The quiz card (`quiz*`) names the gut segment with the `level.*` names, or **Gut microbes** (肠道微生物) for the general cards; `{source}` is a short citation such as "Martinsen et al. 2005" and stays as is. After a crash in an education run the same card is a **revive** (复活): `revive*` lines; ❤️ are the tries left, ⭐ the streak that wins back the coins and power-ups (金币和道具); `{n}` in `reviveChoice` is a number of questions. "Tap when ready" reuses `versusTapReady`.
 
@@ -133,7 +134,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | Key | English | Simplified Chinese |
 |---|---|---|
 | readyTitle | FLAPPY POOP | FLAPPY POOP |
-| countdownSleeps | {n} sleeps till Christmas | 离圣诞节还有{n}晚 |
+| countdownSleeps | {n} sleeps till Christmas (plan 17: December 1 to 24, under the title; the Happy Bowelidays! image above it is English for every locale, so it has no row here) | 离圣诞节还有{n}晚 |
 | countdownSleep | 1 sleep till Christmas | 离圣诞节还有1晚 |
 | countdownChristmas | Merry Christmas! | 圣诞快乐！ |
 | howToPlay | How to play | 玩法说明 |
@@ -214,7 +215,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemTournamentName | Tournament | 锦标赛 |
 | itemTournamentDetail | Every two-player session is a tournament for 2 to 8 players: two race one Final, more play a knockout bracket you can arrange before the first race. The winners take the podium (🥉 from 3 players); with 3 or more players, those who joined with their user code keep their medals on the 🏅 board. | 双人模式总是锦标赛，支持2到8名玩家：两人只比一场决赛，更多玩家进行淘汰赛，第一场比赛前可以调整对阵。胜者登上领奖台（3名或以上玩家时才有🥉）；3名或以上玩家时，用用户码加入的玩家奖牌会记到🏅榜上。 |
 | itemDailyName | Daily Dump | 每日一拉 |
-| itemDailyDetail | Tap the 🌞 at the top of the home screen: one try a day on a course everyone shares, endless at the day's level, with no kernels. Your score goes on the 🌞 board; a new course every day at 00:00 UTC. | 点首页顶部的🌞：每天一次机会，所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。分数记到🌞榜上；每天UTC 00:00换新赛道。 |
+| itemDailyDetail | Tap the {daily} at the top of the home screen: one try a day on a course everyone shares, endless at the day's level, with no kernels. Your score goes on the {daily} board; a new course every day at 00:00 UTC. | 点首页顶部的{daily}：每天一次机会，所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。分数记到{daily}榜上；每天UTC 00:00换新赛道。 |
 | itemEducationName | Education mode | 教育模式 |
 | itemEducationDetail | Turn on 📚 on the home screen: level breaks ask quiz cards about the gut and its microbes, and after a crash, right answers let you fly on. Cards you miss come back until you know them; right answers pay corn. Tap 📚 for how it works. | 在主屏幕打开 📚：关卡休息时会问关于肠道和肠道微生物的问题；撞到之后，答对就能继续飞。答错的卡片会再出现，直到你记住；答对能得玉米粒。点 📚 看玩法说明。 |
 | itemSuperQName | Challenge question (plan 34: How to play's row after Education mode, shown with it) | 挑战题 |
@@ -226,7 +227,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemFeedbackName | Feedback | 反馈 |
 | itemFeedbackDetail | Report a bug or suggest a feature on GitHub. Key: F. | 在GitHub上报告问题或提出功能建议。按键：F。 |
 | itemLeaderboardName | Leaderboard | 排行榜 |
-| itemLeaderboardDetail | The top 25 scores. Its 🌞 tab has today's Daily Dump, its 🏅 tab the tournament medals. Tap a name to see that player's profile. Key: T. | 前25名的成绩。🌞页是今天的每日一拉，🏅页是锦标赛奖牌榜。点名字可查看该玩家的资料。按键：T。 |
+| itemLeaderboardDetail | The top 25 scores. Its {daily} tab has today's Daily Dump, its 🏅 tab the tournament medals. Tap a name to see that player's profile. Key: T. | 前25名的成绩。{daily}页是今天的每日一拉，🏅页是锦标赛奖牌榜。点名字可查看该玩家的资料。按键：T。 |
 | itemSettingsName | Settings | 设置 |
 | itemSettingsDetail | Sound, haptics (Android only), the bean button's side in landscape, skipping to home once the game has loaded, and Reload game to fetch the newest version. Key: S. | 音效、震动（仅限Android）、横屏时豆子按钮的位置、加载后直接进入主页，以及“刷新游戏”获取最新版本。按键：S。 |
 | itemSoundName | Sound | 声音 |
@@ -562,20 +563,20 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 加入朋友：点“输入房间码加入”并输入对方的房间码，或打开对方的链接。然后两人都点“准备”，倒数 3、2、1 后开始比赛。
 比赛规则和锦标赛一样：得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多。保存的比赛会记到 🏅 和 🏆 榜上。点“再来一局”可以再比一次。
 锦标赛：关掉 🌐（宽屏才有），2 到 8 名玩家在这台设备上两两比赛，淘汰制，争夺领奖台 🥇 🥈 🥉。 |
-| dailyTitle | 🌞 DAILY DUMP | 🌞 每日一拉 |
+| dailyTitle | {daily} DAILY DUMP | {daily} 每日一拉 |
 | dailyToday | Today's course: {level} | 今日赛道：{level} |
-| dailyBody | One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the 🌞 leaderboard; a new course starts every day at midnight UTC. | 每天只有一次机会。
+| dailyBody | One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the {daily} leaderboard; a new course starts every day at midnight UTC. | 每天只有一次机会。
 今天所有人飞同一条赛道，
 而且没有尽头：能飞多远就飞多远。
 没有玉米粒，也没有商店。
-在🌞排行榜上比分数；
+在{daily}排行榜上比分数；
 每天UTC午夜换一条新赛道。 |
 | dailyCreateUser | Create user | 创建用户 |
 | dailyPlay | Play | 开始 |
 | dailyChecking | Checking… | 检查中… |
 | dailySeeResult | See today's result | 查看今日成绩 |
 | dailyPractice | Practice | 练习 |
-| dailyNeedName | Pick a username first: your score goes on the 🌞 board under it. | 先取一个用户名：你的分数会以这个名字记到🌞榜上。 |
+| dailyNeedName | Pick a username first: your score goes on the {daily} board under it. | 先取一个用户名：你的分数会以这个名字记到{daily}榜上。 |
 | dailyPracticeNote | Test mode: practice runs are not saved and do not use up the day. | 测试模式：练习不会保存，也不会用掉今天的机会。 |
 | dailyNext | Next Daily Dump in {time} | 下一次每日一拉：{time}后 |
 | dailyOverTitle | DAILY DUMP · {day} | 每日一拉 · {day} |
@@ -588,7 +589,7 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | dailyNotCounted | No pipe crossed: not counted. / You can start it again today. (two lines; on Over after a Daily Dump that crossed no pipe, in the countdown's place: the day is still open, plan 48) | 一根管道都没穿过：本局不计入 / 今天还可以重新开始 |
 | dailyBoardTitle | DAILY DUMP | 每日一拉 |
 | dailyBoardEmpty | No one has played today's Daily Dump yet | 今天还没有人玩每日一拉 |
-| dailyBoardJoin | Play today's Daily Dump from the 🌞 on the home screen | 在首页点🌞玩今天的每日一拉 |
+| dailyBoardJoin | Play today's Daily Dump from the {daily} on the home screen | 在首页点{daily}玩今天的每日一拉 |
 | dailyBoardYou | You: #{rank} of {total} · {score} | 你：第{rank}名 / 共{total}人 · {score} |
 | tournamentSaving | Saving medals… | 正在保存奖牌… |
 | tournamentSaveSent | Medals saved to the 🏅 board | 奖牌已记到 🏅 榜 |
@@ -866,7 +867,7 @@ Inspired by Flappy Bird
 | statsMaxLevel | Highest level | 最高关卡 |
 | statsAvgLevel | Average level | 平均关卡 |
 | statsAvgScore | Average score | 平均得分 |
-| statsDaily | Daily Dump 🌞 | 每日一拉 🌞 |
+| statsDaily | Daily Dump {daily} | 每日一拉 {daily} |
 | statsDumps | Daily Dumps played | 参加次数 |
 | statsPodiums | Podiums | 领奖台 |
 | statsTournament | Tournaments 🏅 | 锦标赛 🏅 |

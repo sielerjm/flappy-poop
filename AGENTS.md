@@ -147,7 +147,9 @@ never relabel the player's leaderboard row). Settings then grows a test section:
 start level for the next run (`testRunStart`: the pairs before it passed, a par score), Invincible (on by
 default; pipes, ceiling and floor cannot kill), power-up buttons (`grantTest` → `openMystery`) and Exit.
 A test run (`runIsTest`, latched for the whole run) records nothing: no legacy best, top list or
-leaderboard sync, and Over says so. A 🧪 badge shows while it is on.
+leaderboard sync, and Over says so. A 🧪 badge shows while it is on. Settings' **Date** row (plan 17, 1.6;
+`registry.testPretendDay`, session-only, counted only while `testMode` is on) steps the *decorations'* clock a day at a time
+(`nextPretendDay`; back on today it is the real date again), so December can be seen in November. It never moves the Daily Dump's own day.
 
 It is a side project by Michael Sieler (gut-microbiome researcher), hence the
 theme. The logical field is 1280 px tall and as wide as the window's aspect asks,
@@ -377,6 +379,41 @@ blank (no board lookup) and shows `dailyNotCounted` in the countdown's place.
 The server (`submit_daily_score`) takes today or yesterday (UTC), checks the day's level with its
 own FNV-1a (`daily_level` = the client's `dailyLevel`), keeps the first post per player and day
 ('duplicate' after), and follows the score board's name claim.
+
+**Christmas** (December, plan 17, Stage 1, v0.32.0): decoration only. No SQL, no new server call, no change to a hitbox,
+a rule or a score. The season is all of December UTC (`TUNING.advent`: `seasonMonth` 12, `seasonLastDay` 31;
+`adventSeason(day, T)`). **The clock** is `dailyNow(reg)` / `dailyDay(reg)` (`src/logic.js`): the real time, or in test mode the
+Pretend date at the real time of day. Only decorations read it; the Daily Dump's day, course, level, store, queue and posts keep
+`utcDayKey()`, so a test run on a pretend date posts nothing and the real course never moves. Every scene reads the same
+day through the game registry.
+- **🎅 for the 🌞.** `Play.pickVisitSanta` picks a new 🎅 each time the home screen is built, never the last one
+  (`pickSanta(Math.random, last, santas)`, never the course RNG). `TUNING.advent.santas` has 18 variants (Santa, Mrs. Claus, Mx Claus, plain
+  and five skin tones); `supportedSantas` drops, once per page, any variant this device draws as two glyphs (`registry.santas`). The last pick
+  lives in `flappyPoop.santa` (`LEADERBOARD.santaKey`; the registry when storage is blocked). Old builds never read that key; the new build
+  treats a missing or unknown value as no last pick. The glyph is `dailyGlyph(day, santa, T)` / `dailyGlyphNow`. The seven strings that
+  named the 🌞 (`itemDailyDetail`, `itemLeaderboardDetail`, `dailyTitle`, `dailyBody`, `dailyNeedName`, `dailyBoardJoin`, `statsDaily`)
+  carry `{daily}`, filled by `fillDaily(text, glyph)` (`src/i18n.js`; `howToItems(locale, { daily })`); the loading splash keeps its literal 🌞.
+- **Twins** (`src/advent.js`, `ADVENT_ART`: `twins`, `fartFrames`, `snowCap`, `files`). The map is data in its own module, not in
+  `config.js`, because `tests/push.test.js` stamps a copy of `config.js` alone and `config.js` names no asset file. `seasonalSkin(day, T, art)`
+  gives the twins in season and nothing off season; `twinKey(stock, skin, fartFrame, has)` gives the twin once it has loaded, else the stock key.
+  **The stock key stays the state:** `Play.poopStockKey` (set by `setPoopTexture`) is what the race snapshot, the match slot and the ghost
+  send, and each side maps it through its own skin, so a December player and an off-season rival see each other correctly.
+  The twins are cut on the stock body's centre and scale (`tools/process_art.py`, same-body-scale mode), so the hitbox circle is the stock one.
+  The fart (and a start boost) alternates `fartFrames` on one loop clock (`Play.ensureFartClock`, the stink frames' rate, paused with the run).
+  There is no dead-frame twin (D13): `tests/advent.test.js` pins it. Pickups swap on the world only (`itemTexture`, `skinItem`: candy cane, gingerbread
+  drawn 5 % taller than the probiotic at 185 px ink height, hatted bacterium); the HUD, cards, Over and Stats keep the stock items. Each bottom pipe
+  gets a snow layer on its cap (`addSnowCap`, `placeSnowCaps` on `postupdate`; offset `TUNING.advent.snowCap`).
+- **Loading.** In season the twins join `loadLazyAudio`'s one flight (never Boot; art under new names needs no `?v=` bump). When it lands, the game
+  emits `advent-art` and every Play instance re-applies its skin (`reapplySkin`), so the stock frame shows until then. The new PNG
+  literals reach `sw.js`'s `FILES` through the push's stamp.
+- **Home and every mode.** `refreshSeasonHome`: the Happy Bowelidays! image above the title on every December day, English for every locale
+  (`countdownLine(day, locale, T)` returns `{ text, image }`; text "N sleeps till Christmas" 1 to 24 Dec, "Merry Christmas!" on the 25th, none
+  after; `readyLayout`'s `countdown` and `bowelidays` boxes, drawn only), and the snowfall. The line and the image stay on the home screen
+  (never a match half's); the snow falls in every mode: runs, the Daily, both match halves, the online race and 📚 runs
+  (`src/ui/snowfall.js`: `createSnowfall`, `makeFlakes`, `stepFlakes`, one renderer for later storms; nothing under `prefers-reduced-motion`).
+- **Smoke.** `tools/headless_check.mjs` pins the page's and its own clock (`SMOKE_PIN_DAY` 2026-11-15, `pinOffset`, `clockStubSource`; `--date=YYYY-MM-DD`
+  overrides every pin), because every older check expects stock art and the 🌞; the `christmas` section runs on a 5 Dec pin and back.
+  Checked by `tests/advent.test.js`, `tests/adventScene.test.js`, `tests/assets.test.js` and `tests/tools.test.js`.
 
 **Player profiles and achievements** (👤, 2026-11-11, v0.14.0, plan `.claude/plans/Archive/08-user-stats.plan.md`):
 every player has a **public** profile (`scenes/Stats.js`, chromeIntent `'stats'`), opened by the save
@@ -1153,7 +1190,10 @@ src/
                             levelSyncDelayMs (the beat after both
                             reach a line before a tap can start the next level),
                             respawn (crashMs, glideMs,
-                            blinkMs, blinkCycles, blinkAlpha).
+                            blinkMs, blinkCycles, blinkAlpha). TUNING.advent = Christmas (plan 17):
+                            seasonMonth / seasonLastDay, bowelidays (widthFrac, y, aspect),
+                            countdownPx, snow, snowCap, santas; LEADERBOARD.santaKey
+                            ('flappyPoop.santa', the last 🎅 shown).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: createResync (plan 35, 1.4: send(),
                             one at a time; online() sends, hidden() / shown() send after a hide
@@ -1248,11 +1288,20 @@ src/
                             shop / breaking args and 'shop' input; test mode:
                             isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
                             settingsLayout (Settings panel 1010 px + rows, taller with the
-                            test section, 1240). Fully unit-tested.
+                            test section, 1240; its Pretend date row, plan 17: dayDown / dayUp),
+                            Christmas (plan 17): isDayKey, shiftDayKey, dailyNow / dailyDay / nextPretendDay
+                            (the decorations' clock), SUN, adventSeason, seasonalSkin / twinKey,
+                            countdownLine, dailyGlyph / dailyGlyphNow, pickSanta, supportedSantas,
+                            readyLayout's countdown and bowelidays boxes. Fully unit-tested.
   changelog.js              What's new data, NO Phaser/DOM: CHANGELOG (one entry per
                             version, newest first: version, date like LAST_UPDATED's
                             day, notes per locale), changelogEntry, changelogNotes
                             (bulleted block for a locale, English fallback).
+  advent.js                 Christmas art data (plan 17), NO Phaser/DOM: ADVENT_ART (`twins`: stock key →
+                            December key for the poop poses, fiber, probiotic and bacteria; `fartFrames`;
+                            `snowCap`; `files`: every key's full 'assets/advent/….png' literal, so the service
+                            worker precaches it, plus the Bowelidays image). Outside config.js on purpose:
+                            tests/push.test.js stamps a copy of config.js alone. tests/advent.test.js.
   achievements.js           Achievements and lifetime counters (plan 08), NO
                             Phaser/DOM: ACHIEVEMENTS (id, kind 'run' / 'lifetime' /
                             'seasonal', glyph, title / desc i18n keys, n, counters,
@@ -1871,7 +1920,8 @@ src/
                             eduProfileRows (your own profile's learning streaks and
                             highest level unlocked, plan 26 A2),
                             countText (a coin count beside the corn kernel: "12", or
-                            ∞ for a test run's purse; locale-free).
+                            ∞ for a test run's purse; locale-free), fillDaily (the {daily}
+                            placeholder: the 🌞, or December's 🎅; plan 17), the countdown strings.
                             Player copy lives here (not in logic.js). See
                             TRANSLATION_NOTES.md.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
@@ -1948,6 +1998,10 @@ src/
                             the rainbow, alpha / scale tweened by Play.
                             createRectGlow(): rounded-rect halo (canvas shadow
                             with the box cut out) for the home user button's "Sign in" prompt.
+    snowfall.js             Snow (plan 17): createSnowfall(scene, area, snow, rng) (36 white dots drifting down,
+                            `TUNING.advent.snow`; { setVisible, destroy }; null under prefers-reduced-motion,
+                            prefersReducedMotion), makeFlakes, stepFlakes (pure). One renderer for the home screen and
+                            every run in December, and for Stage 2's storms.
     tray.js                 Phaser wrapper around trayLayout: leaderboard (🏆) /
                             mute / settings bottom-right, pause directly above the
                             cog, plus bottom-left info, language (🌐), feedback (💬).
@@ -2258,6 +2312,11 @@ src/
                             the scene's shutdown; every use checks cache.audio.exists, so
                             playSample falls back to its synth and the flush is guarded in
                             Versus and OnlineRace; tests/lazyAudio.test.js)
+                            (December, plan 17: this.skin = seasonalSkin(dailyDay(registry)), poopStockKey
+                            (the state; setPoopTexture shows its twin), the fart clock, itemTexture / skinItem,
+                            addSnowCap / placeSnowCaps, reapplySkin on the game's 'advent-art' event,
+                            refreshSeasonHome (countdown, Bowelidays image, snowfall), pickVisitSanta,
+                            dailyGlyph, refreshSeason (a Pretend date stepped); see "Christmas")
                             (+ 'respawn' in a match, between a crash and its restart,
                             and in an education run, from a crash through its revive
                             quiz).
@@ -2817,7 +2876,7 @@ src/
                             first removes this scope's service worker and our caches,
                             else keeps both: see "Service worker"), About link, version. Tap outside the panel
                             closes (overlayOutsideHit), same as X. The panel is 1010
-                            px (plan 35, 4.2: the "Skip to home when loaded" row and its hint, the label fitted by fitScale); in test mode 1240 px with the test section (start level ◀ ▶,
+                            px (plan 35, 4.2: the "Skip to home when loaded" row and its hint, the label fitted by fitScale); in test mode 1240 px with the test section (start level ◀ ▶, the Pretend date ◀ ▶ (plan 17, 1.6; gold while set),
                             Invincible, TEST_POWERS buttons live only while a test run
                             is paused, Exit → setTestMode(false) + scene.restart()).
     About.js                Overlay: How to play + feedback links, then the
@@ -3008,6 +3067,8 @@ assets/                     Contract PNGs + README.md (the art contract).
   poop-stink-falling1.png poop-stink-falling2.png poop-scared.png
   poop-stink-scared1.png poop-stink-scared2.png poop-fart.png
   poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png coin.png
+                            (advent/: the 17 December files (plan 17), listed in src/advent.js; each README row
+                            names its stock frame and body rule; tests/assets.test.js checks them)
                             (coin.png: the golden corn kernel's spin, 12 frames of
                             106x106 side by side (1272x106), loaded as a spritesheet;
                             the rest are 2x their drawn size (plan 35, 2.1): the poop
@@ -3535,6 +3596,12 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             v2 migration, merge, name rules, wrapped paste, empty
                             scores, throwing storage) + helper coverage, best 6,
                             the optional h (hand) key
+  advent.test.js            Christmas (plan 17): isDayKey / shiftDayKey, dailyNow / dailyDay / nextPretendDay
+                            (the Pretend date only in test mode), adventSeason, dailyGlyph, fillDaily and the seven
+                            {daily} strings, pickSanta / supportedSantas, the twin map and its files, the stock
+                            dead frame (D13), Settings' Date row layout.
+  adventScene.test.js       The countdown line, and the December skin on the real Play prototype: the stock key
+                            as state, the fart and boost alternation, the one lazy flight and its re-apply.
   ready.test.js             readyLayout boxes inside the field, non-overlapping,
                             clear of the bobbing poop; readyHit centre / gap / profile;
                             the 📚 glyph's box (educationInfo: thumb-sized, clear of
@@ -3993,7 +4060,10 @@ tools/
                             their lumen-side tips undulate (BACK_WAVE on the
                             fringes, FRONT_WAVE in the strips' TIP_ZONE). Must
                             not overwrite poop.png. Run only when you intend to.
-  process_art.py            Crops assets/src/ drawings into 192x192 contract PNGs (SIZE 192;
+  advent_preview.py         Gate A mock-up sheets for the December art (plan 17): draft art on the real game art at
+                            in-game size, with checks that every twin keeps its stock body edges; writes outside the tree.
+  process_art.py            Crops assets/src/ drawings into 192x192 contract PNGs (SIZE 192; plan 17 adds the santa twins:
+                            same-body-scale mode for the poop set, --body-like for the bacterium, --anchor for the snow;
                             drawn at spriteDisplayScale 0.5 → 96 logical px, art at 2x);
                             runs oxipng -o 4 --strip safe after Pillow's optimized save
                             when oxipng is installed;
@@ -4100,13 +4170,16 @@ tools/
                             sessions, fourteen PASS/FAIL lines (line 12: friends and status; line 13:
                             invites; line 14: teardown; a test project expects 13 of 14, live 14 of 14); each session unlinks itself; never a
                             secret key. tests/onlineLiveCheck.test.js covers it.
-  headless_check.mjs        npm run smoke [url] [--list] [--only=a,b]: the checks run in
+  headless_check.mjs        npm run smoke [url] [--list] [--only=a,b] [--date=YYYY-MM-DD]: the checks run in
                             named sections (SECTIONS, in run order, each printing its check
                             count); --list shows them; --only runs those plus what they
                             need (needs omitted = every earlier section; [] = passes alone,
                             set only once shown), skipping and never reordering; the
                             hermetic stubs, the boot wait and the leaderboard muzzle sit
-                            outside every section, and so does startEducationRun (plan 26
+                            outside every section, and so does the clock pin (plan 17: SMOKE_PIN_DAY,
+                            pinOffset, clockStubSource; the page's Date and this process's Date.now run
+                            from the pinned noon UTC, a section may pin its own day, --date overrides all;
+                            the `christmas` section checks December on a 5 Dec pin), and so does startEducationRun (plan 26
                             A2): every education section starts its runs through it (a
                             settled ready screen, a start, the 📚 popup's Play once its
                             click lockout is over; a check fails when the run is not an

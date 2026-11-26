@@ -17,7 +17,8 @@ Tip: on iPhone, turn **Silent mode off** to hear sound.
 | [👆 How to play](#how-to-play) | [🥦 Pickups & power-ups](#pickups--power-ups) |
 | [🏁 Levels & shop](#levels--shop) | [🎮 Controls](#controls) |
 | [👥 Two players](#two-players) | [🌞 Daily Dump](#daily-dump) |
-| [🏆 Save codes & leaderboard](#save-codes--leaderboard) | [🛠️ For developers](#for-developers) |
+| [🏆 Save codes & leaderboard](#save-codes--leaderboard) | [🎅 December](#december) |
+| [🛠️ For developers](#for-developers) | |
 
 ![Finish line](docs/finish-divider.svg)
 
@@ -228,6 +229,17 @@ One try a day, the same course for everyone, Wordle style. Tap the **🌞** at t
 - Daily scores have their own board and never touch the 🏆 board. Offline, the score posts the next time the board can be reached.
 
 The 🌞 board, like the others, is for friends, not prizes: the course comes from your device's clock (someone could set it ahead and practise tomorrow's), scores are reported by the game, and the server keeps only the first score it gets from you each day. If you ran a fart, the pair right after it opens mid-height for you, so two players' courses can differ by a pipe or two.
+
+![Finish line](docs/finish-divider.svg)
+
+## 🎅 December
+
+All of December (UTC) the game dresses up. Only the look changes; every rule, hitbox and score stays the same.
+
+- The home screen says **Happy Bowelidays!** over the title, with a countdown under it: "20 sleeps till Christmas" on 1 to 24 December, **Merry Christmas!** on the 25th, no line after. (The image is English in every language; the countdown is translated.)
+- A 🎅 stands in for the 🌞, a different one each time the home screen opens (Santa, Mrs. Claus or Mx Claus, in every skin tone). The Daily Dump's texts say it too.
+- Your poop wears a Santa hat in every pose but the crash, and so do the bad bacteria; fiber becomes a candy cane, the probiotic a gingerbread figure, and snow sits on the bottom pipes. The pickup icons in the HUD, the cards and your profile stay as they are.
+- Snow falls on the home screen and in every game mode (a run, the Daily Dump, both halves of a match, the online race and 📚 runs). With "reduce motion" on in your device settings, it does not fall.
 
 ![Finish line](docs/finish-divider.svg)
 
