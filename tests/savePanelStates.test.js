@@ -19,9 +19,9 @@ const OTHER = 'O'.repeat(22);
 const GUEST = 'G'.repeat(22);
 const SAVED_3_NOV = Math.floor(Date.UTC(2026, 10, 3, 12) / 1000); // noon UTC: 3 Nov in every time zone the tests run in
 const tick = () => new Promise((r) => setTimeout(r, 5));
-// The dashboard's code is signed asynchronously: under a loaded full run one tick is not always enough.
-const codeReady = async () => {
-  for (let i = 0; i < 200 && !/^fp1\./.test(el('save-code').value); i++) await tick();
+// A shown code is signed asynchronously: under a loaded full run one tick is not always enough.
+const codeReady = async (id = 'save-code') => {
+  for (let i = 0; i < 200 && !/^fp1\./.test(el(id).value); i++) await tick();
 };
 const empty = () => ({ id: null, name: '', top: [], exportedAt: null });
 
@@ -299,6 +299,7 @@ test("Create user stores the name and opens the popup on the user code; Got it o
   el('save-name').value = 'Newbie';
   await el('save-save-btn').click();
   await tick();
+  await codeReady('save-explain-code');
   assert.equal(play.save.name, 'Newbie');
   assert.ok(play.calls.some((c) => c[0] === 'noteRename' && c[1] === 'Newbie'));
   assert.ok(shown('save-explain'), 'the popup about the user code');
