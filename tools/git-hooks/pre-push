@@ -1,0 +1,14 @@
+#!/bin/sh
+# Local guard (plan 35 audit, AUD-155), installed by hand: cp tools/git-hooks/pre-push .git/hooks/pre-push
+# A push to main whose stamp (index.html's import map, sw.js's BUILD and FILES) is stale would ship new
+# bytes behind old ?h= URLs: returning players would keep running the old modules. `npm run push`
+# restamps first, so its own push passes; a plain `git push` of a stamped tree that moved on is refused.
+# An unstamped tree (before the first push) passes. Bypass, if you must: git push --no-verify.
+while read -r _ _ remote_ref _; do
+  [ "$remote_ref" = refs/heads/main ] || continue
+  node "$(git rev-parse --show-toplevel)/tools/sw_stamp.mjs" --check-if-stamped || {
+    echo "pre-push: the stamp is stale: run npm run push (it restamps), or git push --no-verify" >&2
+    exit 1
+  }
+done
+exit 0

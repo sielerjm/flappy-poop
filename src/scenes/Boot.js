@@ -19,7 +19,7 @@ export class Boot extends Phaser.Scene {
     this.load.image('probiotic', 'assets/probiotic.png' + V);
     this.load.image('postbiotic', 'assets/postbiotic.png' + V);
     // Mystery box: 8 spin frames side by side (assets/README.md); the anim is made in create().
-    this.load.spritesheet('mystery', 'assets/mystery.png' + V, { frameWidth: 384, frameHeight: 384 });
+    this.load.spritesheet('mystery', 'assets/mystery.png' + V, { frameWidth: 192, frameHeight: 192 });
     this.load.image('mystery-icon', 'assets/mystery-icon.png' + V); // static view for the game-over summary and How to play
     this.load.image('question', 'assets/question.png' + V); // the challenge question bubble (plan 34)
     this.load.image('bacteria', 'assets/bacteria.png' + V);
@@ -47,13 +47,8 @@ export class Boot extends Phaser.Scene {
     this.load.audio('coin', 'assets/sfx/Coin_Pickup.mp3' + V); // a coin picked up, or a box paying coins
     this.load.audio('coin-spend', 'assets/sfx/Coin_Spend.mp3' + V); // a shop purchase
     this.load.audio('shop', 'assets/sfx/ShopOpenClose.mp3' + V); // the shop panel opening / closing
-    this.load.audio('flush', 'assets/sfx/ToiletFlush_Win.mp3' + V); // a two-player GO
-    // The education quiz (plan 22): a book opening with the card, a page turned for each next question, the book shut on leaving.
-    this.load.audio('book-open', 'assets/sfx/Book_Open.mp3' + V);
-    this.load.audio('book-flip', 'assets/sfx/Book_PageTurn.mp3' + V);
-    this.load.audio('book-close', 'assets/sfx/Book_Close.mp3' + V);
-    this.load.audio('sparkle', 'assets/sfx/Sparkle_Restore.mp3' + V); // a revive's streak wins everything back
-    this.load.audio('bubble-pop', 'assets/sfx/Bubble_Pop.mp3' + V); // the challenge question's bubble touched (plan 34, round 2: Michael's sound)
+    // Plan 35, 2.3: the quiz's book sounds, the sparkle, the bubble's pop and the flush load after Play's
+    // first frame (Play.loadLazyAudio), so the splash does not wait on them.
   }
 
   create() {

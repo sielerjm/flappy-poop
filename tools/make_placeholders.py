@@ -6,17 +6,20 @@ your own drawing, overwrite the file keeping the same name and size, or change
 the size in BOTH assets/README.md and the scene code (tests/assets.test.js
 checks that the README table matches the PNG headers).
 
-Run:  python3 tools/make_placeholders.py
+Run:  python3 tools/make_placeholders.py   [--only NAME[,NAME]] [--out DIR] [--src DIR]
+  --only  pipe, villi, ceiling, ground, question (default: all five, as before)
+  --out   output folder (default assets/)
+  --src   accepted for symmetry with process_art.py; the placeholders are drawn in code and read no source art
 Requires Pillow. Uses Noto Color Emoji for the poop if present, else draws a blob.
 Only pipe / villi / ceiling / ground: the player, items and the app icons come from
 tools/process_art.py (Michael's drawings in assets/src/), never from here.
 """
+import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import math, random
 
 OUT = Path(__file__).resolve().parent.parent / "assets"
-OUT.mkdir(exist_ok=True)
 
 PINK = (232, 94, 150, 255)
 PINK_DARK = (176, 50, 108, 255)
@@ -181,12 +184,14 @@ def ground(path, w=720, h=128):
     img.save(path)
 
 
-def question(path, size=384):
+def question(path, size=230):
     """Plan 34's challenge question bubble: a black "?" in a see-through soap bubble (Michael at Preview G:
     "a little transparent like a bubble"): a faint white fill, denser towards the rim, a thin dark outline,
-    a white shine top left and a small one bottom right; 384x384 like the items (drawn at about 115 px).
+    a white shine top left and a small one bottom right; 230x230, 2x the 115 px it is drawn at (superQ.displayPx;
+    plan 35, 2.1: it was 384x384, so its line widths scale with `size` from that look).
     A placeholder for Michael's drawing (assets/src/), so the main block only writes it when the file is missing."""
     s = 4  # draw at 4x, then shrink: smooth edges
+    u = size / 384  # the outline and shine were tuned at 384 px; keep them the same share of the bubble
     big = Image.new("RGBA", (size * s, size * s), (0, 0, 0, 0))
     c, r = size * s / 2, size * s * 0.44
     # The film: clear in the middle, whiter towards the rim (rings of rising alpha).
@@ -200,10 +205,10 @@ def question(path, size=384):
         fd.ellipse((c - rr, c - rr, c + rr, c + rr), fill=(235, 245, 255, alpha))
     big = Image.alpha_composite(big, film)
     d = ImageDraw.Draw(big)
-    d.ellipse((c - r, c - r, c + r, c + r), outline=(42, 26, 16, 210), width=7 * s)
+    d.ellipse((c - r, c - r, c + r, c + r), outline=(42, 26, 16, 210), width=round(7 * s * u))
     # The shine: a white arc top left and a dot bottom right.
     hr = r * 0.74
-    d.arc((c - hr, c - hr, c + hr, c + hr), start=195, end=255, fill=(255, 255, 255, 235), width=13 * s)
+    d.arc((c - hr, c - hr, c + hr, c + hr), start=195, end=255, fill=(255, 255, 255, 235), width=round(13 * s * u))
     dr = r * 0.07
     dx, dy = c + r * 0.52, c + r * 0.52
     d.ellipse((dx - dr, dy - dr, dx + dr, dy + dr), fill=(255, 255, 255, 220))
@@ -217,15 +222,30 @@ def question(path, size=384):
     d.text((c, c + r * 0.04), "?", font=font, fill=(20, 12, 8, 255), anchor="mm")
     big.resize((size, size), Image.LANCZOS).save(path)
 
-if __name__ == "__main__":
+def main(argv=None):
+    global OUT
+    ap = argparse.ArgumentParser(description="Generate placeholder art (pipe, villi, ceiling, ground, question).")
+    ap.add_argument("--only", help="NAME[,NAME]: pipe, villi, ceiling, ground, question (default: all)")
+    ap.add_argument("--out", help="output folder (default assets/)")
+    ap.add_argument("--src", help="accepted for symmetry with process_art.py; unused (nothing here reads source art)")
+    args = ap.parse_args(argv)
+    names = [n.strip() for n in args.only.split(",") if n.strip()] if args.only else list(MAKERS)
+    unknown = [n for n in names if n not in MAKERS]
+    if unknown:
+        raise SystemExit(f"unknown --only name(s): {', '.join(unknown)}. Known: {', '.join(MAKERS)}")
+    if args.out:
+        OUT = Path(args.out).resolve()
+    OUT.mkdir(parents=True, exist_ok=True)
     # poop.png and the icons are Michael's drawings (tools/process_art.py). Do not overwrite them.
-    pipe(OUT / "pipe.png")
-    villi(OUT / "villi.png")
-    ceiling(OUT / "ceiling.png")
-    ground(OUT / "ground.png")
-    # The challenge bubble (plan 34): only while it is missing, so Michael's drawing is never overwritten.
-    if not (OUT / "question.png").exists():
-        question(OUT / "question.png")
-    for f in ["pipe.png", "villi.png", "ceiling.png", "ground.png", "question.png"]:
-        im = Image.open(OUT / f)
-        print(f"{f}: {im.width}x{im.height}")
+    for name in names:
+        # The challenge bubble (plan 34): only while it is missing, so Michael's drawing is never overwritten.
+        if not (name == "question" and (OUT / "question.png").exists()):
+            MAKERS[name](OUT / f"{name}.png")
+        im = Image.open(OUT / f"{name}.png")
+        print(f"{name}.png: {im.width}x{im.height}")
+
+
+MAKERS = {"pipe": pipe, "villi": villi, "ceiling": ceiling, "ground": ground, "question": question}
+
+if __name__ == "__main__":
+    main()

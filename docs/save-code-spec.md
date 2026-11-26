@@ -99,14 +99,18 @@ After any run that enters the top 6, show a small hint on the game-over screen: 
 
 Between exports the game keeps `SaveState` in `localStorage` under one key, `flappyPoop.save`, as JSON with its own `schema: 2` field (schema 1 stored bare numbers and is still read). Every read is wrapped in try/catch and falls back to an empty state, because iOS Safari can clear storage for sites unused for 7 days.
 
-UI lives behind the **Save / Load User** button on the home (ready) screen, as a DOM panel over the canvas:
+UI lives behind the **user** button (**Sign in** until a username is set) on the home (ready) screen, as a DOM panel over the canvas:
 
 | Element | Behaviour |
 | --- | --- |
-| Username field | 12-char max, saved on blur |
-| Save user code | Read-only field + Copy button; regenerated on each open of the panel |
-| Load user code | Text field + Load button; shows the error or welcome message inline |
-| Start screen | Shows a `<name> · best` button under Save / Load User when a name is set; tapping it opens the High scores overlay (up to 6, 🚽 on toilet runs) |
+| Signed out | Two buttons: **Sign in** and **Create user**, each with its own screen and ‹ Back |
+| Create user | Username field (saved only by the button or Enter), then a popup with the user code, Copy code and Got it |
+| Sign in | Text field + preview card (name, best, saved date, from the code alone) + Sign in button; shows the error or welcome message inline |
+| Username field | Signed in: 16-char max (4 minimum for a new name), a rename saved on blur |
+| Your user code | Read-only field + Copy button; regenerated on each open of the panel |
+| Sign out | Inline confirm with the code and Copy, then Sign out or Cancel |
+| Merge players… | Paste a second code, see both cards, tap the one whose name stays (this device by default), Merge for good |
+| Start screen | The user button reads `<name> · best` (🚽 on a toilet best) once a name is set, **Sign in** before; tapping it opens this panel |
 
 Keep the Phaser game scene untouched. Whether the panel is plain DOM over the canvas or built with Phaser UI is left to Claude Code: match however the existing bottom tray is built, and prefer DOM if text input on mobile proves awkward in Phaser.
 
@@ -163,5 +167,12 @@ Manual check on iPhone Safari and Chrome: Copy button puts the code on the clipb
 ## 2026-11-08: one player across devices
 
 - The `id` is the leaderboard identity; the display name is a claim the board grants to the player holding it (`db/schema.sql`: `name_key`, `name_blocked`, `submit_score` raises 'name taken'; `name_available` is the read-only check the panel makes before storing a name). Ids that already shared a name before this rule are grandfathered.
-- Import keeps merging as above (pasted id and name win, scores unioned). When the device had its own `id`, the game also calls `merge_players(pasted, old)`: the board folds the old id's rows into the pasted id's and records the old id in `player_aliases`, so every function resolves it to the same player from then on. The pair is queued in `localStorage` (`flappyPoop.merges`) until the server confirms.
-- **Clear** in the panel signs the device out (name, id, top scores, confirmed submits, queued merges, the legacy best); the board keeps the rows, the code brings them back. Nothing in the wire format changed.
+- Import keeps merging as above (pasted id and name win, scores unioned). When the device had its own `id`, Sign in also calls `merge_players(pasted, old)`: the board folds the old id's rows into the pasted id's and records the old id in `player_aliases`, so every function resolves it to the same player from then on. The pair is queued in `localStorage` (`flappyPoop.merges`) until the server confirms.
+- **Sign out** in the panel (Clear before 0.29.0) signs the device out (name, id, top scores, confirmed submits, queued merges, the legacy best); the board keeps the rows, the code brings them back. Nothing in the wire format changed.
+
+## 2026-11-24: Sign in, Sign out and Merge players…
+
+- The save panel's words changed (plan 44, 0.29.0): Load is **Sign in**, Clear is **Sign out** (an inline confirm replaces the two taps), and signed-in players get **Merge players…**. The wire format did not change.
+- A merge can now keep either id, and the player picks. This device kept: `merge_players(device id, code id)`, the device's id and name stay, scores union, and the next post carries the device's name (`noteRename`) even when the kept id has no board row. The code kept: exactly the old Load, `merge_players(code id, device id)`. This player's own code in Merge says "That's already you." and writes nothing.
+- The online name follows trust, not the pick: `fold_player` gives the online name and trust to the player whose trusted device went online first. With this device kept, the session stays and the next 🌐 open reads the trust, which the fold may have set to pending.
+- The schema comments in `db/schema.sql` (about 107 and 1379-1381) still say the pasted code is kept. They stay as they are; an edit would mean a restamp.

@@ -14,7 +14,7 @@
 // the splash and lets the game start, so the splash is never the reason the game does not load.
 
 import { EDUCATION, TUNING } from './config.js';
-import { padAction, storedLocale, VERSION, hardReloadGame } from './logic.js';
+import { padAction, storedLocale, VERSION, hardReloadGame, createSettingsStore } from './logic.js';
 import { t, initialLocale } from './i18n.js';
 import { achievementById } from './achievements.js';
 import { browserStorage } from './store.js';
@@ -184,16 +184,26 @@ export function ringTarget({ elapsedMs = 0, progress = null, ready = false } = {
 }
 
 /**
- * The ring's fill after one frame: it chases the target at the gap ÷ ringEaseMs, held between
- * ringMinPerSec and ringMaxPerSec, never past the target and never back. A frame longer than
- * ringFrameCapMs counts as that long, so a stall pauses the ring rather than jumping it.
+ * A cached load: Boot was ready within ringCachedMs of the splash starting (plan 35, 2.5). The ring then
+ * fills at ringFastPerSec instead of waiting out its normal top speed. A bad number is not a cached load.
  */
-export function ringStep(shown, target, dtMs, t = TUNING) {
+export function ringCachedLoad(elapsedMs, t = TUNING) {
+  const e = Number(elapsedMs);
+  return Number.isFinite(e) && e <= t.splash.ringCachedMs;
+}
+
+/**
+ * The ring's fill after one frame: it chases the target at the gap ÷ ringEaseMs, held between
+ * ringMinPerSec and ringMaxPerSec, never past the target and never back; on a cached load (`fast`) at
+ * ringFastPerSec flat. A frame longer than ringFrameCapMs counts as that long, so a stall pauses the
+ * ring rather than jumping it.
+ */
+export function ringStep(shown, target, dtMs, t = TUNING, fast = false) {
   const s = t.splash;
   const gap = target - shown;
   if (!(gap > 0)) return shown;
   const dt = Math.min(Math.max(0, Number(dtMs) || 0), s.ringFrameCapMs) / 1000;
-  const speed = Math.min(s.ringMaxPerSec, Math.max(s.ringMinPerSec, gap / (s.ringEaseMs / 1000)));
+  const speed = fast ? s.ringFastPerSec : Math.min(s.ringMaxPerSec, Math.max(s.ringMinPerSec, gap / (s.ringEaseMs / 1000)));
   return Math.min(target, shown + speed * dt);
 }
 
@@ -247,6 +257,19 @@ function fail(err) {
 }
 
 /** Wraps a handler so an error in it fails open instead of leaving a stuck splash. */
+/**
+ * Settings' "Skip to home when loaded" (plan 35, 4.2; off by default): once the game has loaded, the
+ * splash goes by itself as a Continue tap would. Read when Continue lights, so a change in Settings
+ * counts from the next load (Reload included). Storage that cannot be read keeps the splash.
+ */
+export function skipWanted(storage = browserStorage()) {
+  try {
+    return createSettingsStore(storage, TUNING.settingsKey).load().skipSplash === true;
+  } catch {
+    return false;
+  }
+}
+
 const safe = (fn) => (...args) => {
   try {
     fn(...args);
@@ -396,6 +419,7 @@ function mount(root, doc, win) {
   const animated = typeof win.requestAnimationFrame === 'function';
   let bootProgress = null; // null until Boot's loader reports
   let wantReady = false; // Boot has loaded: Continue lights up once the ring is full
+  let fast = false; // Boot was ready within ringCachedMs: the ring fills at ringFastPerSec (plan 35, 2.5)
   let goal = 0;
   let shown = 0;
   let lastFrame = null;
@@ -421,6 +445,7 @@ function mount(root, doc, win) {
     } catch {
       /* focus is a nicety */
     }
+    if (skipWanted()) press(); // Settings' Skip to home when loaded (plan 35, 4.2): the full ring, then straight on
   };
 
   const progress = (p) => {
@@ -451,6 +476,7 @@ function mount(root, doc, win) {
   const ready = () => {
     if (removed || wantReady || failedState) return;
     wantReady = true;
+    fast = ringCachedLoad(clock() - startedAt);
     if (!animated) {
       light();
       return;
@@ -551,7 +577,7 @@ function mount(root, doc, win) {
     const dt = lastFrame == null ? 0 : ts - lastFrame;
     lastFrame = ts;
     aim();
-    shown = ringStep(shown, goal, dt);
+    shown = ringStep(shown, goal, dt, TUNING, fast);
     drawRing();
     if (wantReady && shown >= 1) light();
     pollPads();

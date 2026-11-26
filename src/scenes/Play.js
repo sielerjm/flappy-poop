@@ -1,5 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE, EDUCATION, LEADERBOARD } from '../config.js';
+import { ADVENT_ART } from '../advent.js';
 import {
   createRng,
   createCourse,
@@ -24,6 +25,15 @@ import {
   levelProgress,
   withLevelPipes,
   utcDayKey,
+  isDayKey,
+  dailyDay,
+  dailyGlyphNow,
+  adventSeason,
+  seasonalSkin,
+  twinKey,
+  countdownLine,
+  pickSanta,
+  supportedSantas,
   dailySeed,
   dailyLevel,
   dailyRunStart,
@@ -125,12 +135,13 @@ import { createOnlineNet, onlineProjectConfig } from '../onlineNet.js';
 import { createResumeStore, pageTab, resumeKey, ONLINE_HOST_KEY } from '../onlineRace.js';
 import { createOnlineAccount } from '../onlineAccount.js';
 import { createStatusBeat } from '../onlineFriends.js';
-import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
+import { countsAsRun, runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
 import { activeOverlays, OVERLAY_SCENES } from '../ui/overlayStack.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
+import { createSnowfall } from '../ui/snowfall.js';
 import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
@@ -147,6 +158,7 @@ import { openEduDataPanel, isEduDataPanelOpen } from '../ui/eduDataPanel.js';
 import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPadAction } from '../ui/eduIntroPanel.js';
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
+import { registerWorker } from '../swClient.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, matchHostKey, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
 import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, studyStreakNow, pickSuperCard, paidOn, buriedIdsOn, skipUntil, boardRecord, educationBackup, readEducationBackup, restoredSettings } from '../education.js';
 
@@ -206,6 +218,21 @@ function withInput(event, kind, fn) {
   } finally {
     [STAMP.active, STAMP.trusted, STAMP.recent, STAMP.ts] = was;
   }
+}
+
+/**
+ * A width measure for emoji (supportedSantas): one 2D canvas, the ready screen's glyph font. 0 where no canvas
+ * draws (the filter then keeps every variant).
+ */
+function emojiMeasure() {
+  let ctx = null;
+  try {
+    ctx = document.createElement('canvas').getContext('2d');
+    ctx.font = '52px sans-serif';
+  } catch {
+    ctx = null;
+  }
+  return (s) => (ctx ? ctx.measureText(s).width : 0);
 }
 
 export class Play extends Phaser.Scene {
@@ -399,7 +426,7 @@ export class Play extends Phaser.Scene {
     this.versusOn = Boolean(this.registry.get('versus'));
     // 📚 is remembered on the device and 👥 only in this tab, so another tab can leave both on here.
     this.reconcileSwitches();
-    // Test mode is session-only too (registry 'testMode', 'testStartLevel', 'testInvincible').
+    // Test mode is session-only too (registry 'testMode', 'testStartLevel', 'testInvincible', 'testPretendDay').
     // runIsTest latches per run: set in start() or when test mode turns on mid-run, and only
     // cleared by the next start(), so a run that ever had test tools can never be recorded.
     this.runIsTest = false;
@@ -408,6 +435,11 @@ export class Play extends Phaser.Scene {
     // until launch() has swapped to the plain frame and slid it to this.poopX.
     // A match's join screen shows the plain face: the prompt there is the Versus scene's, not the bubble's.
     const readyFrame = this.match ? 'poop' : 'poop-speech';
+    // Christmas (plan 17, 1.10): the December twins in force (seasonalSkin), shown by setPoopTexture once loaded.
+    this.skin = seasonalSkin(dailyDay(this.registry), T, ADVENT_ART);
+    this.fartFrame = 0; // which fart twin is up (the fart clock, ensureFartClock)
+    this.fartClock = null;
+    this.poopStockKey = null; // the stock key the poop wears (setPoopTexture): the state, whatever twin shows
     this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, readyFrame).setDepth(10);
     this.poop.setScale(T.spriteDisplayScale * T.readyPoopScale); // bigger on the ready screen; launch() shrinks it back
     this.setPoopTexture(readyFrame);
@@ -423,6 +455,15 @@ export class Play extends Phaser.Scene {
     // distance scrolled (ghostPlacement), under the live poop and over its glow. Hidden until the race.
     this.ghost = this.match ? this.add.image(this.poopX, GAME_HEIGHT / 2, 'poop').setScale(T.spriteDisplayScale).setDepth(9.5).setAlpha(0).setVisible(false) : null;
     this.rivalKey = null; // what the rival marker on the level bar was last placed for
+    this.ensureFartClock();
+    // The lazy flight (loadLazyAudio) may land in either half's scene: every Play re-applies its skin then.
+    const reapplySkin = () => this.reapplySkin();
+    this.game.events.on('advent-art', reapplySkin);
+    this.events.on('postupdate', this.placeSnowCaps, this); // after the physics step, so the snow never trails its pipe
+    this.events.once('shutdown', () => {
+      this.game.events.off('advent-art', reapplySkin);
+      this.events.off('postupdate', this.placeSnowCaps, this); // the scene's emitter outlives a restart
+    });
 
     // HUD
     this.scoreText = this.add.text(W / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
@@ -500,9 +541,17 @@ export class Play extends Phaser.Scene {
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: `${T.readyTitlePx}px` })
       .setOrigin(0.5)
       .setDepth(20);
+    // December (plan 17, 1.12): the countdown line under the title and the home snowfall, with the ready UI.
+    {
+      const b = this.readyBoxes.countdown;
+      this.countdownText = this.add.text(b.x, b.y, '', { ...TEXT_STYLE, fontSize: `${T.advent.countdownPx}px`, strokeThickness: 8 }).setOrigin(0.5).setDepth(20);
+    }
+    this.snowfall = null;
+    this.countdownImage = null; // the Bowelidays image (all December), made once its file has landed
     this.readyUiShown = true; // setReadyUiVisible's last word: the switches rebuilt by refreshReadySwitches follow it
     this.toiletToggle = this.versusToggle = this.educationToggle = this.eduDueText = this.eduStreakText = null; // a restart destroyed the last ones
     this.buildReadySwitches();
+    this.refreshSeasonHome();
     // "?" in the top-right corner opens How to play. It pulses under a soft white
     // halo until the player acknowledges this build (opens it, or finishes a run).
     {
@@ -518,7 +567,8 @@ export class Play extends Phaser.Scene {
     this.howToBtn = createButton(this, this.readyBoxes.howto, '?', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8' }, { depth: 30 });
     this.howToBtn.pulse(this.isHowToPromptDue()); // breathes with its halo until this build's How to play is seen
     // 🌞 at the top centre opens the Daily Dump popup. Until this player has used today's attempt
-    // it breathes (dailyPulseScale) under the same soft white halo as the ?.
+    // it breathes (dailyPulseScale) under the same soft white halo as the ?. In December it is this visit's 🎅 (plan 17).
+    if (!this.match) this.pickVisitSanta();
     {
       const b = this.readyBoxes.daily;
       this.dailyHalo = createGlow(this, b.x, b.y, { radius: T.beans.glowRadiusPx, fadeFrac: T.beans.glowFadeFrac })
@@ -527,7 +577,7 @@ export class Play extends Phaser.Scene {
         .setAlpha(T.readyPromptMinAlpha);
       this.dailyHaloTween = this.tweens.add({ targets: this.dailyHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
       this.dailyBtn = createButton(this, b, '', { ...TEXT_STYLE, fontSize: '52px' });
-      this.dailySun = this.add.text(b.x, b.y, '\u{1F31E}', { fontFamily: 'sans-serif', fontSize: '52px' }).setOrigin(0.5).setDepth(21);
+      this.dailySun = this.add.text(b.x, b.y, this.dailyGlyph(), { fontFamily: 'sans-serif', fontSize: '52px' }).setOrigin(0.5).setDepth(21);
       this.dailySunTween = this.tweens.add({ targets: this.dailySun, scale: T.dailyPulseScale, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs, ease: 'Sine.easeInOut' });
       // The Daily Dump streak, a small number at the circle's bottom right (plan 34: refreshStreakMarks).
       this.dailyStreakText = this.streakMark(b.x + T.streakMarkPx.dx, b.y + T.streakMarkPx.dy);
@@ -764,13 +814,15 @@ export class Play extends Phaser.Scene {
     });
     // Over's Play again: a one-shot registry flag (not restart data, which Phaser would keep for
     // every later restart), cleared here before the run starts.
-    if (this.registry.get('playAgain')) {
+    const again = this.registry.get('playAgain');
+    if (again) {
       this.registry.set('playAgain', false);
-      if (!this.match) this.launch({ solo: true });
+      this.startAgain(again);
     }
     this.openPendingInvite(); // an invite link (plan 28, 2.4)
     this.openPendingJoin(); // a race's share link (plan 39, 4.3)
     this.openPendingRace(); // a race this page left by a reload or a relaunch (plan 39, 2.3, 2.3b)
+    this.events.once('render', () => this.loadLazyAudio()); // plan 35, 2.3: after this scene's first frame
   }
 
   /**
@@ -809,7 +861,8 @@ export class Play extends Phaser.Scene {
    * from the ready screen (a tap, Space, ↑, the pad's A: all arrive here with no options) opens the
    * 📚 popup instead and nothing starts (plan 26, A2: Michael asked); its Play starts the run
    * (startFromEduIntro: `intro` false). Play again (`solo`), a Daily Dump and a match half go
-   * straight in, and a popup that cannot open never blocks the run.
+   * straight in, and a popup that cannot open never blocks the run. Play again's slide takes
+   * againSlideMs (350 ms), every other start launchSlideMs (700 ms).
    */
   launch({ hold = false, daily = false, solo = false, intro = true } = {}) {
     if (this.launching || this.state !== 'ready') return;
@@ -837,7 +890,7 @@ export class Play extends Phaser.Scene {
       x: this.poopX,
       y: GAME_HEIGHT / 2,
       scale: T.spriteDisplayScale,
-      duration: T.launchSlideMs,
+      duration: solo ? T.againSlideMs : T.launchSlideMs, // Play again's is the quicker one (plan 35, 4.1)
       ease: 'Sine.easeInOut',
       onComplete: () => {
         this.launchTween = null;
@@ -865,6 +918,19 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * Over's Play again, read in create() (the registry's one-shot `playAgain`): a new one-player run; or,
+   * for a Daily Dump that crossed no pipe ('daily', plan 47, call H), today's Daily Dump again while the
+   * popup would offer it (a username, today not used: dailyPlayedToday), else the ready screen stays.
+   * After midnight UTC that is the new day's course. Never in a match. Returns whether a run starts.
+   */
+  startAgain(kind) {
+    if (this.match) return false;
+    if (kind === 'daily') return Boolean(this.save?.name && !this.dailyPlayedToday() && this.startDaily());
+    this.launch({ solo: true });
+    return true;
+  }
+
+  /**
    * A match's GO (Versus.go): the run starts now, from wherever the countdown's slide got the poop
    * (snapped into place if it is still sliding), with the launch flap; the start-boost window opens.
    */
@@ -886,6 +952,7 @@ export class Play extends Phaser.Scene {
   setReadyUiVisible(visible) {
     this.readyUiShown = visible;
     this.readyTitle.setVisible(visible);
+    this.refreshSeasonHome();
     this.toiletToggle.setVisible(visible);
     this.versusToggle?.setVisible(visible);
     this.educationToggle?.setVisible(visible);
@@ -967,6 +1034,7 @@ export class Play extends Phaser.Scene {
     this.runCeilingHits = 0; // ☀️ (0 or 1: the ceiling ends a run)
     this.runBoxesBought = 0; // 🎰 boxes bought in the shop this run
     this.runBadges = [];
+    this.runNotCounted = false; // set by endRun: the run crossed no pipe (plan 47), Over says so
     this.mysteryPair = this.course.mysteryPair(); // the pair the guaranteed first box (early level 3) rides after
     // The purse: every run starts empty (coins last across the levels of one run only).
     this.effects.spendCoins(this.effects.coins());
@@ -996,20 +1064,13 @@ export class Play extends Phaser.Scene {
     this.applyLevel();
     this.levelBar.setVisible(!daily);
     this.refreshLevelBar();
-    this.dailyHud.setText(daily ? `\u{1F31E} ${levelLabel(this.locale, this.level)}` : '').setVisible(Boolean(daily));
+    this.dailyHud.setText(daily ? `${this.dailyGlyph()} ${levelLabel(this.locale, this.level)}` : '').setVisible(Boolean(daily));
     this.bgFade?.stop();
     this.bgFade = null;
     this.bgColor.setFillStyle(levelColor(this.level, LEVEL_COLORS, T.levels.whiteBlend), 1);
     this.prefillPipes();
-    // The attempt is claimed now (not at the crash), so a reload mid-run cannot hand the day back.
-    // Practice (a test run) claims nothing.
     this.daily = null;
-    if (daily) {
-      if (!this.save.id) this.save = ensureId(this.save);
-      this.daily = { day: daily.day, level: daily.level, startPipes: begin.pipes, playerId: this.save.id, saved: null };
-      this.saveDailyAttempt(false);
-      this.countDailyStreak(daily.day);
-    }
+    if (daily) this.claimDailyAttempt(daily, begin.pipes);
     // This run's summary (plan 30): single-player and Daily runs, and a split-screen race's half
     // (plan 39, 2.8); never a test run, an education run (its popup promises its data stays here)
     // or an online race's half (runSummaryMode).
@@ -1189,21 +1250,40 @@ export class Play extends Phaser.Scene {
     }
   }
 
-  /** The Daily Dump streak (plan 34) counts course `day` once its attempt is claimed (start), on its UTC day; a practice Daily (a test run) counts nothing. */
+  /** The Daily Dump streak (plan 34) counts course `day`, on its UTC day, once the run crosses its first pipe (saveDailyAttempt; plan 47); a practice Daily (a test run) counts nothing. */
   countDailyStreak(day) {
     if (!this.runIsTest) this.streakStore.played('daily', day);
   }
 
   /**
+   * Claim the day's Daily Dump attempt as the run starts (start), not at the crash, so a reload once a
+   * pipe is crossed cannot hand the day back: the record is written at once, unfinished. A run that
+   * crosses no pipe is no attempt (plan 47, calls D and G): its record is released at the game over
+   * (endRun) or by the next sync (finishAbandonedDaily). Its streak day waits for the first pipe
+   * (saveDailyAttempt), so a released run has nothing to take back. Practice (a test run) claims nothing.
+   */
+  claimDailyAttempt(daily, startPipes) {
+    if (!this.save.id) this.save = ensureId(this.save);
+    this.daily = { day: daily.day, level: daily.level, startPipes, playerId: this.save.id, saved: null, counted: false };
+    this.saveDailyAttempt(false);
+  }
+
+  /**
    * This device's Daily Dump attempt (dailyStore): the day, the level, the score and pipes so far and
-   * what was picked up; `final` once the run is over. Practice writes nothing. Returns the record.
+   * what was picked up; `final` once the run is over. The first pipe flown that day counts the day's
+   * streak (once a run). Practice writes nothing. Returns the record.
    */
   saveDailyAttempt(final = false) {
     if (!this.runIsDaily || this.runIsTest || !this.daily) return null;
     perfMark(PERF_TAGS.daily);
     const pipes = Math.max(0, this.pipesPassed - this.daily.startPipes);
     this.daily.saved = { score: this.score, pipes };
-    return this.dailyStore.save({ day: this.daily.day, playerId: this.daily.playerId, level: this.daily.level, score: this.score, pipes, collected: { ...this.collected }, final });
+    const rec = this.dailyStore.save({ day: this.daily.day, playerId: this.daily.playerId, level: this.daily.level, score: this.score, pipes, collected: { ...this.collected }, final });
+    if (pipes > 0 && !this.daily.counted) {
+      this.daily.counted = true;
+      this.countDailyStreak(this.daily.day);
+    }
+    return rec;
   }
 
   /** Crossfade the background to `level`'s colour (the current level's at each break; a level chosen there: plan 26, A2). */
@@ -1294,12 +1374,14 @@ export class Play extends Phaser.Scene {
 
   /**
    * The finished half of a match while the other plays on: "Made it out!" over "Waiting for
-   * P2…" (the level banner's texts, no shade). It stays until the result panel covers it.
+   * P2…" (the level banner's texts, no shade). Once both are out (the match over), the waiting
+   * line goes and "Made it out!" stays until the result panel covers it (plan 35, 4.3).
    */
   showEscapedBanner() {
     if (!this.match || !this.won) return;
+    const over = this.match.status === 'over';
     this.levelTitle?.setText(t(this.locale, 'versusEscaped')).setVisible(true);
-    this.levelHint?.setText(t(this.locale, 'versusWaiting').replace('{name}', versusName(this.locale, this.match, this.player === 1 ? 1 : 0))).setVisible(true);
+    this.levelHint?.setText(over ? '' : t(this.locale, 'versusWaiting').replace('{name}', versusName(this.locale, this.match, this.player === 1 ? 1 : 0))).setVisible(!over);
   }
 
   refreshLevelBanner() {
@@ -1541,8 +1623,8 @@ export class Play extends Phaser.Scene {
           return;
         }
         if (hit === 'profile') {
-          // The user button always opens the save panel; unnamed, on the name field (it stays open after Save, so the code shows).
-          this.openSavePanel({ focusName: !this.save?.name });
+          // The user button opens the save panel: signed out on Sign in | Create user, signed in on the player's dashboard (plan 44).
+          this.openSavePanel();
           return;
         }
         // 'start' or empty space both start the run below.
@@ -1646,9 +1728,13 @@ export class Play extends Phaser.Scene {
     this.scene.get('Stats')?.refresh?.(); // the profile's gate ⟷ the profile (a name saved, or Clear)
   }
 
-  /** Has this player used today's Daily Dump on this device (a record for today, finished or cut off)? */
+  /**
+   * Has this player used today's Daily Dump on this device (a record for today, finished or cut off
+   * after a pipe)? One cut off before its first pipe is not used (plan 47, call G): the ready screen
+   * reads this at page load, before the first sync releases it.
+   */
   dailyPlayedToday() {
-    return Boolean(this.save?.id && this.dailyStore.load(utcDayKey(), this.save.id));
+    return Boolean(this.save?.id && this.dailyStore.spent(utcDayKey(), this.save.id));
   }
 
   /**
@@ -1692,7 +1778,7 @@ export class Play extends Phaser.Scene {
   showDailyResult() {
     if (this.match || this.state !== 'ready' || this.launching) return false;
     const day = utcDayKey();
-    const rec = this.save?.id ? this.dailyStore.load(day, this.save.id) : null;
+    const rec = this.save?.id && this.dailyStore.spent(day, this.save.id) ? this.dailyStore.load(day, this.save.id) : null;
     if (!rec) return false;
     const sync = this.syncLeaderboard();
     const after = this.dailyStore.load(day, this.save.id) ?? rec;
@@ -1976,6 +2062,15 @@ export class Play extends Phaser.Scene {
    */
   forgetRename() {
     this.renameStore.clear();
+    this.forgetBoardCache();
+  }
+
+  /**
+   * What this page learned from the board for the player here: their bests (pulled once per page and id), the career
+   * base and the day streaks. A Merge that keeps this device's player (plan 44) calls it alone, so the folded player's
+   * bests, totals and days come with the sync it starts; forgetRename calls it after dropping the rename.
+   */
+  forgetBoardCache() {
     this.boardBestsFor = null;
     this.careerStore.clearBase(); // the device may now be another player: their totals come with the next sync
     this.streakStore?.clear?.();
@@ -2850,19 +2945,73 @@ export class Play extends Phaser.Scene {
     if (this.levelBreak) this.refreshLevelBanner();
   }
 
-  /** Test-mode knobs for Settings: the next run's start level (1..lastLevel) and Invincible. */
+  /**
+   * Test-mode knobs for Settings: the next run's start level (1..lastLevel), Invincible and the Pretend date
+   * (plan 17, 1.6: 'YYYY-MM-DD' or null for the real date; dailyDay reads it from the registry while test mode is on).
+   */
   testSettings() {
     const invincible = this.registry.get('testInvincible');
+    const pretendDay = this.registry.get('testPretendDay');
     return {
       startLevel: testRunStart(this.registry.get('testStartLevel') ?? 1, this.tune).level,
       invincible: typeof invincible === 'boolean' ? invincible : TEST_MODE.defaultInvincible,
+      pretendDay: isDayKey(pretendDay) ? pretendDay : null,
     };
   }
 
-  setTestSettings({ startLevel, invincible } = {}) {
+  setTestSettings({ startLevel, invincible, pretendDay } = {}) {
     if (startLevel !== undefined) this.registry.set('testStartLevel', testRunStart(startLevel, this.tune).level);
     if (invincible !== undefined) this.registry.set('testInvincible', Boolean(invincible));
+    if (pretendDay !== undefined) {
+      this.registry.set('testPretendDay', isDayKey(pretendDay) ? pretendDay : null);
+      this.refreshSeason();
+    }
     return this.testSettings();
+  }
+
+  /**
+   * December's 🎅 for the 🌞 (plan 17, 1.7): a new pick each time the home screen is built (page load, Home, back
+   * from a run), never the one shown last, which is kept in localStorage (LEADERBOARD.santaKey; the registry when
+   * storage is blocked, so a reload there can repeat it). Variants this device cannot draw are dropped once
+   * (supportedSantas, registry 'santas'). Off season nothing is picked. Math.random, never the course RNG.
+   */
+  pickVisitSanta() {
+    if (!adventSeason(dailyDay(this.registry), T)) return;
+    let santas = this.registry.get('santas');
+    if (!santas) {
+      santas = supportedSantas(T.advent.santas, emojiMeasure());
+      this.registry.set('santas', santas);
+    }
+    const store = browserStorage();
+    let last = this.registry.get('santa') ?? null;
+    try {
+      last = store?.getItem(LEADERBOARD.santaKey) ?? last;
+    } catch {
+      // storage blocked: the registry's pick stands in
+    }
+    const santa = pickSanta(Math.random, last, santas);
+    this.registry.set('santa', santa);
+    try {
+      store?.setItem(LEADERBOARD.santaKey, santa);
+    } catch {
+      // storage blocked: kept for this page only
+    }
+  }
+
+  /** The Daily Dump's glyph now: the 🌞, or this visit's 🎅 in December (the decorations' clock, dailyDay). */
+  dailyGlyph() {
+    return dailyGlyphNow(this.registry, T);
+  }
+
+  /** A Pretend date stepped in Settings (test mode): pick a 🎅 if it entered the season and redraw the button now. */
+  refreshSeason() {
+    this.skin = seasonalSkin(dailyDay(this.registry), T, ADVENT_ART);
+    this.ensureFartClock();
+    this.loadLazyAudio(); // the twins, if the season just began; nothing to do otherwise
+    this.reapplySkin();
+    this.refreshSeasonHome();
+    if (!this.match) this.pickVisitSanta();
+    if (this.dailySun?.active) this.dailySun.setText(this.dailyGlyph());
   }
 
   /** Collisions (pipes, ceiling, floor) do not end a test run while Invincible is on. */
@@ -2903,6 +3052,7 @@ export class Play extends Phaser.Scene {
     if (!isLocale(next)) return;
     this.locale = next;
     this.readyTitle?.setText(t(next, 'readyTitle'));
+    this.refreshSeasonHome();
     this.refreshProfile(); // loadUserButton is localised too
     const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
     this.pauseText?.setText(pauseTitle);
@@ -2912,7 +3062,7 @@ export class Play extends Phaser.Scene {
     if (this.shopOpen) this.refreshShop();
     this.showEscapedBanner(); // a finished match half keeps its banner in the new language
     this.refreshLevelBar();
-    if (this.runIsDaily) this.dailyHud.setText(`\u{1F31E} ${levelLabel(this.locale, this.level)}`);
+    if (this.runIsDaily) this.dailyHud.setText(`${this.dailyGlyph()} ${levelLabel(this.locale, this.level)}`);
     this.refreshTestBadge();
   }
 
@@ -3404,6 +3554,7 @@ export class Play extends Phaser.Scene {
   /** Freeze the run's timers, tweens, clip and box spin (pausePlay; grantTest while paused). Safe to repeat. */
   pauseEffects() {
     if (this.stinkTimer) this.stinkTimer.paused = true;
+    if (this.fartClock) this.fartClock.paused = true;
     this.fartSound?.pause();
     this.fartTween?.pause();
     this.popupTween?.pause();
@@ -3420,6 +3571,7 @@ export class Play extends Phaser.Scene {
   /** Undo pauseEffects (resumePlay). */
   resumeEffects() {
     if (this.stinkTimer) this.stinkTimer.paused = false;
+    if (this.fartClock) this.fartClock.paused = false;
     this.fartSound?.resume();
     this.fartTween?.resume();
     this.popupTween?.resume();
@@ -3632,6 +3784,7 @@ export class Play extends Phaser.Scene {
     const bottom = this.pipes.create(x, gapBot, 'pipe', '__BASE');
     bottom.setOrigin(0.5, 0);
     bottom.setDisplaySize(T.pipeWidth, Math.max(bottom.frame.height, GAME_HEIGHT - gapBot + 4));
+    this.addSnowCap(bottom); // December (plan 17, 1.11)
 
     for (const p of [top, bottom]) {
       // Body uses unscaled frame units; scale comes from setDisplaySize.
@@ -3728,7 +3881,7 @@ export class Play extends Phaser.Scene {
     const phase = this.course.phase(this.pipesSpawned, 'band');
     const period = kind === 'mystery' ? T.mystery.periodMs : T.items.fiberPeriodMs;
     const y = stillY ?? bobY(0, phase, this.beanBounds, period);
-    const item = this.items.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, kind);
+    const item = this.items.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, this.itemTexture(kind));
     item.setDepth(8);
     this.finishItem(item, kind);
     if (stillY == null) {
@@ -3834,7 +3987,7 @@ export class Play extends Phaser.Scene {
    */
   spawnGapItem(kind, x, gapY, gapH, pair = null) {
     const y = this.course.itemY(this.pipesSpawned, gapY, gapH, kind);
-    const item = this.items.create(x, y, kind);
+    const item = this.items.create(x, y, this.itemTexture(kind));
     item.setDepth(-1); // under the pipes (0), over the background layers
     this.finishItem(item, kind);
     if (pair) {
@@ -3954,9 +4107,14 @@ export class Play extends Phaser.Scene {
     this.scaredMs = near ? T.scaredHoldMs : Math.max(0, this.scaredMs - delta);
   }
 
-  /** Swap the player texture and rebuild the circle body for that frame size. */
+  /**
+   * Swap the player texture and rebuild the circle body for that frame size. `key` is the stock key, kept as
+   * poopStockKey; the texture shown is its December twin once loaded (twinKey; plan 17, 1.10), which is cut on
+   * the stock body centre, so the circle at the canvas centre is the stock one.
+   */
   setPoopTexture(key) {
-    this.poop.setTexture(key);
+    this.poopStockKey = key;
+    this.poop.setTexture(twinKey(key, this.skin, this.fartFrame, (k) => this.textures.exists(k)));
     const body = scaledCircleBody(this.poop.frame.width, T.spriteDisplayScale, T.poopRadius);
     this.poop.body.setCircle(body.radius, body.offset, body.offset);
   }
@@ -3971,7 +4129,103 @@ export class Play extends Phaser.Scene {
   refreshPoopLook() {
     // A start boost wears the fart face.
     const key = this.boost ? 'poop-fart' : poopFrame({ charged: this.charged, stinkFrame: this.stinkFrame, vy: this.poop.body.velocity.y, scared: this.scaredMs > 0 }, T);
-    if (this.poop.texture.key !== key) this.setPoopTexture(key);
+    if (this.poopStockKey !== key) this.setPoopTexture(key);
+  }
+
+  /**
+   * In season, one loop clock alternates the two fart twins (the hat in the wind) while the poop wears
+   * 'poop-fart' (a fart or a start boost), at the stink frames' rate. Paused with the run (pauseEffects).
+   */
+  ensureFartClock() {
+    if (this.fartClock || !this.skin.fartFrames.length) return;
+    this.fartClock = this.time.addEvent({
+      delay: T.beans.stinkFrameMs,
+      loop: true,
+      callback: () => {
+        this.fartFrame ^= 1;
+        if (this.poopStockKey === 'poop-fart') this.setPoopTexture('poop-fart');
+      },
+    });
+  }
+
+  /** The lazy flight landed or the season changed (plan 17, 1.10): show the current stock key's twin now, or the stock face. */
+  reapplySkin() {
+    if (this.poop?.active && this.poopStockKey) this.setPoopTexture(this.poopStockKey);
+    for (const item of this.items?.getChildren() ?? []) this.skinItem(item);
+    this.refreshSeasonHome(); // the Bowelidays image, once its file is in
+    for (const pipe of this.pipes?.getChildren() ?? []) {
+      if (pipe.originY !== 0) continue; // a bottom pipe stands up from its gap (origin at its top)
+      if (this.skin.snowCap) this.addSnowCap(pipe);
+      else pipe.getData('snow')?.destroy();
+    }
+  }
+
+  /**
+   * December (plan 17, 1.12 and 1.14): the snowfall in every mode, on the home screen and in runs, a match's halves
+   * included (Michael, 26 Nov); the countdown line and Happy Bowelidays! on the home screen only (with the ready UI,
+   * never in a match's halves: the Versus scene draws their join screen). Nothing off season.
+   */
+  refreshSeasonHome() {
+    const day = dailyDay(this.registry);
+    const season = adventSeason(day, T);
+    const home = season && !this.match;
+    const line = home ? countdownLine(day, this.locale, T) : null;
+    this.countdownText?.setText(line?.text ?? '').setVisible(Boolean(line?.text) && this.readyUiShown);
+    const img = line?.image && this.textures.exists(line.image) ? line.image : null; // until the flight lands, nothing
+    if (img && !this.countdownImage?.active) {
+      const b = this.readyBoxes.bowelidays;
+      this.countdownImage = this.add.image(b.x, b.y, img).setDisplaySize(b.width, b.height).setDepth(20);
+    }
+    this.countdownImage?.setVisible(Boolean(img) && this.readyUiShown);
+    if (season && !this.snowfall) this.snowfall = createSnowfall(this, { x: 0, y: 0, width: this.fieldW, height: GAME_HEIGHT }, T.advent.snow);
+    if (!season && this.snowfall) {
+      this.snowfall.destroy();
+      this.snowfall = null;
+    }
+    this.snowfall?.setVisible(true);
+  }
+
+  /** A world pickup's texture (plan 17, 1.11; D2): its December twin once loaded, else the stock one. The kind stays the item's data. */
+  itemTexture(kind) {
+    return twinKey(kind, this.skin, 0, (k) => this.textures.exists(k));
+  }
+
+  /** Re-skin a pickup already in the field (the flight landed, or the season changed): the texture, then its circle for that frame. */
+  skinItem(item) {
+    const kind = item.getData('kind');
+    if (!item.active || !kind || item.getData('baseScale') === undefined) return;
+    const key = this.itemTexture(kind);
+    if (item.texture.key === key || item.anims?.isPlaying) return;
+    item.setTexture(key);
+    const body = scaledCircleBody(item.frame.width, item.getData('baseScale'), item.getData('radius'));
+    item.body?.setCircle(body.radius, body.offset, body.offset);
+  }
+
+  /**
+   * December's snow on a bottom pipe's cap (plan 17, 1.11): one Image per bottom pipe, at the cap's top-left plus
+   * TUNING.advent.snowCap, drawn at spriteDisplayScale over the pipe (moving or still) and under the ground and
+   * ceiling strips; it goes when its pipe does. Nothing off season or before the file has landed.
+   */
+  addSnowCap(pipe) {
+    const key = this.skin.snowCap;
+    if (!key || !this.textures.exists(key) || pipe.getData('snow')) return;
+    const snow = this.add.image(0, 0, key).setOrigin(0, 0).setScale(T.spriteDisplayScale).setDepth(0.5);
+    pipe.setData('snow', snow);
+    pipe.once('destroy', () => snow.destroy());
+    snow.once('destroy', () => pipe.active && pipe.setData('snow', null));
+    this.placeSnowCap(pipe, snow);
+  }
+
+  placeSnowCap(pipe, snow) {
+    snow.setPosition(pipe.x - T.pipeWidth / 2 + T.advent.snowCap.ox, pipe.y + T.advent.snowCap.oy);
+  }
+
+  /** Each frame after the physics step: every snow layer onto its pipe (the pipes scroll and some bob). */
+  placeSnowCaps() {
+    for (const pipe of this.pipes?.getChildren() ?? []) {
+      const snow = pipe.getData('snow');
+      if (snow?.active) this.placeSnowCap(pipe, snow);
+    }
   }
 
   collectBean(bean) {
@@ -4382,6 +4636,46 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * Plan 35, 2.3: the sounds no run needs in its first seconds load here, after Play's first frame, instead
+   * of holding the splash: the quiz's book sounds (ACC-010), the revive's sparkle, the challenge bubble's pop
+   * and the two-player flush (about 240 KB). Every use checks cache.audio.exists, so until a key is in it
+   * stays silent or plays its synth fallback (playSample). One load at a time across Play and PlayB
+   * (registry 'lazyAudio'); a restart that cuts one short leaves the missing keys to the next create.
+   * Once they are in, the service worker registers (plan 35, 3.0 D3: once per page load, src/swClient.js),
+   * so its install never competes with the cold load and finds these files in the HTTP cache.
+   */
+  loadLazyAudio() {
+    if (this.registry.get('lazyAudio')) return;
+    const has = (key) => this.cache.audio.exists(key);
+    const V = `?v=${APP_VERSION}`;
+    if (!has('book-open')) this.load.audio('book-open', 'assets/sfx/Book_Open.mp3' + V);
+    if (!has('book-flip')) this.load.audio('book-flip', 'assets/sfx/Book_PageTurn.mp3' + V);
+    if (!has('book-close')) this.load.audio('book-close', 'assets/sfx/Book_Close.mp3' + V);
+    if (!has('sparkle')) this.load.audio('sparkle', 'assets/sfx/Sparkle_Restore.mp3' + V); // a revive's streak wins everything back
+    if (!has('bubble-pop')) this.load.audio('bubble-pop', 'assets/sfx/Bubble_Pop.mp3' + V); // the challenge question's bubble touched (plan 34)
+    if (!has('flush')) this.load.audio('flush', 'assets/sfx/ToiletFlush_Win.mp3' + V); // a two-player GO
+    // In December the twins too (plan 17, 1.10; D8, D15), never in Boot: the stock frame shows until they land.
+    for (const [key, file] of Object.entries(this.skin.files)) if (!this.textures.exists(key)) this.load.image(key, file + V);
+    if (!this.load.list.size) {
+      registerWorker();
+      return; // all in already
+    }
+    this.registry.set('lazyAudio', true);
+    const done = (arrived) => {
+      this.registry.set('lazyAudio', false);
+      this.load.off('complete', complete);
+      this.events.off('shutdown', cut);
+      if (arrived) registerWorker();
+      if (arrived) this.game.events.emit('advent-art'); // every Play shows the twins that just landed (reapplySkin)
+    };
+    const complete = () => done(true);
+    const cut = () => done(false);
+    this.load.once('complete', complete);
+    this.events.once('shutdown', cut); // the loader resets on shutdown, so a cut-short load never completes
+    this.load.start();
+  }
+
+  /**
    * Buy a SHOP_ITEMS row with coins (the level-break shop). False, and nothing taken, unless
    * canBuy. Fiber → eatFiber; bean → one bean; superBean → the bag filled to beans.superBeans;
    * mystery → a box opened on the plain draw table with pairsLeft 0 (a skip in the break becomes
@@ -4472,6 +4766,7 @@ export class Play extends Phaser.Scene {
       const armed = this.breakQuitArmed();
       // One word, Quit, cards due or not (plan 26, A2); armed, it says when the second tap ends the run ungraded.
       this.breakQuitButton.setText(t(this.locale, armed ? (due ? 'breakQuitDueSure' : 'breakQuitSure') : 'breakQuit')).setVisible(shown);
+      this.breakQuitButton.setAlpha(this.breakQuitHeld() ? 0.4 : 1); // held: dimmed, as Quiz's hold
     }
     if (this.breakLevelPick != null && !this.levelPickOffered()) this.dropLevelPick(); // the gate came back, or test mode turned on
     this.refreshLevelPickUi();
@@ -4566,6 +4861,14 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * Is the armed Quit still held (plan 35, 4.6)? For explainMinMs after the first tap it is dimmed and
+   * a second tap does nothing, the same hold the revive's Quit has (Quiz.giveUp's holdFor).
+   */
+  breakQuitHeld() {
+    return this.breakQuitArmed() && this.time.now - this.breakQuitArmedAt < T.education.explainMinMs;
+  }
+
+  /**
    * Quit at an education break (plan 25, B8): the first tap arms it, a second inside the confirm time
    * ends the run. With the gate open, it ends as a normal run, graded on its answers; while the gate
    * holds (new cards included since plan 28, Stage 3b) it counts as quitting the run (breakGaveUp: no
@@ -4578,9 +4881,11 @@ export class Play extends Phaser.Scene {
     if (!this.breakQuitArmed()) {
       this.breakQuitArmedAt = this.time.now;
       this.refreshShopButton();
+      this.time.delayedCall(T.education.explainMinMs + 20, () => this.refreshShopButton()); // the hold lifts
       this.time.delayedCall(T.saveClearConfirmMs + 50, () => this.refreshShopButton());
       return;
     }
+    if (this.breakQuitHeld()) return; // the warning is read first: a double tap never passes it (plan 35, 4.6)
     const counts = this.quizCounts({ mode: 'break' });
     const due = this.breakGated(counts); // the gate holds, new cards included (plan 28, Stage 3b: Michael's call 1); none with test mode on
     this.breakGaveUp = due || !((this.runQuiz?.answered ?? 0) > 0);
@@ -5043,13 +5348,30 @@ export class Play extends Phaser.Scene {
       return;
     }
     this.queueRunSummary(); // plan 30: the run's summary, sent with the next sync
+    // A run that crossed no pipe is not counted (plan 47, call A; a Daily Dump's, no pair flown that
+    // day): its summary goes all the same (call E), and the sync runs for what was already queued.
+    this.runNotCounted = !countsAsRun({ pipes: this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed });
     // A Daily Dump records only itself: the attempt is final and its score queued for the 🌞 board,
     // never the 🏆 top list or best (an endless score above maxScore would stop every 🏆 post).
     if (this.runIsDaily) {
-      const rec = this.saveDailyAttempt(true);
-      if (rec) this.dailyQueue.add({ ...rec, name: this.save?.name ?? null });
-      this.recordCareer('daily');
+      if (this.runNotCounted) {
+        // No pair flown today (plan 47, call D): the attempt goes back, before the sync below, whose
+        // finishAbandonedDaily would otherwise find the unfinished record. No 🌞 post, no career; the
+        // streak day was never counted (it waits for the first pipe), so nothing is taken back.
+        if (this.daily) this.dailyStore.release(this.daily.day, this.daily.playerId);
+      } else {
+        const rec = this.saveDailyAttempt(true);
+        if (rec) this.dailyQueue.add({ ...rec, name: this.save?.name ?? null });
+        this.recordCareer('daily');
+      }
       this.dailySync = this.syncLeaderboard();
+      return;
+    }
+    // No best, top-list entry or career for a run with no pipe crossed (points picked up before the
+    // first pipe included).
+    if (this.runNotCounted) {
+      this.personalBest = false;
+      this.syncLeaderboard();
       return;
     }
     // A new personal best (Over says so, on screen only): above every score this player had, of
@@ -5130,12 +5452,17 @@ export class Play extends Phaser.Scene {
    * One finished run into the career (plan 08): a normal single-player run or a Daily Dump, never a
    * test run or a match half (endRun returns before). Its counters wait in the career store for the
    * next sync; the badges it earns (judged on this device's totals) are unlocked here and listed on
-   * Over (this.runBadges), their claims queued.
+   * Over (this.runBadges), their claims queued. A run that crossed no pipe adds nothing (plan 47).
    */
   recordCareer(mode) {
     const day = utcDayKey();
     // Pipes passed: fart and skipped pairs included (as for levels); a Daily Dump counts only the pairs flown that day.
     const pipes = mode === 'daily' && this.daily ? Math.max(0, this.pipesPassed - this.daily.startPipes) : this.pipesPassed;
+    // Not a run (plan 47, call A): no counter, no run time (🧱 / 🏃), no streak day, no badge.
+    if (!countsAsRun({ pipes })) {
+      this.runBadges = [];
+      return;
+    }
     const facts = { mode, score: this.score, level: this.level, won: Boolean(this.won), toilet: Boolean(this.toilet), collected: { ...this.collected }, farts: this.runFarts ?? 0, superFarts: this.runSuperFarts ?? 0, pipes, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0 };
     facts.ceilingHits = this.runCeilingHits ?? 0;
     facts.boxesBought = this.runBoxesBought ?? 0;
@@ -5190,8 +5517,9 @@ export class Play extends Phaser.Scene {
    * Open a profile (plan 08): { name } for the player a board shows under that name, nothing for
    * this device's own player. From the save panel (own) or a tapped board name (anyone's).
    */
-  openStats(target = null) {
+  openStats(target = null, { onClose = null } = {}) {
     this.statsTarget = target?.name ? { name: target.name } : null;
+    this.statsOnClose = onClose; // the save panel's Profile button: closing the profile opens the panel again (plan 44)
     this.handleChrome('stats');
   }
 
@@ -5413,7 +5741,7 @@ export class Play extends Phaser.Scene {
 
   /** The 📚 board's rows (education_board) with this player's own row flagged, from place offset + 1 (plan 28, 5.2: a page); a method so the smoke can stub it. */
   fetchEduBoard(id, offset = 0) {
-    return fetchEducationBoard(id, { offset });
+    return fetchEducationBoard(id, { offset, peek: true }); // one row past the page (plan 35, 4.5)
   }
 
   /** share_education for the 📚 board, with the invite code when the player has one; a method so the smoke can stub it (never the live board). */
@@ -5503,7 +5831,8 @@ export class Play extends Phaser.Scene {
     this.ghost.setAlpha(alpha).setVisible(g.visible && alpha > 0);
     if (!g.visible) return;
     this.ghost.setPosition(g.x, g.y).setAngle(g.angle);
-    if (this.ghost.texture.key !== g.frame && this.textures.exists(g.frame)) this.ghost.setTexture(g.frame);
+    const frame = twinKey(g.frame, this.skin, 0, (k) => this.textures.exists(k)); // the rival's stock key, in this side's skin
+    if (this.ghost.texture.key !== frame && this.textures.exists(frame)) this.ghost.setTexture(frame);
   }
 
   /** The other player's marker on this level bar (rivalMarker), re-placed only when a level or pair count changed. */
@@ -5525,7 +5854,7 @@ export class Play extends Phaser.Scene {
     return {
       state: this.state, levelBreak: Boolean(this.levelBreak), ended: Boolean(slot.ended), won: Boolean(this.won), flaps: this.flapCount ?? 0,
       distance: this.distance, speed: this.state === 'playing' ? this.scrollSpeed() : 0, y: this.poop.y, vy, angle: this.poop.angle,
-      frame: this.poop.texture.key, alpha: this.poop.alpha, level: this.level, pipesPassed: this.pipesPassed, score: this.score,
+      frame: this.poopStockKey, alpha: this.poop.alpha, level: this.level, pipesPassed: this.pipesPassed, score: this.score,
       deaths: slot.deaths ?? 0, levelWins: slot.levelWins ?? 0, finalFirst: Boolean(slot.finalFirst),
     };
   }
@@ -5605,14 +5934,22 @@ export class Play extends Phaser.Scene {
     slot.distance = this.distance;
     slot.y = this.poop.y;
     slot.angle = this.poop.angle;
-    slot.frame = this.poop.texture.key;
+    slot.frame = this.poopStockKey; // the stock key: the other side maps it through its own skin
     slot.alpha = this.poop.alpha; // the respawn blink, so the ghost blinks too
   }
 
-  /** A Daily Dump record still unfinished (its run was cut off by a reload): final as it stands, its score queued. */
+  /**
+   * A Daily Dump record still unfinished (its run was cut off by a reload): final as it stands, its
+   * score queued. One cut off before its first pipe is no attempt (plan 47, call G): released, nothing
+   * posted, no stub, and never made final even if storage refuses the release.
+   */
   finishAbandonedDaily() {
     const rec = this.dailyStore.peek();
     if (!rec || rec.final) return;
+    if (rec.pipes === 0) {
+      this.dailyStore.release(rec.day, rec.playerId);
+      return;
+    }
     const done = this.dailyStore.save({ ...rec, final: true });
     if (done) this.dailyQueue.add({ ...done, name: done.playerId === this.save?.id ? (this.save?.name ?? null) : null });
     // Its summary was lost with the page: a short row stands behind the score (plan 30).
@@ -5636,7 +5973,8 @@ export class Play extends Phaser.Scene {
       const badges = this.runIsTest ? [] : [...(this.runBadges ?? [])];
       const education = this.runIsEducation ? { ...this.runQuiz } : null; // the 📚 tally (plan 21)
       // Kept: the bonus quiz draws the panel again with the run's new numbers (refreshOverEducation).
-      this.overData = { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0, education };
+      // notCounted: the run crossed no pipe (endRun, plan 47); Over says so (a Daily Dump: the day is still open).
+      this.overData = { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0, education, notCounted: Boolean(this.runNotCounted) };
       this.scene.launch('Over', this.overData);
     });
   }

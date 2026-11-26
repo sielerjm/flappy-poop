@@ -1081,24 +1081,77 @@ test('boardPage: the page\'s rows (the caller\'s only on its own page), the call
   const row = (rank, over = {}) => ({ rank, name: `N${rank}`, me: false, total: 60, ...over });
   const page = (from, to) => Array.from({ length: to - from + 1 }, (_, k) => row(from + k));
   const me41 = row(41, { me: true });
-  // Page 1 of 60, the caller (41) appended by the server: left off the page, kept for the footer.
-  let got = boardPage([...page(1, 25), me41], { offset: 0, limit: 25 });
+  // Page 1 of 60 (asked with one row past the page, plan 35, 4.5), the caller (41) appended by the
+  // server: left off the page, kept for the footer; the 26th row says a page follows and is not shown.
+  let got = boardPage([...page(1, 26), me41], { offset: 0, limit: 25 });
   assert.deepEqual([got.rows.length, got.rows.at(-1).rank, got.mine, got.last], [25, 25, me41, false]);
   // Page 2: the caller's row is on it, at its place.
   const p2 = [...page(26, 40), me41, ...page(42, 50)];
-  got = boardPage(p2, { offset: 25, limit: 25 });
+  got = boardPage([...p2, row(51)], { offset: 25, limit: 25 });
   assert.deepEqual([got.rows, got.mine, got.last], [p2, me41, false]);
   // Page 3, short (51 to 60): the last; the appended caller off it.
   got = boardPage([me41, ...page(51, 60)], { offset: 50, limit: 25 });
   assert.deepEqual([got.rows.map((x) => x.rank), got.mine, got.last], [[...Array(10).keys()].map((k) => k + 51), me41, true]);
-  // A full last page: the total says so (🌞, 📚); 🏅 gives no total, so a full page looks like one more may follow.
+  // A full last page: the total says so (🌞, 📚); 🏅 gives no total, and since plan 35, 4.5 the missing
+  // row past the page says so (it offered an empty next page before).
   assert.equal(boardPage(page(26, 50).map((x) => ({ ...x, total: 50 })), { offset: 25, limit: 25 }).last, true, 'the total reached');
-  assert.equal(boardPage(page(26, 50).map(({ total, ...x }) => x), { offset: 25, limit: 25 }).last, false, 'no total: a full page may have a next');
+  assert.equal(boardPage(page(26, 50).map(({ total, ...x }) => x), { offset: 25, limit: 25 }).last, true, 'no total, no row past the page: the last');
+  assert.equal(boardPage(page(26, 51).map(({ total, ...x }) => x), { offset: 25, limit: 25 }).last, false, 'no total, a row past the page: a next');
   // Nothing on a page past the end; no caller; offline.
   assert.deepEqual(boardPage([], { offset: 25, limit: 25 }), { rows: [], mine: null, last: true });
   assert.deepEqual(boardPage(page(1, 3), { offset: 0, limit: 25 }), { rows: page(1, 3), mine: null, last: true });
   assert.deepEqual(boardPage(null, { offset: 25, limit: 25 }), { rows: null, mine: null, last: true }, 'offline stays offline');
   assert.deepEqual(boardPage([...page(1, 25), me41], { offset: -3, limit: 25 }).rows.length, 25, 'a bad offset is page 1');
+});
+
+test('empty pages (plan 35, 4.5): a board of exactly 25 or 50 rows offers no empty next page; the fetchers ask one row past the page with opts.peek, and boardPage drops it', async () => {
+  const row = (rank, over = {}) => ({ rank, name: `N${rank}`, me: false, ...over }); // 🏅: no total
+  const page = (from, to) => Array.from({ length: to - from + 1 }, (_, k) => row(from + k));
+  // Exactly 25: page 1 asked for 26, got 25: the last page. Exactly 50: page 2 the same; page 1 got its 26th.
+  assert.deepEqual(boardPage(page(1, 25), { offset: 0, limit: 25 }), { rows: page(1, 25), mine: null, last: true }, '25 rows: one page');
+  let got = boardPage(page(1, 26), { offset: 0, limit: 25 });
+  assert.deepEqual([got.rows, got.last], [page(1, 25), false], '50 rows, page 1: the 26th says a page follows and is not shown');
+  assert.equal(boardPage(page(26, 50), { offset: 25, limit: 25 }).last, true, '50 rows, page 2: the last');
+  // The caller as the 26th: a real row past the page, so a page follows; off this page, on the footer.
+  const me26 = row(26, { me: true });
+  got = boardPage([...page(1, 25), me26], { offset: 0, limit: 25 });
+  assert.deepEqual([got.rows.length, got.mine, got.last], [25, me26, false]);
+  // The caller further down (appended) is not the row past the page: only place 26 counts.
+  assert.equal(boardPage([...page(1, 24), row(40, { me: true })], { offset: 0, limit: 25 }).last, true, 'an appended caller alone never makes a next page');
+  // The fetchers: opts.peek asks limit + 1 (config.limit 10 here), page 1 and later pages alike; without it, as before.
+  const ok = (body = []) => fakeFetch({ body });
+  const f = { top: ok(), plain: ok(), daily: ok(), medals: ok(), edu: ok() };
+  await fetchTop({ playerId: ID, fetch: f.top, config, peek: true });
+  await fetchTop({ fetch: f.plain, config, peek: true, offset: 10 });
+  await fetchDailyBoard(DPID, '2026-11-10', { fetch: f.daily, config, peek: true });
+  await fetchTournamentBoard(ID, { fetch: f.medals, config, peek: true, offset: 10 });
+  await fetchEducationBoard(ID, { fetch: f.edu, config, peek: true });
+  assert.deepEqual(
+    { top: f.top.calls[0].body, plain: f.plain.calls[0].url.replace(config.dataApi, ''), daily: f.daily.calls[0].body, medals: f.medals.calls[0].body, edu: f.edu.calls[0].body },
+    {
+      top: { p_player_id: ID, p_limit: 11 },
+      plain: '/scores?select=name,score,toilet,level&order=score.desc,updated_at.asc&limit=11&offset=10',
+      daily: { p_player_id: DPID, p_day: '2026-11-10', p_limit: 11 },
+      medals: { p_player_id: ID, p_limit: 11, p_offset: 10 },
+      edu: { p_player_id: ID, p_limit: 11 },
+    },
+  );
+  // 🏆 (no ranks): fetchTop with peek keeps the row past the page for the scene to read (Leaderboard.showBoard: last when no more than a page came).
+  const eleven = Array.from({ length: 11 }, (_, k) => ({ name: `N${k}`, score: 100 - k, toilet: false, level: 1 }));
+  assert.equal((await fetchTop({ playerId: ID, fetch: ok(eleven), config, peek: true })).length, 11, 'peek: the 11th kept');
+  assert.equal((await fetchTop({ playerId: ID, fetch: ok(eleven), config })).length, 10, 'no peek: a page, as before');
+  assert.equal(withOwnRows(await fetchTop({ playerId: ID, fetch: ok(eleven), config, peek: true }), [], 'Me', 10).length, 10, 'withOwnRows shows a page');
+});
+
+test('the board scene asks one row past the page on every tab and calls 🏆\'s page last only when no more than a page came back (plan 35, 4.5)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const lb = readFileSync(new URL('../src/scenes/Leaderboard.js', import.meta.url), 'utf8');
+  const play = readFileSync(new URL('../src/scenes/Play.js', import.meta.url), 'utf8');
+  assert.match(lb, /fetchTournamentBoard\([^)]*peek: true/);
+  assert.match(lb, /fetchDailyBoard\([^)]*peek: true/);
+  assert.equal((lb.match(/fetchTop\(named \? \{ playerId: state\.id, offset, peek: true \} : \{ offset, peek: true \}\)/g) ?? []).length, 1, '🏆 peeks, named or not');
+  assert.match(lb, /rawRows\.length <= limit/);
+  assert.match(play, /fetchEducationBoard\(id, \{ offset, peek: true \}\)/, '📚 too (Play.fetchEduBoard)');
 });
 
 test('race post queue (2.5): split-screen 🏆 posts wait here once each, oldest first, capped; junk dropped; drained in order', async () => {

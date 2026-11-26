@@ -1,13 +1,13 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, fitScale, statsLayout, utcDayKey, focusNearest, focusStep } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, fitScale, statsLayout, utcDayKey, focusNearest, focusStep, dailyGlyphNow } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, hasOverlayUnder, openChangelog } from '../ui/overlayStack.js';
 import { createScrollView } from '../ui/scrollView.js';
 import { createButton } from '../ui/button.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { TAG_GLYPHS } from '../leaderboard.js';
-import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText, eduProfileRows, streakProfileRows } from '../i18n.js';
+import { t, fillDaily, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText, eduProfileRows, streakProfileRows } from '../i18n.js';
 import { ACHIEVEMENTS, EDU_ACHIEVEMENTS, achievementById, averageGrade, openQuests, progressOf } from '../achievements.js';
 import { validateName } from '../save.js';
 import { localDayKey, studyStreakNow, shownCounters } from '../education.js';
@@ -71,6 +71,12 @@ export class Stats extends Phaser.Scene {
   create(data) {
     this.scene.bringToTop();
     const play = this.scene.get('Play');
+    // Opened from the save panel's Profile button: closing goes back to the panel (plan 44). Taken now, so a
+    // later profile opened any other way does not inherit it; a restart (sharing changed) keeps it.
+    if (play?.statsOnClose) {
+      this.onBack = play.statsOnClose;
+      play.statsOnClose = null;
+    } else if (!data?.keepBack) this.onBack = null;
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
     const W = this.scale.width; // the live field: the panel stays centred
@@ -284,7 +290,7 @@ export class Stats extends Phaser.Scene {
     const top = L.band.y - L.band.height / 2;
     let y = top + 30;
     const header = (key) => {
-      sv.add(this.add.text(L.left, y, t(locale, key), { ...STYLE, fontSize: '32px', color: PINK, align: 'left' }).setOrigin(0, 0.5));
+      sv.add(this.add.text(L.left, y, fillDaily(t(locale, key), dailyGlyphNow(this.registry, T)), { ...STYLE, fontSize: '32px', color: PINK, align: 'left' }).setOrigin(0, 0.5));
       y += 52;
     };
     const row = (key, value, color = '#ffffff') => {
@@ -430,7 +436,7 @@ export class Stats extends Phaser.Scene {
       onClose: (changed) => {
         if (!changed || !this.sys.isActive()) return;
         this.gen += 1; // drop any in-flight load
-        this.scene.restart({ name: this.askedName });
+        this.scene.restart({ name: this.askedName, keepBack: true });
       },
     });
   }
@@ -578,5 +584,9 @@ export class Stats extends Phaser.Scene {
     this.gen += 1; // drop any in-flight load
     this.scene.stop();
     if (result.armResumeLockout) play?.armResumeLockout?.();
+    // Opened from the save panel's Profile button: back to the panel (plan 44).
+    const back = this.onBack;
+    this.onBack = null;
+    back?.();
   }
 }

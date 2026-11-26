@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: 5, eduShowHow: false, eduShowChoices: false };
+const DEFAULTS = { sound: true, music: true, haptics: true, skipSplash: false, locale: 'en', howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: 5, eduShowHow: false, eduShowChoices: false };
 
 function fakeStorage() {
   const m = new Map();
@@ -140,6 +140,21 @@ test('hand is left or right, defaults to right, and persists', () => {
   assert.equal(s.set({ hand: 'right' }).hand, 'right');
   st.setItem('k', JSON.stringify({ sound: true, hand: 7 }));
   assert.equal(createSettingsStore(st, 'k').load().hand, 'right');
+});
+
+test('skipSplash (plan 35, 4.2: Skip to home when loaded): a remembered boolean, off by default; anything else reads as off', () => {
+  const st = fakeStorage();
+  const s = createSettingsStore(st, 'k');
+  assert.equal(s.load().skipSplash, false, 'off by default: the splash waits for Continue');
+  assert.deepEqual(s.set({ skipSplash: true }), { ...DEFAULTS, skipSplash: true });
+  assert.equal(createSettingsStore(st, 'k2').load().skipSplash, false, 'another key does not see it');
+  st.setItem('k3', JSON.stringify({ skipSplash: true }));
+  assert.equal(createSettingsStore(st, 'k3').load().skipSplash, true, 'a stored true is kept');
+  for (const [i, junk] of ['yes', 1, null, {}].entries()) {
+    st.setItem(`j${i}`, JSON.stringify({ skipSplash: junk }));
+    assert.equal(createSettingsStore(st, `j${i}`).load().skipSplash, false, `${JSON.stringify(junk)} reads as off`);
+  }
+  assert.equal(createSettingsStore(fakeStorage(), 'k5').set({ skipSplash: 'on' }).skipSplash, false, 'a non-boolean patch value is not taken');
 });
 
 test('howToSeenAt keeps a string stamp, drops anything else, and persists', () => {

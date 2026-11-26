@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING } from '../src/config.js';
 
 const root = new URL('..', import.meta.url).pathname;
 
@@ -51,6 +51,57 @@ test('every spritesheet is a whole number of its frames', () => {
   }
 });
 
+// Plan 35, 2.1: the runtime art is exported at 2x the size it is drawn at, not 4x (a phone at 3x DPR
+// shows a 96 logical px sprite at about 156 device px, so 192 px frames still look sharp at a quarter
+// of the decoded texture memory). The poop set shares one scale, so the plain frames carry the rule.
+test('the sprite art is exported at 2x its drawn size (plan 35, 2.1)', () => {
+  const drawn = 96; // logical px a poop frame, an item or a mystery-box frame is drawn at
+  assert.equal(TUNING.spriteDisplayScale, 0.5, 'spriteDisplayScale: 2x frames are drawn at half size');
+  for (const name of ['poop.png', 'poop-dead.png', 'poop-scared.png', 'fiber.png', 'probiotic.png', 'bacteria.png', 'bean.png', 'postbiotic.png', 'mystery-icon.png']) {
+    const real = pngSize(join(root, 'assets', name));
+    assert.deepEqual({ w: real.w, h: real.h }, { w: 2 * drawn, h: 2 * drawn }, `${name}: frames at 2x of ${drawn} px`);
+    assert.equal(real.w * TUNING.spriteDisplayScale, drawn, `${name}: drawn at ${drawn} logical px`);
+  }
+  const mystery = loads.find((l) => l.key === 'mystery');
+  assert.equal(mystery.frameWidth, 2 * drawn, "Boot's mystery spritesheet frames");
+  assert.equal(pngSize(join(root, 'assets/mystery.png')).h, 2 * drawn, 'mystery.png: one row of 2x frames');
+  const coin = loads.find((l) => l.key === 'coin');
+  assert.equal(coin.frameWidth, 2 * TUNING.coin.displayPx, 'coin.png: frames at 2x of coin.displayPx');
+  const q = pngSize(join(root, 'assets/question.png'));
+  assert.equal(q.w, 2 * TUNING.education.superQ.displayPx, 'question.png: 2x of superQ.displayPx');
+});
+
+// Plan 17, 1.3: the December art in assets/advent/. Each entry is a square (px) the file must have once it
+// exists: items are 192 (drawn at 96); the poop twins and the hatted bacterium sit at their measured squares
+// because they are drawn at spriteDisplayScale like the stock frames. An entry whose file is not there yet is
+// skipped (the art arrives step by step), so the table never fails an empty or partly filled folder.
+const adventSquares = {
+  'candy-cane.png': 192,
+  'gingerbread.png': 192,
+  'poop-santa.png': 234,
+  'poop-scared-santa.png': 234,
+  'poop-stink1-santa.png': 358,
+  'poop-stink2-santa.png': 358,
+  'poop-stink-scared1-santa.png': 358,
+  'poop-stink-scared2-santa.png': 358,
+  'poop-falling-santa.png': 366,
+  'poop-stink-falling1-santa.png': 366,
+  'poop-stink-falling2-santa.png': 366,
+  'poop-fart-santa1.png': 438,
+  'poop-fart-santa2.png': 446,
+  'poop-speech-santa.png': 510,
+  'bacteria-santa.png': 196, // built at 1.11 (plan 17)
+};
+
+test('the assets/advent/ art named in the size table has the listed square (plan 17, 1.3)', () => {
+  for (const [name, square] of Object.entries(adventSquares)) {
+    const file = join(root, 'assets/advent', name);
+    if (!existsSync(file)) continue; // not delivered yet
+    const real = pngSize(file);
+    assert.deepEqual({ w: real.w, h: real.h }, { w: square, h: square }, `advent/${name}: ${square}x${square} expected`);
+  }
+});
+
 const readme = readFileSync(join(root, 'assets/README.md'), 'utf8');
 const rows = [...readme.matchAll(/^\|\s*`([^`]+)`\s*\|\s*(\d+)x(\d+)\s*\|/gm)].map((m) => ({
   file: m[1],
@@ -58,8 +109,17 @@ const rows = [...readme.matchAll(/^\|\s*`([^`]+)`\s*\|\s*(\d+)x(\d+)\s*\|/gm)].m
   h: Number(m[3]),
 }));
 
+// Every PNG under assets/, by path relative to assets/ (top-level files are bare names, subfolder files
+// like 'advent/poop-santa.png'). assets/src/ (sources) and assets/vendor/ (libraries) are not game art.
+function assetPngs(dir = join(root, 'assets'), prefix = '') {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    if (e.isDirectory()) return prefix === '' && (e.name === 'src' || e.name === 'vendor') ? [] : assetPngs(join(dir, e.name), `${prefix}${e.name}/`);
+    return e.name.endsWith('.png') ? [`${prefix}${e.name}`] : [];
+  });
+}
+
 test('assets/README.md table lists every PNG in assets/ with its real size', () => {
-  const pngs = readdirSync(join(root, 'assets')).filter((n) => n.endsWith('.png'));
+  const pngs = assetPngs();
   assert.ok(rows.length > 0, 'no size rows parsed from assets/README.md');
   for (const name of pngs) {
     const row = rows.find((r) => r.file === name);

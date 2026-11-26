@@ -30,7 +30,7 @@ test('the trap comes first: before the splash import, the Phaser tag and src/mai
   const trap = html.indexOf('__flappyBoot =');
   const splash = html.indexOf("import('./src/splash.js').then((m) => m.startSplash");
   const cdn = html.search(CDN_TAG);
-  const main = html.indexOf('<script type="module" src="src/main.js">');
+  const main = html.indexOf('<script type="module" src="src/main.js'); // bare, or with the push's ?h= (plan 35, 3.1)
   assert.ok(trap > 0 && trap < splash && splash < cdn && cdn < main, JSON.stringify({ trap, splash, cdn, main }));
   assert.ok(html.indexOf('<div id="splash"') < trap, 'the splash markup exists before the trap can mark it failed');
 });

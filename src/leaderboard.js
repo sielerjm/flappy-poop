@@ -394,8 +394,10 @@ export function createRacePostQueue(storage = browserStorage(), { key = LEADERBO
 // ---------------------------------------------------------------------------
 // Daily Dump (🌞). The attempt record lives on this device under dailyKey: claimed when the run
 // starts (final: false), rewritten as the score grows, final at the crash. A record left unfinished
-// (a reload mid-run) is the day's result all the same. Its score waits in the daily queue until
-// submit_daily_score answers; the name is read when the post is sent.
+// (a reload mid-run) is the day's result all the same, once it crossed a pipe; one that crossed none
+// is not an attempt (plan 47, calls D and G): it is released at its game over or by the next sync,
+// and the day is free (spent). Its score waits in the daily queue until submit_daily_score answers;
+// the name is read when the post is sent.
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const nonNegInt = (n) => Number.isInteger(n) && n >= 0;
@@ -420,15 +422,40 @@ export function createDailyStore(storage = browserStorage(), { key = LEADERBOARD
       return null;
     }
   };
+  /** This player's attempt for `day`, or null (another day or another player on this device). */
+  const load = (day, playerId) => {
+    const rec = read();
+    return rec && rec.day === day && rec.playerId === playerId ? rec : null;
+  };
   return {
-    /** This player's attempt for `day`, or null (another day or another player on this device). */
-    load(day, playerId) {
-      const rec = read();
-      return rec && rec.day === day && rec.playerId === playerId ? rec : null;
-    },
+    load,
     /** Whatever record is stored, any day or player (the sync finalises an unfinished one). */
     peek() {
       return read();
+    },
+    /**
+     * Has this player used the day's attempt here: a record for `day` that is final or crossed a pipe?
+     * An unfinished one with no pipe yet is a run in the air or one cut off before its first pipe
+     * (plan 47, call G): not spent.
+     */
+    spent(day, playerId) {
+      const rec = load(day, playerId);
+      return Boolean(rec && (rec.final || rec.pipes > 0));
+    },
+    /**
+     * Give the attempt back (plan 47, calls D and G): remove the stored record only when it is this
+     * player's unfinished record for `day` with no pipe crossed. Anything else stays (clear() drops
+     * any record). Returns whether a record was removed.
+     */
+    release(day, playerId) {
+      const rec = load(day, playerId);
+      if (!rec || rec.final || rec.pipes !== 0) return false;
+      try {
+        storage?.removeItem(key);
+      } catch {
+        return false;
+      }
+      return true;
     },
     /** Store the attempt (junk is ignored). Returns the stored record or null. */
     save(rec) {
@@ -735,6 +762,15 @@ function offsetField(offset) {
 }
 
 /**
+ * The rows a board page asks for (plan 35, 4.5): `limit`, or one more with opts.peek, so the page knows
+ * whether another follows (a board of exactly 25 or 50 rows offered an empty next page). The server
+ * caps p_limit at 100, so 26 needs no schema change.
+ */
+function pageLimit(limit, opts) {
+  return opts?.peek ? limit + 1 : limit;
+}
+
+/**
  * The 🌞 board for `day` ('YYYY-MM-DD'; today in UTC when omitted): the top rows by score, plus
  * this player's row (me, with its rank and the day's total) when it is below them; null when the
  * board cannot be reached or answers junk. opts.offset (default 0): the page's rows from place
@@ -744,7 +780,7 @@ export async function fetchDailyBoard(playerId, day = null, opts = {}) {
   const limit = opts.config?.limit ?? LEADERBOARD.limit;
   const id = typeof playerId === 'string' && ID_RE.test(playerId) ? playerId : null;
   const d = typeof day === 'string' && DAY_RE.test(day) ? day : null;
-  const out = await request('/rpc/daily_board', { method: 'POST', body: { p_player_id: id, p_day: d, p_limit: limit, ...offsetField(opts.offset) } }, opts);
+  const out = await request('/rpc/daily_board', { method: 'POST', body: { p_player_id: id, p_day: d, p_limit: pageLimit(limit, opts), ...offsetField(opts.offset) } }, opts);
   if (!Array.isArray(out)) return null;
   const rows = out.map(normalizeDailyRow);
   if (rows.some((r) => r === null)) return null;
@@ -768,7 +804,7 @@ function normalizeMedalRow(raw) {
 export async function fetchTournamentBoard(playerId, opts = {}) {
   const limit = opts.config?.limit ?? LEADERBOARD.limit;
   const id = typeof playerId === 'string' && ID_RE.test(playerId) ? playerId : null;
-  const out = await request('/rpc/tournament_board', { method: 'POST', body: { p_player_id: id, p_limit: limit, ...offsetField(opts.offset) } }, opts);
+  const out = await request('/rpc/tournament_board', { method: 'POST', body: { p_player_id: id, p_limit: pageLimit(limit, opts), ...offsetField(opts.offset) } }, opts);
   if (!Array.isArray(out)) return null;
   const rows = out.map(normalizeMedalRow);
   if (rows.some((r) => r === null)) return null;
@@ -789,7 +825,7 @@ function normalizeRow(raw) {
  * the page from place offset + 1 (score_board's p_offset, the table read's offset=).
  */
 export async function fetchTop(opts = {}) {
-  const limit = opts.config?.limit ?? LEADERBOARD.limit;
+  const limit = pageLimit(opts.config?.limit ?? LEADERBOARD.limit, opts); // with opts.peek, one past the page (plan 35, 4.5)
   const page = offsetField(opts.offset);
   const tidy = (out) => {
     if (!Array.isArray(out)) return null;
@@ -835,16 +871,19 @@ export function withOwnRows(rows, ranks, name, limit = LEADERBOARD.limit, offset
  * One page of a ranked board (🌞, 🏅, 📚: rows with rank and me; plan 28, 5.2) at `offset`: rows, the
  * ones that belong on the page (the caller's own row, which the server sends with every page, only
  * when its rank falls on this page); mine, the caller's row wherever it is (the footer's place); last,
- * whether no page follows (fewer than `limit` rows on it, or the board's `total` reached where it
- * gives one: 🏅 does not). rows null (offline) stays null.
+ * whether no page follows: no row at place offset + limit + 1 (the fetchers' peek row, plan 35, 4.5:
+ * ranks are row numbers, so a row there means the next page has one), or the board's `total` reached
+ * where it gives one (🏅 does not). Rows past the page (the peek row) are dropped. rows null (offline)
+ * stays null.
  */
 export function boardPage(rows, { offset = 0, limit = LEADERBOARD.limit } = {}) {
   if (!Array.isArray(rows)) return { rows, mine: null, last: true };
   const from = Number.isInteger(offset) && offset > 0 ? offset : 0;
   const mine = rows.find((r) => r?.me) ?? null;
-  const page = rows.filter((r) => !r.me || (r.rank > from && r.rank <= from + limit));
+  const page = rows.filter((r) => r.rank > from && r.rank <= from + limit);
   const totals = rows.map((r) => r.total).filter(Number.isInteger);
-  const last = page.length < limit || (totals.length > 0 && from + limit >= Math.max(...totals));
+  const more = rows.some((r) => r.rank === from + limit + 1);
+  const last = !more || (totals.length > 0 && from + limit >= Math.max(...totals));
   return { rows: page, mine, last };
 }
 
@@ -1439,7 +1478,7 @@ function normalizeEduRow(raw) {
 export async function fetchEducationBoard(playerId = null, opts = {}) {
   const pid = typeof playerId === 'string' && ID_RE.test(playerId) ? playerId : null;
   const config = opts.config ?? LEADERBOARD;
-  const out = await request('/rpc/education_board', { method: 'POST', body: { p_player_id: pid, p_limit: config.limit ?? 25, ...offsetField(opts.offset) } }, opts);
+  const out = await request('/rpc/education_board', { method: 'POST', body: { p_player_id: pid, p_limit: pageLimit(config.limit ?? 25, opts), ...offsetField(opts.offset) } }, opts);
   if (!Array.isArray(out)) return null;
   return out.map(normalizeEduRow).filter(Boolean);
 }

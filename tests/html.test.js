@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -20,8 +20,46 @@ test('index.html loads Phaser pinned to an exact version from jsDelivr', () => {
   assert.equal(m[1].split('.')[0], '4', 'expected Phaser 4');
 });
 
-test('index.html loads src/main.js as an ES module', () => {
-  assert.match(html, /<script type="module" src="src\/main\.js">/);
+// Plan 35, 3.1: `npm run push` stamps an import map into index.html (tools/sw_stamp.mjs), so the main tag
+// and the modulepreload hrefs carry each module's ?h=. Between pushes the committed file is unstamped
+// (bare URLs) or carries the last push's stamp; either way the tags and the map must agree.
+const importMap = (page) => {
+  const m = /<script type="importmap">([\s\S]*?)<\/script>/.exec(page);
+  return m ? JSON.parse(m[1]).imports : null;
+};
+
+/** The main tag, the preloads and the import map agree; the map, if any, comes before every script and preload. */
+function checkModuleTags(page, label) {
+  const map = importMap(page);
+  const main = /<script type="module" src="(src\/main\.js(?:\?h=[0-9a-f]{10})?)"><\/script>/.exec(page);
+  assert.ok(main, `${label}: src/main.js loads as an ES module`);
+  const hrefs = [...page.matchAll(/<link rel="modulepreload" href="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(hrefs.some((h) => h.split('?')[0] === 'src/main.js'), `${label}: main.js is preloaded`);
+  assert.equal(new Set(hrefs).size, hrefs.length, `${label}: no module is preloaded twice`);
+  for (const url of [main[1], ...hrefs]) {
+    const [path, query] = url.split('?');
+    assert.match(path, /^src\/[\w/]+\.js$/, `${label}: ${url} is a src/ path`);
+    assert.ok(existsSync(new URL(`../${path}`, import.meta.url)), `${label}: ${path} exists`);
+    if (map) assert.equal(url, map[`./${path}`].slice(2), `${label}: ${url} is the import map's URL for ${path}`);
+    else assert.equal(query, undefined, `${label}: ${url} is bare (no map, so the imports are bare too)`);
+  }
+  if (!map) return;
+  const at = page.indexOf('<script type="importmap">');
+  assert.ok(page.indexOf('<meta charset="utf-8">') < at, `${label}: the map follows the charset meta`);
+  for (const later of ['<script>', '<script type="module"', '<link rel="modulepreload"']) assert.ok(at < page.indexOf(later), `${label}: the map comes before ${later}`);
+  assert.equal(page.match(/<script type="importmap">/g).length, 1, `${label}: one map`);
+}
+
+test('index.html loads src/main.js as an ES module, its tag and preloads bare or matching the import map', () => {
+  checkModuleTags(html, 'index.html');
+});
+
+test('a stamped copy of index.html (what npm run push commits) passes the same checks', async () => {
+  const { planStamp } = await import('../tools/sw_stamp.mjs');
+  const stamped = planStamp(new URL('..', import.meta.url).pathname).index;
+  assert.ok(importMap(stamped), 'the stamp writes a map');
+  checkModuleTags(stamped, 'stamped');
+  assert.equal(stamped.replace(/\s*<!-- sw_stamp[^>]*-->\s*<script type="importmap">[\s\S]*?<\/script>/, '').replace(/\?h=[0-9a-f]{10}/g, ''), html.replace(/\s*<!-- sw_stamp[^>]*-->\s*<script type="importmap">[\s\S]*?<\/script>/, '').replace(/\?h=[0-9a-f]{10}/g, ''), 'the stamp changes nothing else');
 });
 
 // The loading splash (src/splash.js reads these ids and classes; the CSS paints before any module).

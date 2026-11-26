@@ -49,6 +49,7 @@ function setup({ versus = null, active = false, project = undefined, enter = { o
   const account = {
     enter: async () => (entered.push(1), typeof enter === 'function' ? enter() : enter),
     devices: async () => ({ ok: true, rows: [] }),
+    races: async () => ({ ok: true, rival: null, recent: [] }),
     status: () => ({ linked: true, trusted: true, name: 'PlopMaster' }),
   };
   const play = { getSaveState: () => ({ name: 'PlopMaster', id: 'p1' }), onlineAccount: () => account, onlineNet: net, onlineTestProject: () => project === 'test', ...(project === undefined ? {} : { onlineProjectName: () => project }) };
@@ -95,6 +96,23 @@ test('✕ in an online view goes back to the online home first; a second ✕ clo
   await el('tour-close').click();
   assert.equal(isTournamentPanelOpen(), false);
   assert.ok(k.net.calls.some((c) => c[0] === 'close'), 'the socket and token ticker stop');
+});
+
+// Michael's playtest (plan 44, 24 Nov): ✕ on 🏁 Recent races left the window; its Back went home. ✕ is Back
+// on every sub-view of the online home (Recent races joined the list after Devices and the pairing code).
+test('✕ on 🏁 Recent races goes back to the online home, as its Back does; a second ✕ closes the window', async () => {
+  const k = setup();
+  k.open();
+  await flush();
+  await el('tour-races').click();
+  await flush();
+  assert.ok(el('tour-races-back'), 'on Recent races');
+  await el('tour-close').click();
+  await flush();
+  assert.ok(el('tour-create') && !el('tour-races-back'), 'back on the online home');
+  assert.equal(isTournamentPanelOpen(), true);
+  await el('tour-close').click();
+  assert.equal(isTournamentPanelOpen(), false);
 });
 
 test('Create room shows Connecting while create_room runs, then the code', async () => {

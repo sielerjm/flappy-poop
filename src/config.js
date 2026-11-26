@@ -32,7 +32,7 @@ export const TUNING = {
   gapMargin: 80, // keep the gap this far from the ceiling and the ground
   poopXFrac: 0.25, // 0–1 share of the field width where the player sits (180 px of a 720 field; the same share on a wider desktop field; poopX())
   poopRadius: 48, // px circular hitbox = half the 96 logical-px sprite (the whole drawing, square corners excluded)
-  spriteDisplayScale: 0.25, // 384 px textures drawn at 96 logical px
+  spriteDisplayScale: 0.5, // 192 px textures (2x) drawn at 96 logical px (plan 35, 2.1; was 384 px at 0.25)
   hudProbioticSize: 96, // logical px; HUD icon uses setDisplaySize
   hudProbioticPulse: { scale: 1.1, ms: 600 }, // the probiotic / postbiotic HUD icon breathes 1 → scale and back every ms while its count runs; it grows hudProbioticSize × (scale − 1) / 2 per side, which must stay under hudRightLayout's 8 px gap to the count (tests/tuning.test.js)
   hudScoreY: 116, // px centre line of the 80 px score (and the 🚽 beside it): below the progress bar with air between
@@ -64,8 +64,9 @@ export const TUNING = {
   readyPromptMaxAlpha: 1, // 0–1 halo pulse ceiling
   dailyPulseScale: 1.14, // the 🌞's breathing size (×) while today's Daily Dump is unplayed, in step with its halo
   streakMarkPx: { dx: 30, dy: 30, eduDy: 24, fontPx: 24, color: '#ffb347' }, // the streak subscripts on the 🌞 and 📚 (plan 34): offset from the glyph's centre (the 📚's mirrors its gold due count at −24), size and colour
-  saveClearConfirmMs: 4000, // ms a first tap on the save panel's Clear stays armed: a second tap inside it signs this device out
+  saveClearConfirmMs: 4000, // ms a first tap on a two-tap button stays armed (the tournament's Abandon, the level break's Quit); the save panel's Clear had it until plan 44's Sign out confirm
   launchSlideMs: 700, // ms the poop slides from its ready spot to poopX() on the start tap
+  againSlideMs: 350, // ms the same slide takes on Over's Play again (plan 35, 4.1: Michael's pick from preview E, 24 Nov); a start from home keeps launchSlideMs
   readyTitlePx: 72, // px font size of the FLAPPY POOP title on the ready screen
   readyPoopScale: 1.5, // × spriteDisplayScale for the speech-bubble poop on the ready screen (shrinks back during the slide)
   toiletOffColor: 0x6a6a6a, // toggle track when off (grey)
@@ -490,11 +491,13 @@ export const TUNING = {
     storageKey: 'flappyPoop.splash', // localStorage key: the deck and the features already shown
     // The ring only ever fills, chasing a target (ringTarget) at a speed (ringStep) of the gap ÷
     // ringEaseMs, held between ringMinPerSec and ringMaxPerSec (shares of the ring per second): the top
-    // speed is its viscosity (a cached load still takes ~0.8 s to fill), the floor makes it finish.
+    // speed is its viscosity, the floor makes it finish; a cached load (ready within ringCachedMs) fills at ringFastPerSec.
     ringEaseMs: 200, // ms: the chase's time constant
-    ringMaxPerSec: 1.6, // ring / s at most
+    ringMaxPerSec: 1.6, // ring / s at most (a cached load uses ringFastPerSec)
     ringMinPerSec: 0.6, // ring / s at least, while behind its target
     ringFrameCapMs: 50, // ms: a longer frame (Phaser compiling) pauses the ring instead of jumping it
+    ringFastPerSec: 3.4, // ring / s on a cached load (plan 35, 2.5): empty to full in about 300 ms, not 600 to 1100
+    ringCachedMs: 1500, // ms: Boot ready this soon after the splash started counts as a cached load (a Slow 4G revalidate takes ~3.7 s, a warm one ~0.4 s)
     waitCap: 0.2, // 0–1: the share the ring creeps to during the Phaser download, before Boot reports
     waitHalfMs: 3000, // ms: the creep is half of waitCap after this long (and still moving at 30 s)
   },
@@ -529,6 +532,26 @@ export const TUNING = {
     pulseScale: 1.06, // × ring scale at the top of the pulse
     pulseMs: 500, // ms per pulse (one way)
     scrollStepPx: 160, // px a d-pad up / down scrolls About and How to play
+  },
+  // Christmas (plan 17): all of December (UTC, or test mode's Pretend date) is the season. Decoration only in Stage 1.
+  advent: {
+    seasonMonth: 12, // the season's month (1–12): adventSeason holds from day 1 of it
+    seasonLastDay: 31, // the season's last day of that month (inclusive)
+    // "Happy Bowelidays!" (all December, Michael 26 Nov; English for everyone; D16 (b)): its width as a share of the field, its centre's y
+    // (between the ceiling villi's tips, y 234, and the title's ink, y 345), and the PNG's height / width (947 x 170).
+    bowelidays: { widthFrac: 0.6, y: 290, aspect: 170 / 947 },
+    countdownPx: 30, // px font of the countdown line under the title (1–25 Dec; readyLayout's countdown box)
+    // Home snowfall (src/ui/snowfall.js): white dots drifting down the ready screen; none under reduced motion (D6).
+    snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9 },
+    snowCap: { ox: -6.5, oy: -14.5 }, // px from a bottom pipe's cap top-left to the snow layer's top-left (process_art's --anchor report)
+    // The 🎅 that stands in for the 🌞 all December, a new one each time the home screen shows (pickSanta):
+    // Santa, Mrs. Claus and Mx Claus in the five skin tones and plain. The first is the fallback; variants a
+    // device cannot draw as one glyph are dropped at the first pick (supportedSantas). Drop the plain three here.
+    santas: [
+      '\u{1F385}', '\u{1F385}\u{1F3FB}', '\u{1F385}\u{1F3FC}', '\u{1F385}\u{1F3FD}', '\u{1F385}\u{1F3FE}', '\u{1F385}\u{1F3FF}',
+      '\u{1F936}', '\u{1F936}\u{1F3FB}', '\u{1F936}\u{1F3FC}', '\u{1F936}\u{1F3FD}', '\u{1F936}\u{1F3FE}', '\u{1F936}\u{1F3FF}',
+      '\u{1F9D1}\u200D\u{1F384}', '\u{1F9D1}\u{1F3FB}\u200D\u{1F384}', '\u{1F9D1}\u{1F3FC}\u200D\u{1F384}', '\u{1F9D1}\u{1F3FD}\u200D\u{1F384}', '\u{1F9D1}\u{1F3FE}\u200D\u{1F384}', '\u{1F9D1}\u{1F3FF}\u200D\u{1F384}',
+    ],
   },
 };
 
@@ -605,6 +628,7 @@ export const LEADERBOARD = {
   tournamentQueueMax: 20, // finished tournaments kept for a later post; the oldest goes first when full
   racePostsKey: 'flappyPoop.racePosts', // localStorage key for split-screen race scores (🏆, plan 39 2.5) the board has not confirmed yet (submit_score)
   racePostQueueMax: 20, // race scores kept for a later post; the oldest goes first when full
+  santaKey: 'flappyPoop.santa', // localStorage key for the last 🎅 the home screen showed (plan 17), so a reload never repeats it
   dailyKey: 'flappyPoop.daily', // localStorage key for this device's Daily Dump (🌞) attempt: claimed at the start, rewritten as the score grows
   dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
   dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full

@@ -1267,7 +1267,8 @@ function toggleOnline(on) {
  */
 function onlineBack() {
   const { st, lobby } = online;
-  if (st.view === 'devices' || st.view === 'paircode') {
+  // 🏁 Recent races too (Michael's playtest, plan 44): its ✕ left the window while its Back went home.
+  if (st.view === 'devices' || st.view === 'paircode' || st.view === 'races') {
     st.view = 'home';
     setStatus('');
     renderLobby();

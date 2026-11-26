@@ -105,30 +105,51 @@ ready screen's user button); spec in `docs/save-code-spec.md`. The code's
 random `id` is also the leaderboard identity. **One player across devices** (2026-11-08):
 a username belongs to the player holding it on the board (`submit_score` raises
 'name taken'; the panel asks `name_available` first through `Play.checkNameAvailable`
-and refuses the name with the user-code steps; the board cannot say → saved locally,
+and refuses the name with the Sign in steps; the board cannot say → saved locally,
 `saveNameOffline`; a refused sync sets `Play.boardNameTaken`, shown by the panel and
-the 🏆 footer). Loading a code on a device that had its own player queues
-`merge_players(pasted, old)` (`createMergeStore`, drained first by `syncLeaderboard`):
-the board folds the rows and keeps the old id as an alias (`player_aliases`), so every
-id resolves to one player. **The board's name wins** (2026-11-09): `syncLeaderboard` asks
+the 🏆 footer). **Sign in, Sign out, Merge players…** (plan 44, 0.29.0; the save panel's words, replacing Load and Clear).
+Signed out, the panel shows only **Sign in** and **Create user**, each with its own screen and ‹ Back. Sign in
+pastes a code: a preview card from the code alone (no server call), a line for a guest's progress, then one
+tap. A guest's progress joins the code's player: the code's state wins, `queueMerge(code id, guest id)`
+(`createMergeStore`, drained first by `syncLeaderboard`). The board folds the rows and keeps the guest id as
+an alias (`player_aliases`), so every id resolves to one player. Create user saves the username and shows the
+code popup (`save-explain`) before the dashboard. Signed in, **Sign out** opens an inline confirm (the code
+with its own Copy, then Clear's notes: cards, 📚 sharing, pilot, 🌐) and then `Play.signOut`, which forgets
+what Clear forgot and leaves online play as Clear did (`unlink_online_player`, only on a device that holds
+a session). **Merge players…** pastes a second code and shows both cards; a tap picks the one whose name
+stays, this device's by default. This device kept: `merge_players(device id, code id)`, the id and name of
+the device with the scores unioned, `noteRename(device name)` so the next post carries the name even when the
+kept id has no board row yet, and `Play.forgetBoardCache` so the folded player's bests, totals and days are
+pulled on this page. The code kept: exactly the old Load (`merge(before, pasted)`, `forgetRename`,
+`queueMerge(code id, device id)`). This player's own code in Merge says "That's already you." and writes
+nothing. **Online play follows seniority, not the pick:** `fold_player` gives the online name and trust to
+the player whose trusted device went online first. With this device kept, the id does not change, so the
+session stays (no `onlineLeave`) and the next 🌐 open reads the trust, which the fold may have set to
+pending (pair again). When the code's player is senior, the kept player's devices become pending and the
+friends swap to the senior side. The client sees only this device's session, so the Merge confirm's
+🌐 line (`saveMergeOnline`) shows only while this device holds an online session. The schema comments in
+`db/schema.sql` (about 107 and 1379-1381) still say the pasted code is kept; they stay as they are, since an
+edit means a restamp. **The board's name wins** (2026-11-09): `syncLeaderboard` asks
 `player_name` (`Play.fetchPlayerName`) and adopts it (`nameAction`, `Play.adoptBoardName`,
 `showAdoptedName` in an open panel) unless the name is a rename typed on this device
 (`createRenameStore`, flappyPoop.rename, set by the panel's store, cleared once a post
-carries it, by Load and by Clear); the first `Play.create` of a page load syncs. **Scores flow down
+carries it, by Sign in and by Sign out); the first `Play.create` of a page load syncs. **Scores flow down
 too** (2026-11-11): after the name step `syncLeaderboard` runs `Play.pullBoardBests`, which reads the
 player's two board rows (`Play.fetchBoardBests` → `fetchRank` off / on the toilet, aliases resolved) once
-per page and id (Load and Clear ask again) and folds them into `save.top` (`mergeBoardBests`), so a
+per page and id (Sign in, Sign out and a Merge keeping this device ask again: `Play.forgetBoardCache`) and folds them into `save.top` (`mergeBoardBests`), so a
 code or device that never played them catches up (the home button, the code and, via `showBoardScores`,
-the Load's welcome line follow); a pulled row that is now the device's best of its kind is filed in
-`submitStore`, so it is not posted back. The panel's **Clear** (`Play.signOut`, two taps inside
-`saveClearConfirmMs`) forgets the player on the device only.
+the Sign in's welcome line follow); a pulled row that is now the device's best of its kind is filed in
+`submitStore`, so it is not posted back. **Sign out** forgets the player on the device only (the confirm
+replaced Clear's two taps; `saveClearConfirmMs` now serves only the tournament's Abandon and the level break's Quit).
 **Test mode** is a session-only sandbox: typing either of `TEST_MODE.words` (`pooptest` or `testpoop`, any
 case) as the username and pressing Save toggles it (a trigger word is never stored as a name, so it can
 never relabel the player's leaderboard row). Settings then grows a test section:
 start level for the next run (`testRunStart`: the pairs before it passed, a par score), Invincible (on by
 default; pipes, ceiling and floor cannot kill), power-up buttons (`grantTest` → `openMystery`) and Exit.
 A test run (`runIsTest`, latched for the whole run) records nothing: no legacy best, top list or
-leaderboard sync, and Over says so. A 🧪 badge shows while it is on.
+leaderboard sync, and Over says so. A 🧪 badge shows while it is on. Settings' **Date** row (plan 17, 1.6;
+`registry.testPretendDay`, session-only, counted only while `testMode` is on) steps the *decorations'* clock a day at a time
+(`nextPretendDay`; back on today it is the real date again), so December can be seen in November. It never moves the Daily Dump's own day.
 
 It is a side project by Michael Sieler (gut-microbiome researcher), hence the
 theme. The logical field is 1280 px tall and as wide as the window's aspect asks,
@@ -212,7 +233,7 @@ the other half plays on); a shopper is never ready, so the count cannot start un
 the other player; a respawning half's clock stops with it). Chrome decisions in a match read
 `chromeState()` (the match's state, not the half's), so a finished or respawning half still pauses and
 resumes the match. The match ends once **both** have cleared the rectum (the first one out waits under
-"Made it out!" / "Waiting for P2…", `showEscapedBanner`); the result panel names the higher score
+"Made it out!" / "Waiting for P2…", `showEscapedBanner`; once the match is over the second finisher's half drops the waiting line, and `Versus.onRunEnded` redraws both halves, so both read only "Made it out!"; plan 35, 4.3, tests/versusEnd.test.js); the result panel names the higher score
 (`raceOutcome`, below) on a `versus.resultPanelW` (820 px) panel with each player's 🏁 level wins and 💀
 count, and offers Continue | Bracket (the Tournament paragraph). A race adds nothing to a best, the
 save-code score or the career, but it posts (plan 39, 2.5): a two-player tournament to 🏅 (the Tournament
@@ -340,28 +361,77 @@ level's pairs, score 0) and never leaves the level: no finish line (the spawn br
 pre-fill stop), a box's skip and coin draws open as fiber (`dailyDraw`), no kernel or rolled coin,
 `takeCoins` refuses, "🌞 LV n" (`dailyHud`) in place of the level bar. A box's reward comes from
 its pair's own stream (`course.reward(pair)`), so it is the same for everyone. The attempt is
-claimed at the start (`dailyStore`, `flappyPoop.daily`) and rewritten from `update()` as the score
-moves; `endRun` makes it final and queues it (`dailyQueue`, `flappyPoop.dailyQueue`) without
-touching the 🏆 list or best; `syncLeaderboard` finalises an *unfinished* record left by a reload
-(never the run in flight) and `drainDaily` posts under the current name. Over shows the daily
-result: date headline, the score as a link to the board's 🌞 tab, the rank read off
+claimed at the start (`claimDailyAttempt`, split out of `start`; `dailyStore`, `flappyPoop.daily`) and
+rewritten from `update()` as the score moves; `endRun` makes it final and queues it (`dailyQueue`,
+`flappyPoop.dailyQueue`) without touching the 🏆 list or best; `syncLeaderboard` finalises an
+*unfinished* record left by a reload (never the run in flight) and `drainDaily` posts under the current
+name. A run that crosses no pipe is no attempt (plan 48, calls D and G): `endRun` releases the record
+before its sync (`dailyStore.release(day, playerId)`: only that player's unfinished record for the day
+with 0 pipes), posts no 🌞 score and counts no career; `finishAbandonedDaily` releases an unfinished
+0-pipe record (a reload before the first pipe) instead of finalizing, posting and stubbing it, and never
+finalizes one. `dailyStore.spent(day, playerId)` (final, or pipes above 0) backs `dailyPlayedToday` and
+"See today's result". Over shows the daily result: date headline, the score as a link to the board's 🌞 tab, the rank read off
 `daily_board` once the post settles, the countdown to 00:00 UTC, Share (the card, and the link as its message).
+A Daily Dump that crossed no pipe (plan 48, call H, option a) instead offers Play again, which starts
+today's Daily Dump again (Over sets the registry flag `playAgain` to 'daily'; `Play.startAgain(kind)`
+starts it only while the popup would offer it: a username and the day not used), leaves the rank cell
+blank (no board lookup) and shows `dailyNotCounted` in the countdown's place.
 The server (`submit_daily_score`) takes today or yesterday (UTC), checks the day's level with its
 own FNV-1a (`daily_level` = the client's `dailyLevel`), keeps the first post per player and day
 ('duplicate' after), and follows the score board's name claim.
+
+**Christmas** (December, plan 17, Stage 1, v0.32.0): decoration only. No SQL, no new server call, no change to a hitbox,
+a rule or a score. The season is all of December UTC (`TUNING.advent`: `seasonMonth` 12, `seasonLastDay` 31;
+`adventSeason(day, T)`). **The clock** is `dailyNow(reg)` / `dailyDay(reg)` (`src/logic.js`): the real time, or in test mode the
+Pretend date at the real time of day. Only decorations read it; the Daily Dump's day, course, level, store, queue and posts keep
+`utcDayKey()`, so a test run on a pretend date posts nothing and the real course never moves. Every scene reads the same
+day through the game registry.
+- **🎅 for the 🌞.** `Play.pickVisitSanta` picks a new 🎅 each time the home screen is built, never the last one
+  (`pickSanta(Math.random, last, santas)`, never the course RNG). `TUNING.advent.santas` has 18 variants (Santa, Mrs. Claus, Mx Claus, plain
+  and five skin tones); `supportedSantas` drops, once per page, any variant this device draws as two glyphs (`registry.santas`). The last pick
+  lives in `flappyPoop.santa` (`LEADERBOARD.santaKey`; the registry when storage is blocked). Old builds never read that key; the new build
+  treats a missing or unknown value as no last pick. The glyph is `dailyGlyph(day, santa, T)` / `dailyGlyphNow`. The seven strings that
+  named the 🌞 (`itemDailyDetail`, `itemLeaderboardDetail`, `dailyTitle`, `dailyBody`, `dailyNeedName`, `dailyBoardJoin`, `statsDaily`)
+  carry `{daily}`, filled by `fillDaily(text, glyph)` (`src/i18n.js`; `howToItems(locale, { daily })`); the loading splash keeps its literal 🌞.
+- **Twins** (`src/advent.js`, `ADVENT_ART`: `twins`, `fartFrames`, `snowCap`, `files`). The map is data in its own module, not in
+  `config.js`, because `tests/push.test.js` stamps a copy of `config.js` alone and `config.js` names no asset file. `seasonalSkin(day, T, art)`
+  gives the twins in season and nothing off season; `twinKey(stock, skin, fartFrame, has)` gives the twin once it has loaded, else the stock key.
+  **The stock key stays the state:** `Play.poopStockKey` (set by `setPoopTexture`) is what the race snapshot, the match slot and the ghost
+  send, and each side maps it through its own skin, so a December player and an off-season rival see each other correctly.
+  The twins are cut on the stock body's centre and scale (`tools/process_art.py`, same-body-scale mode), so the hitbox circle is the stock one.
+  The fart (and a start boost) alternates `fartFrames` on one loop clock (`Play.ensureFartClock`, the stink frames' rate, paused with the run).
+  There is no dead-frame twin (D13): `tests/advent.test.js` pins it. Pickups swap on the world only (`itemTexture`, `skinItem`: candy cane, gingerbread
+  drawn 5 % taller than the probiotic at 185 px ink height, hatted bacterium); the HUD, cards, Over and Stats keep the stock items. Each bottom pipe
+  gets a snow layer on its cap (`addSnowCap`, `placeSnowCaps` on `postupdate`; offset `TUNING.advent.snowCap`).
+- **Loading.** In season the twins join `loadLazyAudio`'s one flight (never Boot; art under new names needs no `?v=` bump). When it lands, the game
+  emits `advent-art` and every Play instance re-applies its skin (`reapplySkin`), so the stock frame shows until then. The new PNG
+  literals reach `sw.js`'s `FILES` through the push's stamp.
+- **Home and every mode.** `refreshSeasonHome`: the Happy Bowelidays! image above the title on every December day, English for every locale
+  (`countdownLine(day, locale, T)` returns `{ text, image }`; text "N sleeps till Christmas" 1 to 24 Dec, "Merry Christmas!" on the 25th, none
+  after; `readyLayout`'s `countdown` and `bowelidays` boxes, drawn only), and the snowfall. The line and the image stay on the home screen
+  (never a match half's); the snow falls in every mode: runs, the Daily, both match halves, the online race and 📚 runs
+  (`src/ui/snowfall.js`: `createSnowfall`, `makeFlakes`, `stepFlakes`, one renderer for later storms; nothing under `prefers-reduced-motion`).
+- **Smoke.** `tools/headless_check.mjs` pins the page's and its own clock (`SMOKE_PIN_DAY` 2026-11-15, `pinOffset`, `clockStubSource`; `--date=YYYY-MM-DD`
+  overrides every pin), because every older check expects stock art and the 🌞; the `christmas` section runs on a 5 Dec pin and back.
+  Checked by `tests/advent.test.js`, `tests/adventScene.test.js`, `tests/assets.test.js` and `tests/tools.test.js`.
 
 **Player profiles and achievements** (👤, 2026-11-11, v0.14.0, plan `.claude/plans/Archive/08-user-stats.plan.md`):
 every player has a **public** profile (`scenes/Stats.js`, chromeIntent `'stats'`), opened by the save
 panel's 👤 Profile (own; disabled until a username is stored) or a name on any board
 (`Leaderboard.linkName` → `Play.openStats({ name })`). A player with no username gets a **gate**
 instead (`buildGate`: Create user opens the save panel; `Stats.refresh`, from `Play.setSaveState`,
-turns it into the profile once a name is saved, and back on Clear).
+turns it into the profile once a name is saved, and back on Sign out).
 **Counting:** `Play.endRun`'s single-player and Daily branches call `recordCareer`: `runDeltas`
 (`src/achievements.js`) turns the run into counters (games / wins / sumScore / sumLevel / maxLevel
 for single player, dailyGames for a Daily Dump, deaths / pipes / falls / closeCalls / farts / superFarts / the pickups
 for both, pipes being the pairs flown that day in a Daily Dump;
 `runFarts` / `runSuperFarts` from `activatePower`; `runFalls` once per drop past `fallLookVy` (`fallStarted`) and `runCloseCalls` when the near-miss clock starts in `tickScared`, both outside a fart, its grace and Invincible; `runCeilingHits` (☀️, set before `die()` when the poop ended on the ceiling) and `runBoxesBought` (🎰, `buyItem('mystery')`). Run facts for v0.16.0 badges: `closeCallsByLevel` → `closeShave` (💈, `levelCloseShave` on `levelPipes`), the same-draw streak in `openMystery` → `fourOfAKind` (🃏, `nextDrawStreak`), and from `careerStore.markRun` this device's `daysSinceLastRun` (🧱) and `winsLast7Days` (🏃). that wait in the career store (`createCareerStore`,
-`flappyPoop.career`); test runs and match halves return before it. **Badges:** `evaluate` judges the
+`flappyPoop.career`); test runs and match halves return before it. **No pipe, no count** (plan 48, call A:
+pipes, not score; a Daily Dump's pipes are the pairs flown that day): `countsAsRun` (`src/achievements.js`)
+is false for a single-player or Daily run that crossed no pipe, and `Play.recordCareer` then returns before
+`markRun`, `addRun`, the Singleplayer streak and the badges; `Play.endRun` sets `runNotCounted` and, for single
+player, skips the best, the top list and the career. `runDeltas` is unchanged. Over shows `runNotCounted`
+under the cells (tests/zeroRun.test.js). **Badges:** `evaluate` judges the
 `ACHIEVEMENTS` catalog (run feats from a normal single-player run only; lifetime milestones on the
 totals; time-boxed quests by UTC day) and `careerStore.unlock` records them with a claim; Over names
 the run's (`runBadges`, "🏆 New: …"). `creditCareer` quietly credits the score and level badges the
@@ -370,7 +440,7 @@ totals. **Sync:** `drainCareer`, in `syncLeaderboard`'s named path after `drainD
 (`submit_counters`: the batch id is the receipt, so a lost reply resends the same batch; the answer is
 the player's totals across every device, kept as `base` for that id), then the claims
 (`claim_achievements`). `postCounters` / `claimBadges` / `fetchProfile` are Play methods so the smoke
-stubs them. Clear empties the store; a Load forgets only `base`. **Server:** `player_counters` (one
+stubs them. Sign out empties the store; a Sign in forgets only `base`. **Server:** `player_counters` (one
 jsonb of counters, `merge_counters`: sum, or the larger value for `max*` keys), `achievement_defs`
 (windows of time-boxed quests only), `player_achievements`; `player_stats(id or board name)` is the
 profile (no ids): single-player numbers (bestScore = the best score-board row), daily podiums ranked as `daily_board` ranks, medals, the
@@ -385,7 +455,7 @@ behind it: the module-private press stamp set by the input listeners through `wi
 pass `internal`), the listeners (press, release), pipes, falls, close calls, the death, levels and a
 level picked at a break (skip), the break, the shop, pauses. `endRun` queues the row
 (`queueRunSummary` → `createRunQueue`, `flappyPoop.runQueue`, 50, never dropping the run behind a best
-not yet posted); `finishAbandonedDaily` queues a short stub row (`stubRow`). **Sync:** `drainRuns` runs
+not yet posted); `finishAbandonedDaily` queues a short stub row (`stubRow`) for a record with a pipe crossed, none for a 0-pipe one (plan 48: a run that is not counted still sends its summary, call E, and the sync still runs). **Sync:** `drainRuns` runs
 before `drainDaily` in both of `syncLeaderboard`'s paths (`submitRuns`, up to 20 per player id); a 🏆
 or 🌞 post whose run is still queued after a paced send waits (`postWaits`, `waitsForRun`, at most
 `runWaitSyncs` syncs). The row's fields are `RUN_DATA_KEYS`, equal to `run_data_keys()` in
@@ -402,8 +472,10 @@ door on every load, phone and desktop. `index.html`'s `#splash` (cream, the bobb
 brown ring's track) paints at once; an inline `import('./src/splash.js')` placed **before** the Phaser
 tag starts `startSplash` while Phaser is still downloading, so the note cards show during that wait
 too. The ring **only fills**, every frame chasing `ringTarget` (a creep toward `splash.waitCap` during
-the download, then Boot's progress, then full) at `ringStep`'s capped speed, so even a cached load
-takes ~0.8 s and never jumps. A card (‹ card › in one row, Continue on the row below; every card's text
+the download, then Boot's progress, then full) at `ringStep`'s capped speed, so a slow load never jumps. A
+cached load (Boot ready within `TUNING.splash.ringCachedMs`, 1500, of the splash starting:
+`ringCachedLoad`) fills at `ringStep(..., fast)`'s flat `ringFastPerSec` (3.4 ring / s), empty to full in
+about 300 ms (plan 35, 2.5). A card (‹ card › in one row, Continue on the row below; every card's text
 stacked in one grid cell, so the card is as tall as the tallest and never jumps) is a hint or a major
 feature (`SPLASH_NOTES`: TIP or NEW, a picture, one line). The picture is the game's own sprite where
 there is one (`art`: Boot's exact URL via `splashArtUrl`, all preloaded at start; a strip's frame 0 or a
@@ -418,9 +490,67 @@ drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` ha
 `splashReady(() => scene.start('Play'))`: once the ring is full (or after a timer backstop, since rAF
 stops in a hidden tab) Continue lights up and glows, and **Play starts only on its
 release** (click, Enter / Space up, the pad's A up), since Play's keydown-SPACE flap repeats while held
-and the pad plugin reports a held button. Any error in the splash removes it and starts the game.
+and the pad plugin reports a held button. With the **`skipSplash` setting** on (Settings "Skip to home when loaded"; off by
+default; plan 35, 4.2) Continue presses itself the moment it lights (`skipWanted(storage)`, read from the settings
+store then, so a change counts from the next load; the full ring still shows, and the failed splash never skips). The
+splash's tap never unlocked iOS sound (`Play.flap` does), so skipping loses nothing. Plan 01's rule that Continue
+stays on every load holds unless the player turned that on. Any error in the splash removes it and starts the game.
 Held-key flaps stay in split screen and single player; an **online race drops a key's auto-repeat** (flap, Ready, P
 and Esc: Play's `onlineRepeat(event)`, plan 39 5.2b, AUD-149 / AUD-144), tests/raceRun.test.js, tests/runStamp.test.js.
+
+**Service worker** (plan 35, Stage 3, 0.29.0): `sw.js` at the root, scope the game's folder
+(`registration.scope`). It gives an offline launch, and a launch more than 10 minutes after the last
+(GitHub Pages' `max-age=600`) no longer revalidates every module and asset one by one; only index.html
+goes to the network. About 4.7 MB per build in Cache Storage. Its page side is `src/swClient.js`.
+- **Stamp.** `npm run push` writes `BUILD` and `FILES` into `sw.js` (`tools/sw_stamp.mjs`): `FILES` pairs
+  every URL exactly as the page asks for it with the SHA-256 of its bytes: index.html, every module
+  (`?h=<content hash>`, through the import map `index.html` also gets), art and sounds (`?v=<VERSION>`),
+  the vendored Phaser (`?v=4.2.1`) and supabase-js. Icons and the manifest stay out. An unstamped
+  `sw.js` (the committed one) answers nothing and clears its caches. A `?h=` URL's bytes never change,
+  so a cached copy is right for any build, and an unchanged module keeps its URL across pushes.
+- **Cache.** One build per `BUILD` in Cache Storage as `flappy-poop-<BUILD>`. Install stores every file
+  hash-checked, copying an identical entry from the previous build's cache instead of downloading it;
+  a mismatch (a stale HTTP or CDN copy) is retried once past the HTTP cache (`cache: 'reload'`), and a
+  second one fails the install: the old worker stays, the console logs "build … not installed", and the
+  next launch tries again. Activate keeps the previous build's cache (a page still running that build
+  gets its own files), deletes older ones and never deletes a cache it did not name (`flappy-poop-`
+  prefix only), then claims the open pages.
+- **What it answers.** index.html: network first (`cache: 'no-cache'`, 3 s), else this build's cached copy,
+  so a push shows on the next launch. A listed file: this build's cache, then the previous build's, then the
+  network; nothing is written at fetch time. A `cache: 'reload'`, `'no-cache'` or `'no-store'` request
+  (Reload) goes to the network first. It does **not** answer, and the browser fetches as if there were no
+  worker: anything cross-origin (Supabase REST and auth, the realtime `wss:`, the Phaser CDN), a non-GET, a
+  Range request, a path outside the scope, a `?nosw` navigation and any URL not in `FILES`. A cache fault
+  falls back to `fetch(request)`. Offline, the CDN tag fails at once and the trap loads the cached vendored
+  Phaser (on a stalled connection, after its 6 s wait, as before).
+- **Registration** (`registerWorker`, `swMode` in `src/logic.js`). Play registers it once per page load,
+  when its lazy sounds are in (`Play.loadLazyAudio`), so the install never competes with the cold load,
+  then calls `registration.update()` once: `register()` with an unchanged script checks nothing, Chrome
+  skipped its own navigation check in `tools/sw_check.mjs`, and Safari checks at each launch. An update
+  installs in the background and takes over at once, but the running page keeps its build; the next launch
+  runs the new one. There is no update prompt (Michael's call). Never on a local host (`localHost`,
+  shared with the debug handle: localhost, `*.localhost`, `*.local`, 127.x, `::1`, private ranges) unless
+  the URL has `?sw`; `main.js` (`stopWorkerIfAsked`) removes this scope's worker and our caches for `?nosw`
+  anywhere and on a local host without `?sw`.
+- **Reload** (`hardReloadGame`, Settings, the error card, the failed splash). When the page answers from the
+  network, it unregisters this scope's worker and deletes our caches, then navigates, so Reload is a clean
+  network load and a player's way out of a bad cache; the worker returns after Play's lazy sounds. When
+  the page does not answer, it keeps both and reloads through the cache, so Reload never strands a player
+  offline. All inside the existing 3 s budget.
+- **Kill switch.** Copy `tools/sw-off.js` over `sw.js` and push; the stamp leaves it alone (the
+  `FLAPPY_SW_OFF` marker). Browsers fetch `sw.js` past the old worker, so it reaches each online player at
+  their next launch even if the old fetch handler is broken. It never claims a page, so there is no reload
+  loop. Players can add `?nosw` themselves.
+- **Known behaviors.** Between pushes the committed `sw.js` and `index.html` are unstamped or carry the
+  last push's stamp; harmless locally, since `tools/serve.py` ignores queries and no worker runs on a local
+  host, but not on a deploy (new module bytes behind old `?h=` URLs), so `tools/git-hooks/pre-push`
+  refuses a plain push of main with a stale stamp (see "Before a push").
+  Chrome holds an update check started offline for about a minute, and jobs behind it wait; harmless, since
+  an online launch runs the newest build from the network. Art changed under the same name still needs a
+  `VERSION` bump (art URLs carry `?v=`, not a hash). A browser without import maps (Safari before 16.4)
+  loads the bare modules from the network: nothing breaks, the module speed-up is lost.
+- Checked by `tests/sw.test.js`, `tests/swStamp.test.js`, `tests/swClient.test.js`, and in a real browser
+  by `node tools/sw_check.mjs`.
 
 **Education mode** (📚, 2026-11-13, v0.16.1, plan `.claude/plans/21-education.plan.md`: the tester
 build, its playtest polish and Stage 3, "tester-complete"; the old plans 22 and 23 are merged into
@@ -630,7 +760,9 @@ when the gate is open and something was answered; while the gate holds (new card
 quitting the run (`breakGaveUp`: ungraded, and 🏳️ with nothing answered; plan 26, A2). It reads Quit
 either way; armed it reads "Quit? Tap again", or "Quit ungraded? Tap again" while the gate holds
 (`breakQuitDueSure`), and an armed Quit ends with its break (`startLevelBreak` and `endLevelBreak` clear
-`breakQuitArmedAt`; plan 27), so a level cleared within the confirm time never opens a break armed. **The level choice** (plan 26, A2: Michael's image 12): once the gate is open
+`breakQuitArmedAt`; plan 27), so a level cleared within the confirm time never opens a break armed. The armed Quit is dimmed and ignores a second tap for
+`education.explainMinMs` (`Play.breakQuitHeld()`, as the revive's Quit; the 4 s confirm time is unchanged; plan 35, 4.6), so a
+double tap never passes the warning. **The level choice** (plan 26, A2: Michael's image 12): once the gate is open
 (`breakGate`: nothing left that the break asks), never in a test run (or with test mode on) or a match, **[◀] LV n [▶]** shows on ⏸'s row, centred
 (`eduBreakLayout`'s `levelDown` / `levelLabel` / `levelUp`, `levelStrip` swallowing the tap; ring items `levelDown`,
 `levelUp`). ◀ ▶ cycle 1 … the higher of the next level and `unlockedLevel`, wrapping (`stepBreakLevel` →
@@ -725,17 +857,18 @@ gaps come from the date keys (`localDayKey`), never from milliseconds. Since pla
 `src/streak.js` (`nextDayStreak`, `dayStreakNow`, `cleanDayStreak`; `nextStudyStreak` / `studyStreakNow` are
 education's names for them), shared with the day streaks below.
 **Day streaks** (plan 34, Michael): `createStreakStore` (`flappyPoop.streaks`, src/leaderboard.js) keeps a
-Singleplayer and a Daily Dump streak on the device: never sent, not in the backup, cleared by Clear and by a Load
-(`forgetRename`, finish plan F2: the device may now be another player; the sync the Load starts refills them for
+Singleplayer and a Daily Dump streak on the device: never sent, not in the backup, cleared by Sign out and by a Sign in
+(`forgetRename`, finish plan F2: the device may now be another player; the sync the Sign in starts refills them for
 the loaded code). They count the days played on any device with the save code (34.13, Michael:
 "Daily and Singleplayer", "any device"): once per page load, a named device's sync (`pullPlayDays`, after
 `drainDaily`; the registry's `playDaysFor`) asks the server's `play_days` with this device's IANA time zone and folds
 the days in (`streakStore.merge`, `mergeDayStreak`: the run of days in a row ending on the latest day, the best
 never lowered, a day more than one ahead of today left out; the server's `singleBest` is the floor of the
-Singleplayer best, so a Load or a new device shows the Longest everyone sees). The server counts by its own clock
+Singleplayer best, so a Sign in or a new device shows the Longest everyone sees). The server counts by its own clock
 (`streak_days`, 34.14 and Checkpoint 34c): Daily Dump course days from `daily_scores` alone (since 10 Nov 2026,
 kept; it takes a day only on that day or the next), and a Singleplayer day as the local day of the run's
-`ended_at + clock_offset_ms`, for a row that arrived within 48 hours of it (a row that came later, one with no end
+`ended_at + clock_offset_ms`, for a row that arrived within 48 hours of it and has `data.pipes` above 0 or no `pipes`
+key (plan 48, call S; schema stamp df6e05322d54da82; a row that came later, one with no end
 time and a held run count for no day; the log starts with 0.19.1, 15 Nov 2026, and keeps 90 days). So the streaks
 of players from before 0.24.0 come back too. Offline, nothing changes and the next sync asks again; a merge that
 lands on a later sync forgets `playDaysFor`, so the next sync asks again too. Every profile shows them (34.14, Michael: "Users should be
@@ -744,8 +877,8 @@ player's from `player_stats`' `streaks` (`cleanStreaks`; `day_streak` over `stre
 zone `play_days` keeps in `player_meta.tz`, its best never below `player_meta.single_best`, which `play_days` keeps past
 the run log's 90 days and raises only in a zone that has stood for a week, `player_meta.tz_at`; `known_tz` takes
 IANA Area/Location names and UTC only; `play_days` writes the row only when something changed). A one-player run that is neither education nor test counts the local day it
-ends on (`recordCareer('single')`, at the game over); a Daily Dump
-counts its course's UTC day once claimed (`countDailyStreak` in `start`; a practice Daily counts nothing). Every
+ends on (`recordCareer('single')`, at the game over) only once it crossed a pipe (plan 48); a Daily Dump
+counts its course's UTC day at the run's first pipe (`saveDailyAttempt`, once a run, `this.daily.counted`; no longer at the claim; a practice Daily counts nothing). Every
 profile shows 🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer and under Daily Dump
 (`streakProfileRows`; yours from `Stats.streakView`, another player's from the server, above); the ready screen shows a small orange number at the 🌞's bottom right
 (the Daily Dump streak) and at the 📚's (the learning streak, under the gold due count), while the streak is alive
@@ -785,7 +918,7 @@ gate) with a study day, pays or charges the purse, and stays out of `runQuiz`, t
 events (the server takes break, revive and bonus contexts only; RESEARCH.md says so: once a challenge card is in the bank,
 its answers in a level break, after a crash or in the bonus quiz are sent like any card's); a test run saves nothing.
 Fly on (held after a miss) closes it and `endSuperQ` resumes with half a flap and at least `beans.graceMs`. The 21
-challenge cards (`SQ-01`…, deck `super`; Michael reviews them, `.claude/plans/34-super-cards-review.md`) are never
+challenge cards (`SQ-01`…, deck `super`; Michael reviews them, `.claude/plans/Archive/34-super-cards-review.md`) are never
 a quiz's new card (`inScope`, `chooseCard`'s fresh pool, `browseCard`, `breakDecks`), count in `masteryByDeck`
 once met, and come back at any level once in the bank.
 **Backup and restore** (plan 28, 3.1b): the cards live in this browser only, so the top of 📚 Education
@@ -862,7 +995,7 @@ nowhere), after which `quizAnswer` records each answer as an event (`src/researc
 only under the current notice; `Play.drainResearch` sends them early in the sync, username or not
 (`submit_research_events`, under a random research id, never the player id). The consent keeps the
 player id it joined with (`Play.researchConsent()`, `researchPlayerId()`), so its answers and a
-Withdraw still find the participant after a Load merges that id away, and the participation's start
+Withdraw still find the participant after a Sign in merges that id away, and the participation's start
 (`since`: the server's `joined_at`, set once when the participant is made): a device whose `since`
 is not the participant's (a withdrawal and a new join elsewhere) is told `'not enrolled'` and stops.
 A join empties the queue, so nothing recorded under an older notice goes out; a re-join keeps the
@@ -910,7 +1043,17 @@ index.html                  Entry page. Viewport/touch CSS; the loading splash's
                             async <script> for Phaser from jsDelivr (after 6 s or on error
                             the trap loads assets/vendor/phaser.min.js instead; neither:
                             the splash says it could not load), then
-                            <script type=module src=src/main.js>.
+                            <script type=module src=src/main.js>. Six
+                            <link rel=modulepreload> tags (main, config, logic, i18n,
+                            Boot, Play) start those downloads at once (plan 35, 2.4). The
+                            main tag and the hrefs are bare in the tree; `npm run push`
+                            writes an import map (every module at its ?h= content hash)
+                            and the same ?h= into them (plan 35, 3.1; tools/sw_stamp.mjs),
+                            and a preload only helps when its href is exactly the URL
+                            the import uses. tests/html.test.js checks they agree with the map.
+sw.js                       The service worker, a classic script at the root (plan 35, 3.1;
+                            "Service worker"). BUILD and FILES are stamped by npm run push;
+                            committed unstamped. tests/sw.test.js.
 manifest.webmanifest        PWA "Add to Home Screen" metadata (fullscreen, portrait).
 package.json                `npm test`, `npm start`, `npm run push`; "license" is the SPDX id
                             PolyForm-Noncommercial-1.0.0 (MIT until plan 28); one devDependency,
@@ -942,6 +1085,10 @@ src/
                             import it first, so no `extends Phaser.Scene` or `new Phaser.Game`
                             runs before Phaser exists (a module waits on its imports' top-level
                             await). In Node it resolves at once. tests/phaserFallback.test.js.
+  swClient.js               The worker's page side (plan 35, 3.1): registerWorker (Play, once
+                            per page load, after the lazy sounds) and stopWorkerIfAsked (main.js,
+                            first thing). The decisions are in logic.js (swMode, localHost,
+                            workerScope, removeWorker). tests/swClient.test.js.
   supabaseLoader.js         loadSupabase(): appends one <script data-own-error> for
                             assets/vendor/supabase.js?v=<SUPABASE_JS_VERSION> on the first
                             call and resolves with window.supabase; an error, a stall (15 s)
@@ -1032,7 +1179,8 @@ src/
                             loading splash (hintMs, slideMs, fadeMs, swipePx,
                             featureMax, storageKey; the ring: ringEaseMs,
                             ringMaxPerSec, ringMinPerSec, ringFrameCapMs, waitCap,
-                            waitHalfMs). TUNING.versus = the
+                            waitHalfMs; ringFastPerSec 3.4 and ringCachedMs 1500, the
+                            cached-load fill, plan 35, 2.5). TUNING.versus = the
                             two-player knobs: minViewportH (the gate), keys (the
                             two keyboard groups), countdownMs, ghostRangePx /
                             ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
@@ -1042,7 +1190,10 @@ src/
                             levelSyncDelayMs (the beat after both
                             reach a line before a tap can start the next level),
                             respawn (crashMs, glideMs,
-                            blinkMs, blinkCycles, blinkAlpha).
+                            blinkMs, blinkCycles, blinkAlpha). TUNING.advent = Christmas (plan 17):
+                            seasonMonth / seasonLastDay, bowelidays (widthFrac, y, aspect),
+                            countdownPx, snow, snowCap, santas; LEADERBOARD.santaKey
+                            ('flappyPoop.santa', the last 🎅 shown).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: createResync (plan 35, 1.4: send(),
                             one at a time; online() sends, hidden() / shown() send after a hide
@@ -1095,7 +1246,7 @@ src/
                             levelSpeed, levelColor, levelProgress,
                             levelBarLayout, lerpColor),
                             best-score store, settings store (incl. locale,
-                            howToSeenAt and hand: HANDS 'left' | 'right', the
+                            howToSeenAt, skipSplash (plan 35, 4.2; off by default) and hand: HANDS 'left' | 'right', the
                             bean button's side; eduStartLevel 1 … levels.lastLevel,
                             plan 25;
                             eduNewOrder after / mixed / before, plan 26;
@@ -1136,16 +1287,26 @@ src/
                             the 💰 in a race's shared level break), shopLayout / shopHit, chromeIntent's
                             shop / breaking args and 'shop' input; test mode:
                             isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
-                            settingsLayout (Settings panel + rows, taller with the
-                            test section). Fully unit-tested.
+                            settingsLayout (Settings panel 1010 px + rows, taller with the
+                            test section, 1240; its Pretend date row, plan 17: dayDown / dayUp),
+                            Christmas (plan 17): isDayKey, shiftDayKey, dailyNow / dailyDay / nextPretendDay
+                            (the decorations' clock), SUN, adventSeason, seasonalSkin / twinKey,
+                            countdownLine, dailyGlyph / dailyGlyphNow, pickSanta, supportedSantas,
+                            readyLayout's countdown and bowelidays boxes. Fully unit-tested.
   changelog.js              What's new data, NO Phaser/DOM: CHANGELOG (one entry per
                             version, newest first: version, date like LAST_UPDATED's
                             day, notes per locale), changelogEntry, changelogNotes
                             (bulleted block for a locale, English fallback).
+  advent.js                 Christmas art data (plan 17), NO Phaser/DOM: ADVENT_ART (`twins`: stock key →
+                            December key for the poop poses, fiber, probiotic and bacteria; `fartFrames`;
+                            `snowCap`; `files`: every key's full 'assets/advent/….png' literal, so the service
+                            worker precaches it, plus the Bowelidays image). Outside config.js on purpose:
+                            tests/push.test.js stamps a copy of config.js alone. tests/advent.test.js.
   achievements.js           Achievements and lifetime counters (plan 08), NO
                             Phaser/DOM: ACHIEVEMENTS (id, kind 'run' / 'lifetime' /
                             'seasonal', glyph, title / desc i18n keys, n, counters,
-                            from / to, check), runDeltas (one run's counters, capped
+                            from / to, check), countsAsRun (plan 48: a run that
+                            crossed no pipe is not counted), runDeltas (one run's counters, capped
                             as submit_counters checks), addCounters (= the SQL's
                             merge_counters), cleanCounters, evaluate (newly earned
                             ids), windowOpen, progressOf, bestFacts (veteran
@@ -1392,7 +1553,7 @@ src/
                             0.3 spike. close() keeps the session, signOut() is local. close() counts
                             calls: a first load or sign-in still out at a close starts no ticker,
                             socket or clock (AUD-145). signIn({ create: false }) reuses a
-                            stored session only (Clear and Load; AUD-146).
+                            stored session only (Sign out and Sign in; AUD-146).
                             ?netsim delays and drops received messages. Per-frame calls
                             are synchronous. Knobs in TUNING.online.net. Callers: the
                             sign-in side, src/onlineAccount.js, and the lobby,
@@ -1623,7 +1784,9 @@ src/
                             drains joined per storage, outcomes for the podium).
                             Both queues sit on createPostQueue. Daily Dump:
                             createDailyStore (flappyPoop.daily: this device's
-                            attempt, read back for the same day and player),
+                            attempt, read back for the same day and player;
+                            release drops an unfinished 0-pipe record, spent is
+                            final or pipes above 0; plan 48),
                             createDailyQueue (flappyPoop.dailyQueue, one entry per
                             player and day, outcome 'nameTaken' kept),
                             submitDailyScore ('ok' / 'keep' / 'rejected' /
@@ -1648,7 +1811,12 @@ src/
                             the page; boardPage(rows, { offset, limit }) splits a
                             ranked board's answer: the page's rows (the caller's only
                             on its own page), mine (the caller's row, wherever it
-                            is: the footer), last (no page follows).
+                            is: the footer), last (no page follows). Plan 35, 4.5:
+                            opts.peek makes a fetcher ask limit + 1 (p_limit 26; the
+                            server caps at 100); boardPage reads the row at place
+                            offset + limit + 1 (ranks are row_number), drops it, and
+                            calls the page last when none came back; 🏆 (no ranks) is
+                            last when rawRows.length <= limit. 🌞 and 📚 keep their total.
                             The 📚 board (plan 21): createEduShareStore
                             (flappyPoop.eduShare: on, the round sharedAt, the name
                             last sent, what was sent, one batch in flight, and the
@@ -1686,7 +1854,8 @@ src/
                             SPLASH_NOTES (id, kind 'feature' | 'hint', glyph, i18n
                             key, art { file, frames | crop } on the sprite cards;
                             features newest first), splashArtUrl (Boot's URL),
-                            ringTarget / ringStep (the ring), splashPool, nextNote (the
+                            ringTarget / ringStep (the ring; `fast` = a cached load) /
+                            ringCachedLoad (plan 35, 2.5), splashPool, nextNote (the
                             deck: unseen features first, every card once per cycle,
                             no repeat across a reshuffle, ids that left or joined
                             the pool handled), createBrowser (one load's history:
@@ -1694,7 +1863,8 @@ src/
                             createSplashStore (flappyPoop.splash, throw-guarded).
                             DOM, document / window injected: startSplash
                             (idempotent; the inline import or Boot, whichever is
-                            first), setSplashProgress, splashReady(onContinue).
+                            first), setSplashProgress, splashReady(onContinue), skipWanted(storage)
+                            (plan 35, 4.2: the skipSplash setting, read when Continue lights).
                             Fails open: an error removes the splash and starts the
                             game. tests/splash.test.js.
   streak.js                 Day streaks (plan 34), NO Phaser, no imports: dayNumber,
@@ -1750,7 +1920,8 @@ src/
                             eduProfileRows (your own profile's learning streaks and
                             highest level unlocked, plan 26 A2),
                             countText (a coin count beside the corn kernel: "12", or
-                            ∞ for a test run's purse; locale-free).
+                            ∞ for a test run's purse; locale-free), fillDaily (the {daily}
+                            placeholder: the 🌞, or December's 🎅; plan 17), the countdown strings.
                             Player copy lives here (not in logic.js). See
                             TRANSLATION_NOTES.md.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
@@ -1826,7 +1997,11 @@ src/
                             glowStops) as an Image behind the poop; tinted for
                             the rainbow, alpha / scale tweened by Play.
                             createRectGlow(): rounded-rect halo (canvas shadow
-                            with the box cut out) for the "Load user" button.
+                            with the box cut out) for the home user button's "Sign in" prompt.
+    snowfall.js             Snow (plan 17): createSnowfall(scene, area, snow, rng) (36 white dots drifting down,
+                            `TUNING.advent.snow`; { setVisible, destroy }; null under prefers-reduced-motion,
+                            prefersReducedMotion), makeFlakes, stepFlakes (pure). One renderer for the home screen and
+                            every run in December, and for Stage 2's storms.
     tray.js                 Phaser wrapper around trayLayout: leaderboard (🏆) /
                             mute / settings bottom-right, pause directly above the
                             cog, plus bottom-left info, language (🌐), feedback (💬).
@@ -2021,38 +2196,47 @@ src/
                             long name never clips the time; ✉️ n beside the 🤝 Friends button.
                             Plain DOM over onlineFriends and onlineInvites.
                             tests/onlineFriendsPanel.test.js, tests/onlineInvitesPanel.test.js.
-    savePanel.js            Plain DOM panel over the canvas (a three-step intro,
-                            Username field, read-only user code + Copy, Load
-                            field, an outlined Clear beside the Save button that
-                            stores the username and confirms "Username saved",
-                            status line). claimName asks the board once per name
-                            (blur and Save share the promise; Save is never
-                            disabled, a disabled button would swallow the phone
-                            tap that blurred the field): taken → refused with the
-                            steps, unknown → saved with the offline note. Load
-                            from another id → Play.queueMerge, "saveMerged". Clear
-                            → warn, then Play.signOut on a second tap inside
-                            saveClearConfirmMs; the warning adds a note for a player
-                            who shares on the 📚 board and one for a device holding a
-                            pilot consent, an older notice's too (what was sent stays
-                            until Stop sharing / Withdraw). Load queues the merge
-                            also when the device holds a pilot consent.
-                            A 📚 Education data button beside Profile, shown only
-                            while education mode is available (refreshClear:
-                            Play.educationAvailable()), closes this
-                            panel and opens ui/eduDataPanel.js.
-                            Opened by the ready screen's user button, with
-                            { focusName: true } while there is no username (caret
-                            in the field at once). It stays open after Save so the
-                            player sees their user code.
-                            Disables game.input.keyboard while open so typing does
-                            not flap. The test-mode word in Username: Save toggles
-                            Play.setTestMode instead of renaming; blur never stores it. Copy calls clipboard.writeText inside the tap
-                            handler (iOS); falls back to selecting the field.
-                            👤 Profile (an outline button on its own row, disabled
-                            with Clear until a username is stored): closes the panel,
-                            then Play.openStats() (the own profile; over the 🌞
-                            popup when it was under).
+    savePanel.js            Plain DOM panel over the canvas (plan 44: one 420 px card).
+                            Signed out: the title, an intro line, Sign in (save-have-btn)
+                            and Create user (save-new-btn), each opening its own screen
+                            with ‹ Back (save-back). Sign in: the paste field, a preview
+                            card parsed from the code alone, the guest line, Sign in
+                            (save-load-btn); a guest's progress joins the code's player
+                            via Play.queueMerge. Create user: the username field and
+                            button, then the code popup (save-explain, Copy code, Got it).
+                            Signed in: the name and best, 👤 Profile and 📚, the code with
+                            Copy, the username (a rename, saved on blur), Sign out
+                            (save-clear-btn) and Merge players…, and a (?) button
+                            (save-help-btn) for "What's on this page". Sign out: an inline
+                            confirm with the code, Clear's notes (cards, 📚 sharing, pilot
+                            consent, an older notice's, 🌐) and Cancel, then Play.signOut.
+                            Merge players…: both cards, a tap picks the one that stays (this
+                            device by default); this device kept → merge_players(device,
+                            code) + noteRename + Play.forgetBoardCache; the code kept → the
+                            old Load; this player's own code → "That's already you."
+                            Sign out and Merge steps hide the rest of the dashboard.
+                            claimName asks the board once per name (blur and Create user
+                            share the promise; the button is never disabled, a disabled
+                            button would swallow the phone tap that blurred the field):
+                            taken → refused with the Sign in steps, unknown → saved with
+                            the offline note. The fields are type="search" with
+                            autocomplete="off" and the password-manager opt-outs
+                            (NO_AUTOFILL). A 📚 Education data button beside Profile,
+                            shown only while education mode is available (refreshClear:
+                            Play.educationAvailable()), closes this panel and opens
+                            ui/eduDataPanel.js; closing 👤 Profile (Play.openStats(target,
+                            { onClose })) or 📚 Education data (openEduData({ onClose }))
+                            from here opens the dashboard again. Opened by the ready
+                            screen's user button without focusName; the Daily Dump's and
+                            the profile's Create user buttons pass { focusName: true } and
+                            land on the Create user screen with the caret in the field.
+                            Disables game.input.keyboard while open so typing does not
+                            flap. The test-mode word in the username field toggles
+                            Play.setTestMode instead of renaming; blur never stores it.
+                            Copy calls clipboard.writeText inside the tap handler (iOS);
+                            falls back to selecting the field.
+                            tests/savePanelStates.test.js (the states, Sign in, Sign out),
+                            tests/savePanelMerge.test.js (Merge players…).
     eduIntroPanel.js        The 📚 popup (plan 26): plain DOM, built like
                             eduDataPanel.js; opened at every start from the ready
                             screen with 📚 on (plan 26 A2: Play.launch). The beta
@@ -2110,16 +2294,29 @@ src/
                             lets the board and the profile reload when sharing
                             changed.
   scenes/
-    Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
-                            spritesheet; coin.png as a 106 px one) + the sfx MP3s (coin, coin-spend,
-                            shop, flush, and the education quiz's book-open / book-flip /
-                            book-close / sparkle, beside fart / fart-accelerate /
-                            level-up); create() makes the global
+    Boot.js                 preload() gameplay PNGs (mystery.png as a 192 px
+                            spritesheet; coin.png as a 106 px one) + the sfx MP3s every run
+                            needs (coin, coin-spend, shop, fart / fart-accelerate /
+                            level-up); book-open / book-flip / book-close, sparkle,
+                            bubble-pop and flush are not loaded here but by Play.loadLazyAudio
+                            (plan 35, 2.3); create() makes the global
                             'mystery-spin' (mystery.frameMs) and 'coin-spin' (coin.frameMs)
                             anims, then hands splashReady() the start of Play: Play
                             starts on the splash's Continue. The loader's progress
                             fills the splash's ring.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'
+                            (loadLazyAudio, once per create() on the scene's first 'render':
+                            loads the six sounds Boot skips that are still missing, with
+                            this.load.start(), one load at a time across Play and PlayB via
+                            the registry's 'lazyAudio', cleared on the loader's complete or
+                            the scene's shutdown; every use checks cache.audio.exists, so
+                            playSample falls back to its synth and the flush is guarded in
+                            Versus and OnlineRace; tests/lazyAudio.test.js)
+                            (December, plan 17: this.skin = seasonalSkin(dailyDay(registry)), poopStockKey
+                            (the state; setPoopTexture shows its twin), the fart clock, itemTexture / skinItem,
+                            addSnowCap / placeSnowCaps, reapplySkin on the game's 'advent-art' event,
+                            refreshSeasonHome (countdown, Bowelidays image, snowfall), pickVisitSanta,
+                            dailyGlyph, refreshSeason (a Pretend date stepped); see "Christmas")
                             (+ 'respawn' in a match, between a crash and its restart,
                             and in an education run, from a crash through its revive
                             quiz).
@@ -2177,12 +2374,14 @@ src/
                             build is acknowledged by opening How to play or dying),
                             title, poop spot wearing poop-speech.png's "TAP TO
                             FLAP!" bubble, toilet toggle, and the user button
-                            (profileButtonText(): "Load user" under a pulsing
+                            (profileButtonText(): "Sign in" under a pulsing
                             createRectGlow halo until a name is set, then "name ·
                             best"; either way it opens the save panel, on the name
                             field while unnamed); any other tap starts); launch() swaps to the
                             plain poop frame and slides it to poopX over
-                            launchSlideMs, then start(); extra taps during the
+                            launchSlideMs (700), or againSlideMs (350) on Over's
+                            Play again (launch({ solo }); plan 35, 4.1), then
+                            start(); extra taps during the
                             slide are ignored (launching flag). Toilet mode:
                             this.toilet from the registry (session-only), toggle
                             under tap to flap, 🚽 HUD left of the score while
@@ -2673,9 +2872,11 @@ src/
                             (hardReloadGame(): re-fetches loaded scripts with
                             cache: 'reload', then location.replace with a fresh r=
                             query; picks up a push at once, works on home-screen
-                            installs), About link, version. Tap outside the panel
-                            closes (overlayOutsideHit), same as X. The panel is 860
-                            px; in test mode 1240 px with the test section (start level ◀ ▶,
+                            installs; when the page itself answers from the network it
+                            first removes this scope's service worker and our caches,
+                            else keeps both: see "Service worker"), About link, version. Tap outside the panel
+                            closes (overlayOutsideHit), same as X. The panel is 1010
+                            px (plan 35, 4.2: the "Skip to home when loaded" row and its hint, the label fitted by fitScale); in test mode 1240 px with the test section (start level ◀ ▶, the Pretend date ◀ ▶ (plan 17, 1.6; gold while set),
                             Invincible, TEST_POWERS buttons live only while a test run
                             is paused, Exit → setTestMode(false) + scene.restart()).
     About.js                Overlay: How to play + feedback links, then the
@@ -2773,8 +2974,9 @@ src/
                             arrows (footerTop) so a second line grows down, and
                             setFooter shrinks a longer one (both places and the
                             name note) to fit above the version line; – rows fill
-                            page 1 only. Known edges: a board of exactly 25, 50, …
-                            on 🏆 or 🏅 (no total) offers one empty page; on 🏆's
+                            page 1 only. A board of exactly 25, 50, … no longer offers an
+                            empty page (plan 35, 4.5; see the fetchers' opts.peek).
+                            Known edge: on 🏆's
                             table-read fallback a hidden or held player's spliced
                             row pushes one place off page 1 (score_board answers
                             their own view, so this needs score_board to fail).
@@ -2865,14 +3067,20 @@ assets/                     Contract PNGs + README.md (the art contract).
   poop-stink-falling1.png poop-stink-falling2.png poop-scared.png
   poop-stink-scared1.png poop-stink-scared2.png poop-fart.png
   poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png coin.png
+                            (advent/: the 17 December files (plan 17), listed in src/advent.js; each README row
+                            names its stock frame and body rule; tests/assets.test.js checks them)
                             (coin.png: the golden corn kernel's spin, 12 frames of
                             106x106 side by side (1272x106), loaded as a spritesheet;
+                            the rest are 2x their drawn size (plan 35, 2.1): the poop
+                            set and the items 192 px, drawn at spriteDisplayScale 0.5
+                            (96 logical px); stink 358, falling 268, fart 438, speech
+                            510; question.png 230 (2x superQ.displayPx 115);
                             postbiotic.png: HUD icon only, never spawned;
                             the falling frames: scared face + sweat marks for a
                             long drop, with / without stink lines; the scared
                             frames: the near-miss face after a close call with a
                             pipe, with / without stink lines)
-  mystery.png               Mystery box spin: 8 frames of 384x384 side by side (3072x384),
+  mystery.png               Mystery box spin: 8 frames of 192x192 side by side (1536x192),
                             loaded as a spritesheet; mystery-icon.png is its static view
                             for the game-over summary and How to play (never spawned).
   pipe.png villi.png ceiling.png ground.png
@@ -2892,12 +3100,12 @@ assets/                     Contract PNGs + README.md (the art contract).
   sfx/Coin_Pickup.mp3       A coin picked up, or a box paying coins.
   sfx/Coin_Spend.mp3        A shop purchase.
   sfx/ShopOpenClose.mp3     The shop opening and closing.
-  sfx/ToiletFlush_Win.mp3   The toilet flush when GO appears in a two-player countdown.
-  sfx/Book_Open.mp3         An education quiz opening.
-  sfx/Book_PageTurn.mp3     Each next question of an education quiz.
-  sfx/Book_Close.mp3        An education quiz being left.
-  sfx/Sparkle_Restore.mp3   A revive's full streak winning everything back.
-  sfx/Bubble_Pop.mp3        The poop touching a challenge question's ❓ bubble (the offer opens on it, with no book sound).
+  sfx/ToiletFlush_Win.mp3   (lazy, plan 35, 2.3) The toilet flush when GO appears in a two-player countdown.
+  sfx/Book_Open.mp3         (lazy) An education quiz opening.
+  sfx/Book_PageTurn.mp3     (lazy) Each next question of an education quiz.
+  sfx/Book_Close.mp3        (lazy) An education quiz being left.
+  sfx/Sparkle_Restore.mp3   (lazy) A revive's full streak winning everything back.
+  sfx/Bubble_Pop.mp3        (lazy) The poop touching a challenge question's ❓ bubble (the offer opens on it, with no book sound).
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant
@@ -3013,7 +3221,9 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             when it changed) and the longest Singleplayer streak in
                             player_meta.single_best (raised once the zone has stood
                             a week; sent back as singleBest), and player_stats
-                            returns everyone's streaks (day_streak, streak_days,
+                            returns everyone's streaks (day_streak, streak_days
+                            (a 'single' day needs pipes above 0 or no pipes key,
+                            plan 48),
                             known_tz: internal); fold_player keeps either player's
                             zone and the larger single_best.
                             schema_version()
@@ -3172,25 +3382,29 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   phaserFallback.test.js    Phaser's loader (plan 35, 1.2), the trap run on a fake window: CDN
                             ok, failed or stalled → vendored copy, neither → the splash's
                             failed state and a retry; the pin: one CDN tag and the vendored
-                            copy, both 4.2.1 and the same build
+                            copy, both 4.2.1 and the same build (the main tag may carry the push's ?h=)
   eachChild.test.js         eachChild (plan 35, 1.3): walks a copy, skips a child an earlier
                             turn destroyed; guards that Play walks its groups through it
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser;
                             the splash's parts, ‹ card › then Continue, no spinner,
                             no words in its markup, the inline import before
-                            Phaser, its colour tokens; poop.png's pixels, decoded,
+                            Phaser, its colour tokens, the six modulepreload links, none
+                            twice (plan 35, 2.4), and that the main tag and the preload hrefs
+                            agree with the import map (bare in the tree, ?h= after a push;
+                            the map comes before every script: plan 35, 3.1); poop.png's pixels, decoded,
                             stay 2 % inside the ring at both ends of the bob)
   splash.test.js            the splash's catalog (copy in every locale under the
                             100 / 50 character cap, one glyph per thing: badge glyphs,
                             no borrowed ones), the sprites (files Boot loads by that
                             path, the coin's frames, crops inside the image), the
                             ring (creep, monotonic, capped per frame, 0.6–1.1 s
-                            empty to full), splashPool, the deck (features first and
+                            empty to full; ringFast and ringCachedLoad, ~300 ms), splashPool, the deck (features first and
                             NEW once, every card once per cycle, no repeat across a
                             reshuffle, pool changes), createBrowser, swipeIntent,
                             the store, the inert DOM part in Node
   assets.test.js            load.image / load.spritesheet / load.audio paths; README
-                            sizes; a spritesheet is a whole number of frames; sfx credits;
+                            sizes; the sprite art exported at 2x its drawn size (plan 35,
+                            2.1); a spritesheet is a whole number of frames; sfx credits;
                             the sound triangle: every tracked sfx file is loaded, every
                             credited one is tracked (git ls-files)
   logic.test.js             gap bounds, rng determinism, hasPassed, angle,
@@ -3209,16 +3423,26 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             countDailyStreak counting days, signOut clearing it,
                             the profile rows, refreshStreakMarks, the subscripts'
                             spots inside the 🌞 and 📚 hit boxes; another player's
-                            profile carrying their streaks; a Load clearing them
+                            profile carrying their streaks; a Sign in clearing them
+  zeroRun.test.js           plan 48: a run that crosses no pipe is not counted
+                            (countsAsRun, recordCareer, endRun's runNotCounted), an
+                            empty Daily Dump gives back its attempt (release, spent,
+                            finishAbandonedDaily), the streak day at the first pipe,
+                            Play.startAgain (Over's Play again after an empty
+                            Daily Dump); Over's note itself is checked by the
+                            smoke's daily and streaks sections
   playDays.test.js          The day streaks from the server (plan 34, 34.13, 34.14,
-                            Checkpoint 34c): play_days and player_stats' streaks in
+                            Checkpoint 34c; plan 48 call S: a 0-pipe row gives no
+                            Singleplayer day): play_days and player_stats' streaks in
                             PGlite (the sources, the server's clock and its 48 hours,
                             time zones, aliases, the 400 cap, tz and single_best, a
                             zone taken back, no rewrite), fetchPlayDays,
                             mergeDayStreak, the store's merge with its floor,
                             Play.pullPlayDays, a late merge asking again
   store.test.js             best-score store incl. throwing/missing storage
-  settings.test.js          settings store (incl. hand; a set() storage refused kept
+  playAgain.test.js         plan 35, 4.1: TUNING.againSlideMs is 350 and launchSlideMs 700; only Play.launch({ solo }) (Over's Play again) slides over againSlideMs
+  versusEnd.test.js         plan 35, 4.3: the second finisher's half never reads "Waiting for P1…" once the match is over; both halves redrawn
+  settings.test.js          settings store (incl. skipSplash, plan 35 4.2; incl. hand; a set() storage refused kept
                             for the page load and shared by the stores over it,
                             AUD-030) + vibrate helper; plan 28 Stage 3b:
                             eduNewPerLevel (3, 5, 'all'; 5 by default); plan 28, 4.2:
@@ -3313,7 +3537,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   testmode.test.js          isTestWord, testRunStart (levels, par score, clamping),
                             nextTestLevel wrap, TEST_POWERS, settingsLayout geometry
                             (incl. the hand row)
-  hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
+  hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x; the art's 2x
+                            scale (plan 35, 2.1)
   chromeShown.test.js       which chrome shows (plan 28, 4.3): chromeShown for one
                             player and a match, the ? / 🌞 row clear of the progress
                             bar, Play.syncChrome acting once per change
@@ -3363,11 +3588,20 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             seed, takes the pair number for the score gates, lets
                             beans spawn into a full bag, rolls moving pipes from
                             pipeMove.fromLevel
+  lazyAudio.test.js         plan 35, 2.3: Boot loads none of the six lazy sounds, Play
+                            loads the missing ones once per create() on the first render,
+                            one load at a time across Play and PlayB (registry 'lazyAudio')
   smoke.test.js             logic.js imports and exports VERSION
   save.test.js              save codes: spec rows 1-10 (round trip, tamper, relabel,
                             v2 migration, merge, name rules, wrapped paste, empty
                             scores, throwing storage) + helper coverage, best 6,
                             the optional h (hand) key
+  advent.test.js            Christmas (plan 17): isDayKey / shiftDayKey, dailyNow / dailyDay / nextPretendDay
+                            (the Pretend date only in test mode), adventSeason, dailyGlyph, fillDaily and the seven
+                            {daily} strings, pickSanta / supportedSantas, the twin map and its files, the stock
+                            dead frame (D13), Settings' Date row layout.
+  adventScene.test.js       The countdown line, and the December skin on the real Play prototype: the stock key
+                            as state, the fart and boost alternation, the one lazy flight and its re-apply.
   ready.test.js             readyLayout boxes inside the field, non-overlapping,
                             clear of the bobbing poop; readyHit centre / gap / profile;
                             the 📚 glyph's box (educationInfo: thumb-sized, clear of
@@ -3386,7 +3620,7 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             submitCounters, claimAchievements, fetchPlayerStats;
                             plan 28 5.2: the four fetchers' p_offset (page 1's
                             requests unchanged, the table read's offset=),
-                            withOwnRows per page, boardPage (the page, mine, last)
+                            withOwnRows per page, boardPage (the page, mine, last), opts.peek's limit + 1 (plan 35 4.5)
   nerdAlert.test.js         🤓 Nerd Alert's rule since plan 34: won, perfect, caught
                             up (eduCaughtUp), graded, any start level; the pending
                             run's caughtUp, moved by bonus answers
@@ -3549,9 +3783,15 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             beside a live race
   onlineDevProject.test.js  onlineProjectConfig and ?onlinetest: dev hosts only, own keys,
                             off, blocked storage
-  onlineSignOut.test.js     Clear and a Load of another player leave online play only on
+  onlineSignOut.test.js     Sign out and a Sign in as another player leave online play only on
                             a device holding a session (Play.onlineSessionHeld /
                             onlineLeave); otherwise no client load
+  savePanelStates.test.js   plan 44, the save panel in a fake DOM: signed out (Sign in | Create user,
+                            ‹ Back), the Sign in preview and guest line, Create user and its code
+                            popup, the dashboard, the (?) card, the Sign out confirm and its notes
+  savePanelMerge.test.js    plan 44, Merge players…: both cards, the pick, this device kept
+                            (merge_players(device, code), noteRename, forgetBoardCache), the code
+                            kept (the old Load), "That's already you.", the 🌐 line only with a session
   schemaCheck.test.js       tools/schema_check.mjs: the stamp (blanked, idempotent),
                             the one read-only live call (an injected fetch), each
                             state it reports (current, fixture, other, none,
@@ -3565,7 +3805,26 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             and pushes; failing tests, a first push with no fixture,
                             an interrupt that reaches only the push, a dry run and
                             --no-schema-check each leave the tree as they should
-                            (AUD-050)
+                            (AUD-050); the 'sw' step stamps index.html and sw.js after
+                            LAST_UPDATED, a BUILD for another VERSION refuses and puts the
+                            tree back, --dry writes nothing
+  sw.test.js                sw.js and tools/sw-off.js in node:vm with fake caches, fetch and
+                            clients (plan 35, 3.1): early returns (cross-origin, non-GET,
+                            Range, websocket, outside scope, ?nosw, unlisted), index.html
+                            network first then the cached copy (a failure, a 404 or 500, past
+                            3 s), a listed file from this build, then the previous build, then
+                            the network, install (hash check, copy from the previous build, one
+                            retry, a failed install), activate (keeps the previous build, never
+                            deletes a cache it did not name), a throwing cache, unstamped
+  swStamp.test.js           tools/sw_stamp.mjs on a temp copy of the tree: byte-identical
+                            output for the same tree, one changed module gives a new BUILD and
+                            only its own ?h=, a VERSION bump new ?v= URLs, every module in the
+                            map and FILES, every asset the code names listed with its query,
+                            an untracked stamped file refused, --check-if-stamped (AUD-155, 156)
+  swClient.test.js          src/swClient.js and logic.js's worker parts: localHost, swMode (?sw,
+                            ?nosw), workerScope, removeWorker (only this scope's worker, only
+                            flappy-poop-* caches), registerWorker (once per page, one update()),
+                            hardReloadGame with the network up, down and a hung unregister
   fsrs.test.js              src/fsrs.js against py-fsrs's test_review_card and
                             test_memo_state (on a harness with py-fsrs's learning
                             steps), the default weights, and properties over random
@@ -3675,7 +3934,7 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
                             real stores and leaderboard.js calls and the real save and
                             education data panels, against db/schema.sql through
-                            tests/support/postgrest.js: Load then Withdraw (merge
+                            tests/support/postgrest.js: Sign in then Withdraw (merge
                             before or after), two devices, a new participation, the
                             queue emptied on join, the kept phase, an older notice
                             (Withdraw offered, nothing recorded or sent), an offline
@@ -3704,7 +3963,7 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             the 🚩 never navigates the game's tab, tapLocked, the
                             numbers' explainer (plan 25); plan 26: the next wait,
                             caught up with Keep practicing, the purse; plan 26 A2:
-                            Quit's warning on every card, holdFor's timer, the
+                            Quit's warning on every card, holdFor's timer, the break's armed Quit held (breakQuitHeld, plan 35 4.6), the
                             ⭐ choice's own line, the already-earned note, Skip
                             (price, warning, lockout, keys, why it is dimmed); plan
                             28 Stage 3b: the stop before a due card past the gate
@@ -3790,8 +4049,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
 
 tools/
   make_placeholders.py      Regenerates pipe / villi / ceiling / ground, and plan 34's
-                            question.png (the challenge bubble, a see-through
-                            placeholder) only while it is missing (icons
+                            question.png (the challenge bubble, 230 px, a see-through
+                            placeholder, line widths scaled from the 384 px look) only while it is missing (icons
                             moved to process_art.py); ceiling.png is the ground's
                             mirror (ceiling_strip), drawn by the game as its own
                             strip over the pipes; a cream backdrop from each
@@ -3801,8 +4060,13 @@ tools/
                             their lumen-side tips undulate (BACK_WAVE on the
                             fringes, FRONT_WAVE in the strips' TIP_ZONE). Must
                             not overwrite poop.png. Run only when you intend to.
-  process_art.py            Crops assets/src/ drawings into 384x384 contract PNGs
-                            (drawn at spriteDisplayScale 0.25 → 96 logical px);
+  advent_preview.py         Gate A mock-up sheets for the December art (plan 17): draft art on the real game art at
+                            in-game size, with checks that every twin keeps its stock body edges; writes outside the tree.
+  process_art.py            Crops assets/src/ drawings into 192x192 contract PNGs (SIZE 192; plan 17 adds the santa twins:
+                            same-body-scale mode for the poop set, --body-like for the bacterium, --anchor for the snow;
+                            drawn at spriteDisplayScale 0.5 → 96 logical px, art at 2x);
+                            runs oxipng -o 4 --strip safe after Pillow's optimized save
+                            when oxipng is installed;
                             the poop set (alive / dead / stink1 / stink2 / falling /
                             stink-falling1 / stink-falling2 / scared / stink-scared1 /
                             stink-scared2 / fart / speech) shares
@@ -3810,7 +4074,7 @@ tools/
                             speech on bigger squares; bean.png from Kidney_Bean.png,
                             postbiotic.png from Postbiotic.png, mystery-icon.png from
                             MysteryBox_Icon.png; process_sheet cuts MysteryBox.gif's
-                            frames on one shared square into the mystery.png strip
+                            frames on one shared square into the mystery.png strip (192 px frames)
                             and CornKernel.gif's into the coin.png strip (106 px frames);
                             process_icons cuts icon-192 / icon-512 (padded to the
                             maskable safe zone) and apple-touch-icon (full bleed)
@@ -3832,12 +4096,42 @@ tools/
                             schema_check.mjs); a failed or interrupted test run (a
                             signal while npm test runs is remembered, then the run
                             fails: AUD-050) puts the stamp and the fixture back and
-                            exits. Then it commits both and pushes main. Refuses a
+                            exits. Right after the stamp, an 'sw' step (pushSteps) runs tools/sw_stamp.mjs
+                            (writeStamp, then checkStamp); a problem puts the tree back and exits.
+                            It commits src/logic.js, index.html and sw.js (and the fixture) and pushes main. Refuses a
                             dirty tree or a non-main branch; --dry skips commit +
                             push and puts the stamp and the fixture back (the tree as
                             it was); --no-schema-check skips the live check and leaves
                             the fixture. tests/push.test.js runs it in a temp copy
                             with stub git and npm and a local stamp server.
+  sw_stamp.mjs              The service worker's stamp (plan 35, 3.1), written by npm run push
+                            right after LAST_UPDATED: index.html's import map (every module at
+                            src/<path>.js?h=<first 10 hex of its SHA-256>, after the charset meta,
+                            before every script) and the ?h= on the main tag and the modulepreload
+                            hrefs; sw.js's BUILD (<VERSION>-<10 hex>) and FILES (URL as the page
+                            asks for it, SHA-256). checkStamp refuses a BUILD for another VERSION,
+                            a module or asset the code names but FILES lacks, a stale hash, and a
+                            stamped file git does not track (untrackedPaths: push commits tracked
+                            files only, so it would 404 at install; judged only for a root that is
+                            the top of a git work tree; AUD-155). isStamped tells a stamped tree.
+                            An sw.js holding FLAPPY_SW_OFF is left alone. node tools/sw_stamp.mjs
+                            [--check] [--check-if-stamped] [--root=DIR] (the second passes an unstamped
+                            tree, and holds a stamped one to --check). tests/swStamp.test.js.
+  git-hooks/pre-push        Tracked, installed by hand: cp tools/git-hooks/pre-push
+                            .git/hooks/pre-push (like the local pre-commit). Refuses a plain
+                            git push of main when the stamp is stale (--check-if-stamped); npm run
+                            push restamps first, so it passes; an unstamped tree passes;
+                            --no-verify bypasses (AUD-156).
+  sw-off.js                 The kill switch: copy it over sw.js and push (see "Service worker").
+                            Deletes flappy-poop-* caches, unregisters itself, reloads its pages.
+  sw_check.mjs              node tools/sw_check.mjs: the worker in a real browser, 50 checks. It
+                            stamps its own temp copy of the tree, serves it on 127.0.0.1:8036 (open
+                            with ?sw) and starts its own headless Chrome with the jsDelivr CDN and
+                            *.supabase.co unresolvable. Covers registration after the lazy sounds,
+                            an offline launch, a same-VERSION push, a VERSION bump, Reload online
+                            and offline, ?nosw, the kill switch, and that no cross-origin request
+                            passes through the worker. Run it, like the smoke, through smoke-runner
+                            after its pgrep wait for another headless_check.mjs.
   schema_check.mjs          npm run schema:check: which db/schema.sql the live database
                             last ran (its schema_version(), one read-only call): this
                             file, the fixture's (this file has changes to apply),
@@ -3876,13 +4170,16 @@ tools/
                             sessions, fourteen PASS/FAIL lines (line 12: friends and status; line 13:
                             invites; line 14: teardown; a test project expects 13 of 14, live 14 of 14); each session unlinks itself; never a
                             secret key. tests/onlineLiveCheck.test.js covers it.
-  headless_check.mjs        npm run smoke [url] [--list] [--only=a,b]: the checks run in
+  headless_check.mjs        npm run smoke [url] [--list] [--only=a,b] [--date=YYYY-MM-DD]: the checks run in
                             named sections (SECTIONS, in run order, each printing its check
                             count); --list shows them; --only runs those plus what they
                             need (needs omitted = every earlier section; [] = passes alone,
                             set only once shown), skipping and never reordering; the
                             hermetic stubs, the boot wait and the leaderboard muzzle sit
-                            outside every section, and so does startEducationRun (plan 26
+                            outside every section, and so does the clock pin (plan 17: SMOKE_PIN_DAY,
+                            pinOffset, clockStubSource; the page's Date and this process's Date.now run
+                            from the pinned noon UTC, a section may pin its own day, --date overrides all;
+                            the `christmas` section checks December on a 5 Dec pin), and so does startEducationRun (plan 26
                             A2): every education section starts its runs through it (a
                             settled ready screen, a start, the 📚 popup's Play once its
                             click lockout is over; a check fails when the run is not an
@@ -3900,7 +4197,8 @@ tools/
                             overlay that does not open / close. Covers every overlay in
                             OVERLAYS (tests/tools.test.js keeps that list equal to
                             main.js), a run start, leaderboard mid-run pause, and a
-                            close-and-reopen race, plus the mystery box (level 3's
+                            close-and-reopen race, the six lazy sounds loading after Play's first frame
+                            (plan 35, 2.3), plus the mystery box (level 3's
                             still first box, a still rolled level-3 box, a bobbing
                             level-4 box, the spin pausing, forced draws,
                             the full-bag fallback, and a skip into level 4's break), coins
@@ -3925,7 +4223,9 @@ tools/
                             (no save hint, the 1080x1350 share card and its pixels:
                             dark fill, pink frame, tan poop frame with the poop; a
                             real tap on Share through a stubbed
-                            navigator.share, cancel, download fallback, Home), and
+                            navigator.share, cancel, download fallback, Home; a real
+                            click on Play again reaches 'playing' in at least
+                            againSlideMs and under launchSlideMs, plan 35, 4.1), and
                             the controller through Play.padDown / padNav (plugin
                             wiring, A / Menu / B / RT / Y, an overlay under A and B,
                             the save panel, the tray ring, the game-over ring and
@@ -4005,7 +4305,7 @@ tools/
                             pill, answers by tap / key / pad, coins, every card's fit
                             both ways, the buttons and keys, the counts on the pill
                             and the card, the tally and its "This run" card, the 🚩,
-                            the sounds, the level's prices), education-revive (every
+                            the sounds, which wait up to 5 s for the lazy quiz sounds, the level's prices), education-revive (every
                             revive path: the pause, the refill under the card, Fly
                             on, a level's end, a wide field, a test run's quiz),
                             education-over (the tally, the bonus quiz, the badges
@@ -4033,7 +4333,7 @@ tools/
                             board's and the pilot's calls are stubbed at boot
                             (globalThis.__edu / __eduAnswer), like the career's.
                             OVERLAYS lists Quiz; NEEDS_RUN keeps the ready-screen
-                            overlay loops off it. Two sections of plan 35: phaser-fallback
+                            overlay loops off it. Plan 35's skip-splash (4.2: the setting off then on, Continue pressed by itself, the failed splash not) and its other sections: phaser-fallback
                             (the page reloaded with the CDN blocked, then stalled, boots from
                             assets/vendor/; both blocked, the splash reads Couldn't load and a
                             tap reloads; then back on the CDN) and error-card (an error thrown
@@ -4073,7 +4373,7 @@ tools/
                             the wait, a no and Resend in the same room. Plan 39's online-join-link (4.3): the
                             real page opened at ?join= takes the code out of the address, opens 🌐, keeps it
                             through a failed sign-in, joins on Retry; a gone room says the link expired.
-                            Full smoke: 43 sections, 993 checks.
+                            Full smoke: 44 sections, 1002 checks.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -4115,7 +4415,7 @@ Claude outputs/             Michael's private hand-over notes (gitignored; never
    If you add a feel-related constant, add it to `TUNING` with a short comment
    and units (px, px/s, ms).
 3. **Respect the art contract.** Asset file names and sizes are fixed by
-   `assets/README.md`. Change a size only if you update that table AND the scene
+   `assets/README.md` (art at 2x its drawn size since plan 35, 2.1; the audio re-encode recipe is there too). Change a size only if you update that table AND the scene
    code that positions the sprite. `npm test` fails otherwise. The pipe image has
    its cap at the top and is flipped vertically for the top pipe; `villi.png`,
    `ceiling.png` and `ground.png` must tile horizontally. Player/item redraws go through
@@ -4184,7 +4484,8 @@ Claude outputs/             Michael's private hand-over notes (gitignored; never
 ```bash
 npm test          # every unit + audit test (~30 s); must pass before committing
 node --test tests/items.test.js   # one file while iterating
-npm run push      # check the live schema is db/schema.sql, stamp LAST_UPDATED = now, copy
+npm run push      # check the live schema is db/schema.sql, stamp LAST_UPDATED = now, stamp the
+                  # service worker (index.html's import map, sw.js's BUILD and FILES), copy
                   # the schema to the test fixture, run tests, commit, push main
                   # (always push this way so the About overlay's "Updated" is the push time)
 npm run schema:stamp   # after editing db/schema.sql (a test fails on a stale stamp)
@@ -4195,7 +4496,7 @@ npm run schema:check   # which db/schema.sql the live database has (one read-onl
 #   It exists on localhost, *.local and private-network addresses (the LAN URL below), not on
 #   the live site; a driver aimed elsewhere sets globalThis.__flappyDebug = true before the
 #   page's scripts run (Page.addScriptToEvaluateOnNewDocument), as the smoke does
-#   (debugHandleAllowed in src/logic.js).
+#   (debugHandleAllowed in src/logic.js, on the same localHost() rule the service worker uses).
 npm start         # tools/serve.py: http://localhost:8000 plus a printed
                   # http://<LAN-IP>:8000 for a phone on the same Wi-Fi
                   # (localhost on the phone is the phone, not the laptop; user
@@ -4211,6 +4512,7 @@ npm run smoke     # with npm start running: headless Chrome drives the real game
                   # (needs Google Chrome; CHROME=/path overrides), ~3 min.
 npm run smoke -- --list            # the sections and what each needs
 npm run smoke -- --only=wide,pad   # just those (plus what they need)
+node tools/sw_check.mjs   # the service worker in its own headless Chrome (see "Service worker")
 uv run --with pillow python3 tools/process_art.py   # rebuild poop set / items / bean from assets/src/
 uv run --with pillow python3 tools/make_placeholders.py   # pipe / villi / ceiling / ground; question.png only if missing
 ```
@@ -4233,6 +4535,22 @@ and audio; don't report those as tested. A subset is for iterating: it skips
 sections, so it never stands in for the full run.
 Never name a scene method after a Phaser.Scene property (`load`, `add`, `input`,
 `time`, `render`, …): `tests/scenes.test.js` enforces this.
+
+Before a push (the 2026-11-15-c audit's open item; `npm run push` does the stamping, you do the thinking):
+
+- Did client storage or a cache format change (a `flappyPoop.*` key, a save or backup shape, an
+  IndexedDB or Cache Storage name)? Then write down what a client on the old build does with the new
+  data, and what the new build does with the old, before you push. Players keep both for months.
+- The service worker is stamped by the push itself (`tools/sw_stamp.mjs`); never edit `BUILD`,
+  `FILES` or the import map by hand. A push that refuses says which file is missing, stale or untracked.
+- A plain `git push` of main with a stale stamp is refused by `tools/git-hooks/pre-push` once you have
+  copied it to `.git/hooks/pre-push`; use `npm run push`, which restamps first. `--no-verify` bypasses it.
+- To pull the worker from every player: copy `tools/sw-off.js` over `sw.js` and push. To bring it
+  back, restore `sw.js` from git and push.
+- Art or a sound changed under an existing name needs a `VERSION` bump (their URLs carry `?v=`, not
+  a hash), or a cached page keeps the old file.
+- Run the full `npm run smoke` and `node tools/sw_check.mjs` (both through the smoke runner's
+  `pgrep` wait when another session may be running one), then `npm run push`.
 
 Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `tune`,
 `refactor`); a step of a plan adds `step n/N` to the scope. Keep it.
@@ -4290,13 +4608,13 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   older clients are told to update) and never reuses a server event name.
   A new online function goes in `ONLINE_RPCS` as well as the schema header
   (`tests/onlineNet.test.js` keeps them equal). Friends (3.1) name another player only by
-  a peer handle (`peer` in `online_history()` and `friend_list()`), never an id or a name. The client (3.3) lives in `src/onlineFriends.js` and `src/ui/onlineFriendsViews.js` (`TUNING.online.status`: `beatMs` 20 s, tied below half of the schema's `c_fresh` by a test; `pollMs` 10 s; `badgeMs` 30 s; `opponents` 5). The status beat (`Play.onlineStatusBeat()`, once per page; pagehide sends `online_beat(false)` through `onlineNet.beacon`, pageshow beats again) starts on link in the 🌐 window and after pairing, and stops with `online_beat(false)` on 🌐 off, ✕ and Leave after a race; it is quiet on stepping aside and on Clear / Load and is kept through the race hand-off. It never runs outside online mode: `tests/onlineFriends.test.js` checks that `tournamentPanel.js` is the only caller. The results panel offers Add as a friend only once the report is agreed. The 39 friend strings (`friendsButton` to `friendResultPair`) carry rows in `TRANSLATION_NOTES.md`. The server's event names on
+  a peer handle (`peer` in `online_history()` and `friend_list()`), never an id or a name. The client (3.3) lives in `src/onlineFriends.js` and `src/ui/onlineFriendsViews.js` (`TUNING.online.status`: `beatMs` 20 s, tied below half of the schema's `c_fresh` by a test; `pollMs` 10 s; `badgeMs` 30 s; `opponents` 5). The status beat (`Play.onlineStatusBeat()`, once per page; pagehide sends `online_beat(false)` through `onlineNet.beacon`, pageshow beats again) starts on link in the 🌐 window and after pairing, and stops with `online_beat(false)` on 🌐 off, ✕ and Leave after a race; it is quiet on stepping aside and on Sign out / Sign in and is kept through the race hand-off. It never runs outside online mode: `tests/onlineFriends.test.js` checks that `tournamentPanel.js` is the only caller. The results panel offers Add as a friend only once the report is agreed. The 39 friend strings (`friendsButton` to `friendResultPair`) carry rows in `TRANSLATION_NOTES.md`. The server's event names on
   `room:<code>` are hints: the transport confirms them with `room_state`, since a
   seated peer can broadcast those names too.
   The sign-in side (enter, claim, devices, pairing, leave) lives in
   `src/onlineAccount.js` (`tests/onlineAccount.test.js`); `Play.onlineAccount`
   builds it once, and `Play.onlineSessionHeld` / `Play.onlineLeave` ask and end it.
-  Clear and a Load of another player leave online play only on a device that holds
+  Sign out and a Sign in as another player leave online play only on a device that holds
   a session (no client load otherwise: `tests/onlineSignOut.test.js`). A newly
   claimed online name is stored the save panel's way only after the link succeeds.
   Invites (4.2, `src/onlineInvites.js`) show only in online mode, as the beat does. Every time comes
@@ -4428,6 +4746,10 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
 - Code, a knob, a string or a texture kept although nothing uses it (a test hook,
   say) → a one-line reason in the matching allowlist in `tests/orphans.test.js`;
   otherwise delete it. The audit fails on anything unused and unexplained.
+- A file the game loads that is new (a module under `src/`, art, a sound, a vendored script) → nothing
+  to list by hand: `tools/sw_stamp.mjs` finds modules and the assets the code names, and the push
+  refuses when one is missing from `FILES`. A new kind of loaded file the stamp cannot see → teach
+  `tools/sw_stamp.mjs` and add a case to `tests/swStamp.test.js`.
 - New smoke checks → inside the section they belong to in `tools/headless_check.mjs`.
   A new section → a `SECTIONS` entry (with `about`) and a `section()` call in the
   same order; leave `needs` out (it then runs after everything before it) until
@@ -4438,8 +4760,10 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   Every plan opens with `## Progress (resume here)`: Now / Next / Left / Updated lines
   and a step table with an estimate, start, finish and time taken per sub-task. Update
   it when each sub-task starts and ends and before every stop (checkpoint, hand-off,
-  failure, session end), with times from the clock (`date`), never guessed. Full
-  format: the Conventions in `.claude/plans/ROADMAP.md`.
+  failure, session end), with times from the clock (`date`), never guessed. Each
+  step also gets a tier and a `Route` (model, effort, and whether it runs in the main
+  session or a named agent in `.claude/agents/`). Full format, the tier table and the
+  session rules: the Conventions in `.claude/plans/ROADMAP.md`.
 - An audit of the repo, a zone or a feature → the `audit-repo` skill
   (`.claude/skills/audit-repo/SKILL.md`, local and untracked; example prompts in its
   `examples.md`). It is read-only: reports go to `.claude/audits/<date>/`, fixes only on Michael's word.

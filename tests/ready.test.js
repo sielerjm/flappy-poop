@@ -238,3 +238,40 @@ test("the 📚 popup's keys (plan 26, A2; AUD-032: eduIntroKey, the decision ui/
   eduIntroKey({ ...SPACE, down: false, held });
   assert.deepEqual([...held], ['Space'], 'the set passed in is left alone (pure)');
 });
+
+test("December's 🎅 stands in the 🌞's box (plan 17, 1.9): the layout reads no date, and every variant is one glyph", async () => {
+  const { dailyGlyph, SUN } = await import('../src/logic.js');
+  // readyLayout takes no day: the button the 🎅 is drawn on is the 🌞's round button, wherever the season is.
+  assert.deepEqual(readyLayout(GAME_WIDTH, GAME_HEIGHT, T), layout);
+  const seg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+  const glyphs = [SUN, ...T.advent.santas.map((s) => dailyGlyph('2026-12-05', s, T))];
+  assert.equal(glyphs.length, 19);
+  for (const g of glyphs) assert.equal([...seg.segment(g)].length, 1, `${g} is one grapheme, as the 🌞 is, so it fits the same 52 px round button`);
+  assert.deepEqual(glyphs.slice(1), T.advent.santas, 'in season the glyph is the visit\'s variant, unchanged');
+});
+
+test("December's countdown box (plan 17, 1.12) sits in the gap: under the title's ink, over the bubble at its highest", () => {
+  const c = layout.countdown;
+  const titleInkBottom = layout.title.y + 34; // the 72 px title's ink is 69 px tall around its centre (Gate A sheet 7: y 345 to 414)
+  const bubbleTop = layout.poop.y + layout.poop.bubble.top; // 481.5; the poop only bobs downward from here
+  assert.ok(c.y - c.height / 2 >= titleInkBottom, `top ${c.y - c.height / 2} clears the title's ink (${titleInkBottom})`);
+  assert.ok(c.y + c.height / 2 <= bubbleTop, `bottom ${c.y + c.height / 2} clears the bubble (${bubbleTop})`);
+  assert.equal(c.x, GAME_WIDTH / 2);
+  assert.ok(T.advent.countdownPx <= c.height, 'the line\'s font fits its box');
+  assert.equal(readyHit(c.x, c.y, layout), null, 'drawn only: a tap there is the plain screen');
+});
+
+test('the Bowelidays image box (plan 17, 1.14; D16 (b)) sits above the title and under the top row and its halos', async () => {
+  const { readFileSync } = await import('node:fs');
+  const b = layout.bowelidays;
+  const png = readFileSync(new URL('../assets/advent/bowelidays.png', import.meta.url));
+  const [w, h] = [png.readUInt32BE(16), png.readUInt32BE(20)];
+  assert.ok(Math.abs(T.advent.bowelidays.aspect - h / w) < 1e-9, `the aspect is the PNG's (${w} x ${h})`);
+  const haloR = layout.daily.width / 2 + T.readyPromptGlowPx;
+  const rowBottom = Math.max(layout.daily.y, layout.howto.y) + haloR;
+  const titleInkTop = layout.title.y - 35; // Gate A sheet 7: the title's ink from y 345
+  assert.ok(b.y - b.height / 2 > rowBottom, `top ${b.y - b.height / 2} clears the 🎅 / ? halos (${rowBottom})`);
+  assert.ok(b.y + b.height / 2 < titleInkTop, `bottom ${b.y + b.height / 2} clears the title's ink (${titleInkTop})`);
+  assert.ok(Math.abs(b.width - GAME_WIDTH * 0.6) < 1e-9 && b.x === GAME_WIDTH / 2, '60 % of the width, centred');
+  assert.equal(readyHit(b.x, b.y, layout), null, 'drawn only');
+});

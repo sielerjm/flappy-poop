@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { SPLASH_NOTES, splashPool, nextNote, createBrowser, swipeIntent, createSplashStore, splashReady, setSplashProgress, startSplash, ringTarget, ringStep, splashArtUrl } from '../src/splash.js';
+import { SPLASH_NOTES, splashPool, nextNote, createBrowser, swipeIntent, createSplashStore, splashReady, setSplashProgress, startSplash, ringTarget, ringStep, ringCachedLoad, splashArtUrl, skipWanted } from '../src/splash.js';
 import { ACHIEVEMENTS } from '../src/achievements.js';
 import { LOCALES, catalogFor } from '../src/i18n.js';
 import { createRng, VERSION } from '../src/logic.js';
@@ -357,4 +357,58 @@ test('plan 39 (Michael, 24 Nov): the 🌐 online-races card is the newest featur
     assert.ok(text.includes('👥') && text.includes('🌐') && [...text].length <= 100, `${loc}: names 👥 and 🌐, at most 100 characters`);
   }
   assert.ok(!t('en', 'splashTwoPlayer').startsWith('On a wide screen'), 'the 👥 tip no longer says wide screens only (👥 shows on phones too)');
+});
+
+// Plan 35, 2.5: a cached load (Boot ready within ringCachedMs of the splash starting) fills the ring at
+// ringFastPerSec, about 300 ms empty to full instead of 600 to 1100. A slow load keeps the old speed.
+test('ringCachedLoad: ready within ringCachedMs of the start counts as a cached load; later, or a bad number, does not', () => {
+  assert.equal(ringCachedLoad(0), true);
+  assert.equal(ringCachedLoad(S.ringCachedMs), true);
+  assert.equal(ringCachedLoad(S.ringCachedMs + 1), false);
+  assert.equal(ringCachedLoad(Number.NaN), false);
+  assert.equal(ringCachedLoad(-5), true, 'a clock that stepped back is still a quick load');
+  assert.ok(S.ringCachedMs >= 800 && S.ringCachedMs <= 3000, 'a warm load finishes Boot in ~0.4 s, a 3 s revalidate on Slow 4G must not count');
+});
+
+test('ringStep fast: empty to full in about 300 ms at any frame rate, monotone, never past the target; the default speed is unchanged', () => {
+  assert.ok(S.ringFastPerSec > S.ringMaxPerSec, 'faster than the normal top speed');
+  for (const frameMs of [1000 / 120, 1000 / 60, 1000 / 30]) {
+    let shown = 0;
+    let frames = 0;
+    while (shown < 1 && frames < 1000) {
+      const next = ringStep(shown, 1, frameMs, T, true);
+      assert.ok(next >= shown && next <= 1, 'monotone, never past the target');
+      assert.ok(next - shown <= S.ringFastPerSec * (Math.min(frameMs, S.ringFrameCapMs) / 1000) + 1e-12, 'never faster than ringFastPerSec');
+      shown = next;
+      frames += 1;
+    }
+    assert.equal(shown, 1);
+    const ms = frames * frameMs;
+    assert.ok(ms >= 250 && ms <= 360, `empty to full in ${Math.round(ms)} ms at ${frameMs.toFixed(1)} ms frames`);
+  }
+  assert.equal(ringStep(0.5, 0.3, 16, T, true), 0.5, 'a lower target does not pull it back');
+  assert.equal(ringStep(0.2, 1, 5000, T, true), ringStep(0.2, 1, S.ringFrameCapMs, T, true), 'a long frame still counts as ringFrameCapMs');
+  assert.equal(ringStep(0, 1, 16), ringStep(0, 1, 16, T, false), 'fast is off unless asked for');
+});
+
+test('skipWanted (plan 35, 4.2): Settings\' Skip to home when loaded, read from the settings store; off by default, and storage that cannot be read keeps the splash', () => {
+  const store = (raw) => {
+    const m = new Map(raw === undefined ? [] : [[T.settingsKey, raw]]);
+    return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) };
+  };
+  assert.equal(skipWanted(store()), false, 'nothing stored: the splash waits for Continue');
+  assert.equal(skipWanted(store(JSON.stringify({ skipSplash: true }))), true);
+  assert.equal(skipWanted(store(JSON.stringify({ skipSplash: false, sound: false }))), false);
+  assert.equal(skipWanted(store(JSON.stringify({ skipSplash: 'yes' }))), false, 'junk is off');
+  assert.equal(skipWanted(store('{not json')), false, 'corrupt is off');
+  assert.equal(skipWanted({ getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } }), false, 'blocked storage is off');
+  assert.equal(skipWanted(null), false, 'no storage is off');
+});
+
+test('the skip (plan 35, 4.2): Continue lighting presses itself when skipWanted, so the full ring shows and the failed state (retry) never skips', () => {
+  const src = readFileSync(new URL('../src/splash.js', import.meta.url), 'utf8');
+  const light = src.slice(src.indexOf('const light = () => {'), src.indexOf('const progress = (p) => {'));
+  assert.match(light, /if \(removed \|\| isReady \|\| failedState\) return;/, 'light never runs on a failed splash');
+  assert.match(light, /if \(skipWanted\(\)\) press\(\);/, 'light presses Continue itself');
+  assert.ok(light.indexOf('isReady = true') < light.indexOf('skipWanted()'), 'after isReady, so press() goes on');
 });

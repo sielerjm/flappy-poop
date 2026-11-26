@@ -25,6 +25,50 @@ import { join } from 'node:path';
 
 export const DEFAULT_URL = 'http://localhost:8000';
 
+/**
+ * The smoke's clock pin (plan 17, 1.9). Every check below was written for a day outside the
+ * Christmas season (stock textures, the 🌞), so the page's clock and this process's Date.now are
+ * offset to a pinned start and keep running from it; the offset is fixed once per pin, so time
+ * still moves forward across reloads. A section may pin its own day (pinClock in run); --date
+ * overrides every pin for one run. Noon UTC is the same day in every time zone near Europe.
+ */
+export const SMOKE_PIN_DAY = '2026-11-15';
+
+/** 'YYYY-MM-DD' → that day's 12:00 UTC in ms; throws on anything that is not a real day. */
+export function pinMs(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day));
+  const ms = m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12) : NaN;
+  if (!m || new Date(ms).toISOString().slice(0, 10) !== day) throw new Error(`--date: ${day} is not a day (use YYYY-MM-DD)`);
+  return ms;
+}
+
+/**
+ * The clock offset for a pin (plan 17, 1.9 and 1.16): the page and this process read `day` 12:00 UTC (or --date's
+ * day when given) from `hostNowMs` on. The pin is absolute, so the host's own date never reaches a section: a
+ * December host clock (from 1 Dec) still runs every section on its pin.
+ */
+export function pinOffset(day, date, hostNowMs) {
+  const want = date ?? day;
+  return { want, offsetMs: pinMs(want) - hostNowMs };
+}
+
+/**
+ * The page's Date, shifted by offsetMs: Date.now(), new Date() and Date() read the real clock plus
+ * the offset; new Date(x), Date.UTC and Date.parse are unchanged, and instanceof Date still holds.
+ * Injected before any page script (Page.addScriptToEvaluateOnNewDocument), in every frame.
+ */
+export function clockStubSource(offsetMs) {
+  return `(() => {
+  const Real = Date; const off = ${Number(offsetMs)}; const now = () => Real.now() + off;
+  function PinnedDate(...a) { if (!new.target) return new Real(now()).toString(); return a.length ? new Real(...a) : new Real(now()); }
+  PinnedDate.prototype = Real.prototype;
+  Object.defineProperty(PinnedDate, 'name', { value: 'Date' });
+  PinnedDate.now = now; PinnedDate.UTC = Real.UTC; PinnedDate.parse = Real.parse;
+  globalThis.Date = PinnedDate;
+  globalThis.__smokeClock = { offsetMs: off };
+})();`;
+}
+
 /** chromeIntent input → the overlay scene it opens. Every overlay has close(). */
 export const OVERLAYS = {
   settings: 'Settings',
@@ -51,7 +95,7 @@ const NEEDS_RUN = new Set(['Quiz']);
  * ready screen with the same checks as in the full run (set only once that is shown).
  */
 export const SECTIONS = [
-  { name: 'home', about: 'home screen (no score, the ? pulsing); onboarding: the username prompt, the save panel, the name saved; the username claim, the merge on Load, the board\'s name winning over a stale one, Clear' },
+  { name: 'home', about: 'home screen (no score, the ? pulsing); onboarding: the Sign in prompt, the save panel\'s Sign in | Create user, the name saved; the username claim, Merge players… (each pick, a cancelled one, this player\'s own code), the board\'s name winning over a stale one, Sign out through its confirm, Sign in' },
   { name: 'overlays', needs: [], about: 'every overlay opens from the ready screen, keeps the loop alive and closes' },
   { name: 'level1', needs: [], about: "level 1's scripted pairs and still pickups; the finish-line texture" },
   { name: 'howto-seen', needs: ['overlays'], about: 'opening How to play stops the ? pulse and stamps this build' },
@@ -72,7 +116,7 @@ export const SECTIONS = [
   { name: 'versus-match', needs: [], about: 'two players: shared pause, level sync and ready check, catch-up, respawn, result, the result panel\'s gate, the smoke\'s rematch' },
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
   { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players; each race post backed by its half\'s run (2.8)' },
-  { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
+  { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised; a run that crosses no pipe gives the attempt back (at its crash, or cut off, at the next sync), and its panel's Play again starts the day's run again" },
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats (with their day streaks, 34.14), the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
   { name: 'education-unlock', needs: [], about: "📚 for everyone (plan 28, 2.3; the section keeps its old name): the 📚 switch from the first boot and remembered across a restart, the old word refused as a name with its line, the off switch hiding 📚, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, each DOM window inside an iPhone's faked safe area (plan 28, 4.1), the 📚 popup's Show / Hide remembered (4.2)" },
   { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), corn for a right answer by the card's kind (3 / 2 / 1) and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
@@ -94,6 +138,8 @@ export const SECTIONS = [
   { name: 'online-friends', needs: [], about: "friends and online status (plan 39, 3.3, Preview G), on a stand-in transport under Play (no network): the 🌐 window beats once linked; the online home's 🤝 Friends with its badge; the Friends screen's order (a request, friends online → in a game → offline with dot and word, a request sent, a recent opponent, Blocked closed); Accept, Add friend, ⋯ Block asked twice, Back with the badge read again; ✕ out of 🌐 says offline once" },
   { name: 'online-invites', needs: [], about: "invites, the ✉️ (plan 39, 4.2, Preview I), on a stand-in transport under Play (no network) on a 320 phone: invite_list once linked and the topic it names; ✉️ 1 on 🤝 Friends; the inviting 🟢 friend first with the ✉️ and its time, the buttons inside the row under a 16-character name (Michael's ask); a topic invite adds one; the ✉️ tapped: the ready screen as the guest; Invite on a 🟢 friend: the room screen waiting, their no with Resend, Resend in the same room" },
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
+  { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
+  { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the stock dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -115,18 +161,20 @@ export function expandOnly(names, sections = SECTIONS) {
 }
 
 /**
- * Command line → { url, only, list }. A positional argument or --url= is the URL;
- * --only=a,b names sections (null: all); --list prints them. Throws on anything else
- * or on a name SECTIONS does not have, listing the valid ones.
+ * Command line → { url, only, list, date }. A positional argument or --url= is the URL;
+ * --only=a,b names sections (null: all); --list prints them; --date=YYYY-MM-DD runs every
+ * section on that day instead of its pin (null: the pins). Throws on anything else, on a
+ * date that is not a day, or on a name SECTIONS does not have, listing the valid ones.
  */
 export function parseArgs(argv, sections = SECTIONS) {
-  const out = { url: DEFAULT_URL, only: null, list: false };
+  const out = { url: DEFAULT_URL, only: null, list: false, date: null };
   for (const arg of argv) {
     if (arg === '--list') out.list = true;
     else if (arg.startsWith('--only=')) out.only = arg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean);
     else if (arg.startsWith('--url=')) out.url = arg.slice('--url='.length);
+    else if (arg.startsWith('--date=')) { out.date = arg.slice('--date='.length); pinMs(out.date); }
     else if (!arg.startsWith('-')) out.url = arg;
-    else throw new Error(`unknown option ${arg} (use --list, --only=a,b or --url=…)`);
+    else throw new Error(`unknown option ${arg} (use --list, --only=a,b, --date=YYYY-MM-DD or --url=…)`);
   }
   if (out.only) {
     const names = sections.map((s) => s.name);
@@ -238,9 +286,15 @@ async function connect(port) {
   return { send, evaluate, exceptions, consoleErrors, close: () => ws.close() };
 }
 
-export async function run(url = DEFAULT_URL, { only = null } = {}) {
+export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) {
   const selected = only ? new Set(expandOnly(only)) : null;
   if (selected) console.log(`sections: ${[...selected].join(', ')}`);
+  // The clock pin (plan 17, 1.9): this process's Date.now takes the page's offset too, since
+  // checks compare times made here with times the page made. Restored in the finally below.
+  const realNow = Date.now;
+  let clockOffset = 0;
+  let clockScriptId = null;
+  Date.now = () => realNow() + clockOffset;
   const { proc, port, profile } = launchChrome();
   const failures = [];
   let checks = 0;
@@ -272,6 +326,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     // (globalThis.__flappy) exists only on local hosts unless a driver opts in before the page's
     // scripts run (debugHandleAllowed): opt in, so --url=<any host> keeps working.
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `globalThis.__flappyDebug = true; Object.defineProperty(navigator, 'getGamepads', { value: () => [], configurable: true });` });
+    // The clock pin (plan 17, 1.9): the page and this process run from `day` 12:00 UTC on (--date wins
+    // over every pin). It takes effect on the next navigation, so a section that pins its own day reloads.
+    const pinClock = async (day) => {
+      const { want, offsetMs } = pinOffset(day, date, realNow());
+      clockOffset = offsetMs;
+      if (clockScriptId) await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: clockScriptId });
+      ({ identifier: clockScriptId } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: clockStubSource(clockOffset) }));
+      return want;
+    };
+    const pinnedDay = await pinClock(SMOKE_PIN_DAY);
+    console.log(`clock pinned to ${pinnedDay} 12:00 UTC${date ? ' (--date)' : ''}`);
     // The field follows the viewport (fieldWidth): pin it to the portrait 720×1280 so every number
     // below is the phone layout (--window-size includes browser chrome, so the viewport is smaller).
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
@@ -304,6 +369,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await sleep(500);
       splash = await splashNow();
     }
+    const pageClock = await evaluate(`JSON.stringify({ day: new Date().toISOString().slice(0, 10), now: Date.now(), stub: Boolean(globalThis.__smokeClock), date: Date().slice(0, 15) === new Date().toString().slice(0, 15) })`).then(JSON.parse);
+    ok(pageClock.stub && pageClock.day === pinnedDay && Math.abs(pageClock.now - Date.now()) < 5000 && pageClock.date, `the page's clock runs on the pin, ${pinnedDay}, as this process's does (${JSON.stringify(pageClock)})`);
     ok(Boolean(splash?.live && splash.text), `splash: a note card shows (${JSON.stringify(splash?.text ?? null)})`);
     ok(Boolean(splash?.enabled && splash.glow), 'splash: Continue lights up and glows once Boot has loaded');
     ok(splash?.enabled && splash.ring < 0.5, `splash: the ring is full when Continue lights up (offset ${splash?.ring})`);
@@ -489,37 +556,39 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(spread(0) > 0.01 && spread(1) > 0.01, `on a fresh profile the ? and the user button's label pulse (scale spread over 600 ms: ${spread(0).toFixed(3)}, ${spread(1).toFixed(3)})`);
       }
 
-      // Onboarding: a fresh profile has no username, so the user button reads "Load user" under a
-      // pulsing halo; tapping it opens the save panel on the name field; Save stores the name and the
-      // panel stays open on the user code. Named, the button reads the name and still opens the panel.
+      // Onboarding: a fresh profile has no username, so the user button reads "Sign in" under a
+      // pulsing halo; tapping it opens the save panel on its two buttons, Sign in and Create user (plan 44);
+      // Create user stores the name and the panel stays open on the popup about the user code. Named, the
+      // button reads the name and still opens the panel, on the player's dashboard.
       {
         const play = `__flappy.scene.getScene('Play')`;
         const texts = () => evaluate(`${play}.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text)`);
         const a1 = await evaluate(`${play}.profileHalo.alpha`);
         await sleep(300);
         const a2 = await evaluate(`${play}.profileHalo.alpha`);
-        const promptShown = (await texts()).includes('Load user');
+        const promptShown = (await texts()).includes('Sign in');
         const haloOn = await evaluate(`${play}.profileHalo.visible`);
         const who = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name ?? null, stored: localStorage.getItem('flappyPoop.save'), launching: ${play}.launching, state: ${play}.state })`).then(JSON.parse);
-        ok(promptShown && haloOn && a1 !== a2, `fresh profile shows "Load user" with a pulsing halo (alpha ${a1.toFixed(2)} → ${a2.toFixed(2)})${promptShown ? '' : ` — name ${JSON.stringify(who.name)}, stored ${who.stored ? 'yes' : 'no'}, launching ${who.launching}, state ${who.state}`}`);
+        ok(promptShown && haloOn && a1 !== a2, `fresh profile shows "Sign in" with a pulsing halo (alpha ${a1.toFixed(2)} → ${a2.toFixed(2)})${promptShown ? '' : ` — name ${JSON.stringify(who.name)}, stored ${who.stored ? 'yes' : 'no'}, launching ${who.launching}, state ${who.state}`}`);
         await evaluate(`${play}.flap({ x: ${play}.readyBoxes.profile.x, y: ${play}.readyBoxes.profile.y }), true`);
         await sleep(200);
-        const opened = await evaluate(`!document.getElementById('save-panel').hidden && document.activeElement && document.activeElement.id === 'save-name'`);
-        ok(opened === true && (await playState()) === 'ready', 'tapping "Load user" opens the save panel on the name field without starting a run');
+        const shownIn = (id) => `((e) => Boolean(e) && e.offsetParent !== null)(document.getElementById('${id}'))`;
+        const opened = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, signIn: ${shownIn('save-have-btn')}, create: ${shownIn('save-new-btn')}, name: ${shownIn('save-name')}, focus: document.activeElement?.id ?? null })`).then(JSON.parse);
+        ok(opened.open && opened.signIn && opened.create && !opened.name && opened.focus !== 'save-name' && (await playState()) === 'ready', `tapping "Sign in" opens the save panel on Sign in | Create user (no field, no keyboard) without starting a run (${JSON.stringify(opened)})`);
         // The board's username check and its name for this player are stubbed for the whole section
         // (deterministic, and never the live board).
         await evaluate(`(globalThis.__nameFree = true, globalThis.__nameChecks = [], ${play}.checkNameAvailable = (name, id) => (globalThis.__nameChecks.push([name, id]), Promise.resolve(globalThis.__nameFree)), true)`);
         await evaluate(`(globalThis.__boardName = null, globalThis.__nameFetches = [], ${play}.fetchPlayerName = (id) => (globalThis.__nameFetches.push(id), Promise.resolve(globalThis.__boardName)), true)`);
         // The player's board rows (pullBoardBests) answer "none" for the whole run, except in the check that sets them.
         await evaluate(`(globalThis.__boardRows = [null, null], ${play}.fetchBoardBests = () => Promise.resolve(globalThis.__boardRows), true)`);
-        await evaluate(`document.getElementById('save-name').value = 'Smoke', document.getElementById('save-save-btn').click(), true`);
+        await evaluate(`document.getElementById('save-new-btn').click(), document.getElementById('save-name').value = 'Smoke', document.getElementById('save-save-btn').click(), true`);
         await sleep(1200);
-        const after = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, code: document.getElementById('save-code').value })`).then(JSON.parse);
+        const after = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, code: document.getElementById('save-explain-code')?.value ?? '' })`).then(JSON.parse);
         const named = await evaluate(`${play}.getSaveState().name`);
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         const line = (await texts()).find((x) => x.startsWith('Smoke'));
         const haloOff = !(await evaluate(`${play}.profileHalo.visible`));
-        ok(after.open && after.code.startsWith('fp1.') && named === 'Smoke' && Boolean(line) && haloOff, `Save stores the name and the panel stays open on the user code (${after.code.slice(0, 8)}…); closed, the button reads "${line}" without the halo`);
+        ok(after.open && after.code.startsWith('fp1.') && named === 'Smoke' && Boolean(line) && haloOff, `Create user stores the name and the panel stays open on the popup about the user code (${after.code.slice(0, 8)}…); closed, the button reads "${line}" without the halo`);
         const still1 = await evaluate(`${play}.profileBtn.labelScale()`);
         await sleep(300);
         const still2 = await evaluate(`${play}.profileBtn.labelScale()`);
@@ -527,13 +596,38 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // Named, the same button opens the save panel (the High scores page is gone).
         await evaluate(`${play}.flap({ x: ${play}.readyBoxes.profile.x, y: ${play}.readyBoxes.profile.y }), true`);
         await sleep(200);
-        const reopened = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, field: document.getElementById('save-name').value, focused: document.activeElement?.id === 'save-name' })`).then(JSON.parse);
+        const reopened = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, field: document.getElementById('save-name').value, focused: document.activeElement?.id === 'save-name', dashboard: ${shownIn('save-code')} && ${shownIn('save-clear-btn')} && ${shownIn('save-merge-btn')} })`).then(JSON.parse);
+        // The (?) is a layer over the card (Michael's playtest, 24 Nov): it does not move when the help opens, so a
+        // second click where it was closes the help and the panel stays, over the dashboard and over Sign out's confirm.
+        for (const over of ['dashboard', 'sign out']) {
+          if (over === 'sign out') await evaluate(`document.getElementById('save-clear-btn').click(), true`);
+          const at = await evaluate(`JSON.stringify(document.getElementById('save-help-btn').getBoundingClientRect())`).then(JSON.parse);
+          const press = async () => {
+            for (const type of ['mousePressed', 'mouseReleased']) await cdp.send('Input.dispatchMouseEvent', { type, x: at.x + at.width / 2, y: at.y + at.height / 2, button: 'left', clickCount: 1 });
+            await sleep(200);
+          };
+          const seen = () => evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, help: Boolean(document.getElementById('save-help')?.isConnected), y: document.getElementById('save-help-btn').getBoundingClientRect().y, logout: Boolean(document.getElementById('save-logout')?.isConnected) })`).then(JSON.parse);
+          await press();
+          const opened = await seen();
+          await press();
+          const closed = await seen();
+          ok(opened.open && opened.help && opened.y === at.y && closed.open && !closed.help && closed.logout === (over === 'sign out'), `over the ${over}, the (?) stays put (y ${at.y} → ${opened.y}); a second click on the same spot closes the help and the panel stays${over === 'sign out' ? ', still on the confirm' : ''}`);
+          // ✕ over the help steps back too (Michael's playtest): to the dashboard, or to the confirm.
+          await press();
+          const xAt = await evaluate(`JSON.stringify(document.getElementById('save-close').getBoundingClientRect())`).then(JSON.parse);
+          for (const type of ['mousePressed', 'mouseReleased']) await cdp.send('Input.dispatchMouseEvent', { type, x: xAt.x + xAt.width / 2, y: xAt.y + xAt.height / 2, button: 'left', clickCount: 1 });
+          await sleep(200);
+          const backed = await seen();
+          ok(backed.open && !backed.help && backed.logout === (over === 'sign out'), `over the ${over}, ✕ on the help goes back to the ${over === 'sign out' ? 'confirm' : 'dashboard'}, the panel stays`);
+          if (over === 'sign out') await evaluate(`document.getElementById('save-logout-cancel').click(), true`);
+        }
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
-        ok(reopened.open && reopened.field === 'Smoke' && !reopened.focused && (await playState()) === 'ready', `tapping "${line}" opens the save panel on the stored name (no keyboard raised) without starting a run`);
+        ok(reopened.open && reopened.field === 'Smoke' && !reopened.focused && reopened.dashboard && (await playState()) === 'ready', `tapping "${line}" opens the save panel on the player's dashboard (no keyboard raised) without starting a run`);
       }
 
-      // The username claim, the merge on Load, and Clear. The board check stays stubbed; the Data API
-      // is muzzled around the Load so the queued merge never reaches the live board.
+      // The username claim, Merge players… (each pick, and a cancelled one), and Sign out through its
+      // confirm (plan 44; the merge on Load and the two-tap Clear before it). The board check stays
+      // stubbed; the Data API is muzzled around each merge so a queued merge never reaches the live board.
       {
         const play = `__flappy.scene.getScene('Play')`;
         const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
@@ -574,27 +668,46 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const refused = await status();
         await evaluate(`${play}.boardNameTaken = false, true`);
         ok(refused.text === (await tx('saveNameTaken')) && refused.cls.includes('error'), 'with the last sync refused for the name, the panel opens on the taken-name steps');
-        // Load a code from another id: the device adopts it, the pair is queued for the board, and the status says merged.
+        // Merge players… with another id's code: a paste shows both cards and changes nothing; Cancel leaves the
+        // save, the merge queue and the online session as they were; the hidden blocks really are display: none
+        // (the card's [hidden] rule beats .row's flex). Then the code's card picked: the device adopts it (what a
+        // Load did), the pair is queued for the board, and the status names both players.
         const oldId = await evaluate(`${play}.getSaveState().id`);
         const other = 'BBBBBBBBBBBBBBBBBBBBBB';
         const code = await evaluate(`import('./src/save.js').then((m) => m.exportCode({ id: '${other}', name: 'Other', top: [{ score: 5, toilet: false, level: 1 }], exportedAt: null }))`);
         await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
-        await evaluate(`${el('save-load')}.value = ${JSON.stringify(code)}, ${el('save-load-btn')}.click(), true`);
+        const snapshot = () => evaluate(`import('./src/config.js').then((m) => JSON.stringify({ save: localStorage.getItem('flappyPoop.save'), merges: localStorage.getItem(m.LEADERBOARD.mergesKey), session: localStorage.getItem(m.LEADERBOARD.onlineSessionKey), rename: localStorage.getItem(m.LEADERBOARD.renameKey) }))`);
+        const pasteMerge = async (text) => {
+          await evaluate(`${el('save-merge-btn')}.click(), ${el('save-merge-input')}.value = ${JSON.stringify(text)}, ${el('save-merge-input')}.dispatchEvent(new Event('input')), true`);
+          for (let i = 0; i < 40 && !(await evaluate(`${el('save-card-device')}.offsetParent !== null`)); i += 1) await sleep(50);
+        };
+        const unmerged = await snapshot();
+        await pasteMerge(code);
+        const cards = await evaluate(`JSON.stringify({ device: ${el('save-card-device')}.className, code: ${el('save-card-code')}.className, codeName: ${el('save-card-code')}.children[1].textContent, go: !${el('save-merge-confirm')}.disabled, rowHidden: ${el('save-profile-btn')}.parentElement.hidden, rowDisplay: getComputedStyle(${el('save-profile-btn')}.parentElement).display })`).then(JSON.parse);
+        const pasted = await snapshot();
+        await evaluate(`${el('save-merge-cancel')}.click(), true`);
+        await sleep(100);
+        const cancelled = await snapshot();
+        ok(cards.device.includes('kept') && !cards.code.includes('kept') && cards.codeName === 'Other' && cards.go && pasted === unmerged && cancelled === unmerged && !(await evaluate(`${el('save-merge')}?.offsetParent ?? null`)), `Merge players… shows both cards, this device marked to stay; the paste and Cancel leave the save, the merge queue, the rename and the online session as they were`);
+        ok(cards.rowHidden && cards.rowDisplay === 'none', `a hidden block reads display: none in the browser though .row is flex (the Profile row while Merge is open: ${cards.rowDisplay})`);
+        const beforeName = await evaluate(`${play}.getSaveState().name`);
+        await pasteMerge(code);
+        await evaluate(`${el('save-card-code')}.click(), ${el('save-merge-confirm')}.click(), true`);
         await sleep(400);
         const loaded = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, id: ${play}.getSaveState().id, queue: ${play}.mergeStore.load(), field: ${el('save-name')}.value })`).then(JSON.parse);
         const loadedStatus = await status();
         await evaluate(`import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; })`);
-        ok(loaded.name === 'Other' && loaded.id === other && loaded.field === 'Other' && JSON.stringify(loaded.queue) === JSON.stringify([{ keep: other, merge: oldId }]) && loadedStatus.text === (await tx('saveMerged')).replace('{name}', 'Other') && loadedStatus.cls.includes('ok'), `Load user code from another id adopts it, queues the merge (keep ${other.slice(0, 4)}…, merge the old id) and reads "${loadedStatus.text}"`);
+        ok(loaded.name === 'Other' && loaded.id === other && loaded.field === 'Other' && JSON.stringify(loaded.queue) === JSON.stringify([{ keep: other, merge: oldId }]) && loadedStatus.text === (await tx('saveMergedInto')).replace('{other}', beforeName).replace('{name}', 'Other') && loadedStatus.cls.includes('ok'), `Merge with the code's card picked adopts its id, queues the merge (keep ${other.slice(0, 4)}…, merge the old id) and reads "${loadedStatus.text}"`);
         // The board's name wins unless the player renamed here. Data API muzzled throughout.
         await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
         const fetched = await evaluate(`JSON.stringify({ fetches: globalThis.__nameFetches, pending: ${play}.renameStore.load() })`).then(JSON.parse);
-        ok(fetched.fetches.length === 1 && fetched.fetches[0] === other && fetched.pending === null, `names typed here (Smoke, Offline) never asked the board for its name; the Load cleared the pending rename and its sync asked once (${fetched.fetches.length})`);
+        ok(fetched.fetches.length === 1 && fetched.fetches[0] === other && fetched.pending === null, `names typed here (Smoke, Offline) never asked the board for its name; the merge cleared the pending rename and its sync asked once (${fetched.fetches.length})`);
         // The loaded code carried an older name than the board's (renamed on another device): the open panel shows the newer one.
         await evaluate(`globalThis.__boardName = 'OtherNew', ${play}.syncLeaderboard().then(() => true)`);
         const adopted = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, stored: JSON.parse(localStorage.getItem('flappyPoop.save')).name, field: ${el('save-name')}.value, profile: ${play}.profileBtn.getText(), code: ${el('save-code')}.value })`).then(JSON.parse);
         const adoptedStatus = await status();
         const otherCode = await evaluate(`import('./src/save.js').then((m) => m.importCode(${el('save-code')}.value, { storage: { getItem: () => null, setItem() {} } })).then((r) => r.ok ? r.state.name : '')`);
-        ok(adopted.name === 'OtherNew' && adopted.stored === 'OtherNew' && adopted.field === 'OtherNew' && adopted.profile.startsWith('OtherNew') && adoptedStatus.text === (await tx('saveMerged')).replace('{name}', 'OtherNew') && otherCode === 'OtherNew', `the board's newer name replaces the loaded code's: stored, in the field, the welcome line, the profile and the code ("${adopted.profile}")`);
+        ok(adopted.name === 'OtherNew' && adopted.stored === 'OtherNew' && adopted.field === 'OtherNew' && adopted.profile.startsWith('OtherNew') && adoptedStatus.text === (await tx('saveMergedInto')).replace('{other}', beforeName).replace('{name}', 'OtherNew') && otherCode === 'OtherNew', `the board's newer name replaces the loaded code's: stored, in the field, the welcome line, the profile and the code ("${adopted.profile}")`);
         // A rename typed here goes to the board: the next sync keeps it and does not ask.
         await typeAndSave('Renamed');
         const fetches0 = await evaluate(`globalThis.__nameFetches.length`);
@@ -602,30 +715,57 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const kept = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, pending: ${play}.renameStore.load(), fetches: globalThis.__nameFetches.length })`).then(JSON.parse);
         ok(kept.name === 'Renamed' && kept.pending?.name === 'Renamed' && kept.pending?.id === other && kept.fetches === fetches0, `a rename typed here is kept (pending until a post carries it) and the board's "${'OtherNew'}" does not overwrite it`);
         await evaluate(`globalThis.__boardName = null, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; })`); // the stub answers "no name" from here on
-        // Clear: a first tap warns, a second inside the window signs the device out.
-        const keys = await evaluate(`import('./src/config.js').then((m) => JSON.stringify({ best: m.TUNING.bestKey, settings: m.TUNING.settingsKey, submits: m.LEADERBOARD.storageKey, merges: m.LEADERBOARD.mergesKey, rename: m.LEADERBOARD.renameKey, confirmMs: m.TUNING.saveClearConfirmMs }))`).then(JSON.parse);
+        // Sign out (plan 44): the button opens a confirm with the code and the warning; its own Sign out signs the device out.
+        const keys = await evaluate(`import('./src/config.js').then((m) => JSON.stringify({ best: m.TUNING.bestKey, settings: m.TUNING.settingsKey, submits: m.LEADERBOARD.storageKey, merges: m.LEADERBOARD.mergesKey, rename: m.LEADERBOARD.renameKey, }))`).then(JSON.parse);
         await evaluate(`localStorage.setItem('${keys.best}', '7'), ${play}.submitStore.save({ playerId: '${other}', name: 'Other', score: 5, toilet: false, level: 1 }), true`);
         await evaluate(`${el('save-clear-btn')}.click(), true`);
-        const armed = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, status: ${el('save-status')}.textContent, cls: ${el('save-status')}.className, disabled: ${el('save-clear-btn')}.disabled, outline: getComputedStyle(${el('save-clear-btn')}).backgroundColor, border: getComputedStyle(${el('save-clear-btn')}).borderTopColor, left: ${el('save-clear-btn')}.getBoundingClientRect().left < ${el('save-save-btn')}.getBoundingClientRect().left })`).then(JSON.parse);
-        ok(armed.name === 'Renamed' && armed.status === (await tx('saveClearConfirm')) && armed.cls.includes('error') && !armed.disabled && armed.outline === 'rgba(0, 0, 0, 0)' && armed.border === 'rgb(232, 94, 150)' && armed.left && keys.confirmMs >= 2000, `a first tap on Clear (pink outline, left of Save) only warns: "${armed.status.slice(0, 40)}…"; the player is still "${armed.name}"`);
-        await evaluate(`${el('save-clear-btn')}.click(), true`);
         await sleep(100);
-        const gone = await evaluate(`JSON.stringify({ state: ${play}.getSaveState(), save: localStorage.getItem('flappyPoop.save'), best: localStorage.getItem('${keys.best}'), submits: localStorage.getItem('${keys.submits}'), merges: localStorage.getItem('${keys.merges}'), rename: localStorage.getItem('${keys.rename}'), settings: localStorage.getItem('${keys.settings}') !== null, status: ${el('save-status')}.textContent, field: ${el('save-name')}.value, code: ${el('save-code')}.value, disabled: ${el('save-clear-btn')}.disabled, prompt: ${play}.profileBtn.getText() })`).then(JSON.parse);
-        ok(gone.state.name === '' && gone.state.id === null && gone.state.top.length === 0 && gone.best === null && gone.submits === null && gone.merges === null && gone.rename === null && gone.settings && gone.status === (await tx('saveCleared')) && gone.field === '' && gone.code === (await tx('saveNameRequired')) && gone.disabled && gone.prompt === (await tx('loadUserButton')), `a second tap signs the device out: no name, id or scores, the submits, merges, pending rename and legacy best gone, settings kept; Clear greys and the code field reads "${gone.code}"`);
-        // Back to the smoke's own name for the rest of the run.
+        const armed = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, warn: ${el('save-logout')}?.textContent ?? '', code: ${el('save-logout-code')}?.value ?? '', focus: document.activeElement?.id ?? null, outline: getComputedStyle(${el('save-clear-btn')}).backgroundColor, border: getComputedStyle(${el('save-clear-btn')}).borderTopColor, left: ${el('save-clear-btn')}.getBoundingClientRect().left < ${el('save-merge-btn')}.getBoundingClientRect().left })`).then(JSON.parse);
+        ok(armed.name === 'Renamed' && armed.warn.includes(await tx('saveSignOutWarning')) && armed.code.startsWith('fp1.') && armed.focus === 'save-logout-cancel' && armed.outline === 'rgba(0, 0, 0, 0)' && armed.border === 'rgb(232, 94, 150)' && armed.left, `Sign out (pink outline, left of Merge) opens its confirm with the code (${armed.code.slice(0, 8)}…) and the focus on Cancel; the player is still "${armed.name}"`);
+        await evaluate(`${el('save-logout-confirm')}.click(), true`);
+        await sleep(100);
+        const gone = await evaluate(`JSON.stringify({ state: ${play}.getSaveState(), save: localStorage.getItem('flappyPoop.save'), best: localStorage.getItem('${keys.best}'), submits: localStorage.getItem('${keys.submits}'), merges: localStorage.getItem('${keys.merges}'), rename: localStorage.getItem('${keys.rename}'), settings: localStorage.getItem('${keys.settings}') !== null, status: ${el('save-status')}.textContent, field: ${el('save-name')}?.value ?? '', doors: ${el('save-have-btn')}?.offsetParent != null && ${el('save-new-btn')}?.offsetParent != null, dashboard: ${el('save-clear-btn')}.offsetParent !== null, prompt: ${play}.profileBtn.getText() })`).then(JSON.parse);
+        ok(gone.state.name === '' && gone.state.id === null && gone.state.top.length === 0 && gone.best === null && gone.submits === null && gone.merges === null && gone.rename === null && gone.settings && gone.status === (await tx('saveCleared')) && gone.field === '' && gone.doors && !gone.dashboard && gone.prompt === (await tx('loadUserButton')), `the confirm's Sign out signs the device out: no name, id or scores, the submits, merges, pending rename and legacy best gone, settings kept; the panel shows Sign in | Create user again`);
+        // Back to the smoke's own name for the rest of the run: Create user.
+        await evaluate(`${el('save-new-btn')}.click(), true`);
         await typeAndSave('Smoke');
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         const back = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, id: ${play}.getSaveState().id, halo: ${play}.profileHalo.visible })`).then(JSON.parse);
-        ok(back.name === 'Smoke' && /^[A-Za-z0-9_-]{22}$/.test(back.id) && !back.halo, `a new username after Clear starts a new player (fresh id), the halo off again`);
+        ok(back.name === 'Smoke' && /^[A-Za-z0-9_-]{22}$/.test(back.id) && !back.halo, `a new username after Sign out starts a new player (fresh id), the halo off again`);
+        // Merge with this device kept (the default pick): its id and name stay, the code's scores join, the pair
+        // folds the code's id into this one, and the name goes to the board as a rename. Data API muzzled; the
+        // queued pair is dropped after, so it never reaches the live board.
+        {
+          const third = 'CCCCCCCCCCCCCCCCCCCCCC';
+          const thirdCode = await evaluate(`import('./src/save.js').then((m) => m.exportCode({ id: '${third}', name: 'Third', top: [{ score: 9, toilet: false, level: 2 }], exportedAt: null }))`);
+          await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
+          await evaluate(`${play}.openSavePanel(), true`);
+          await sleep(200);
+          await pasteMerge(thirdCode);
+          await evaluate(`${el('save-merge-confirm')}.click(), true`);
+          await sleep(400);
+          const kept = await evaluate(`JSON.stringify({ id: ${play}.getSaveState().id, name: ${play}.getSaveState().name, top: ${play}.getSaveState().top.map((e) => e.score), queue: ${play}.mergeStore.load(), rename: ${play}.renameStore.load(), status: ${el('save-status')}.textContent })`).then(JSON.parse);
+          await evaluate(`${play}.mergeStore.clear(), ${play}.setSaveState({ ...${play}.getSaveState(), top: [] }), import('./src/save.js').then((s) => (s.saveLocal(${play}.getSaveState()), import('./src/ui/savePanel.js'))).then((m) => (m.closeSavePanel(), import('./src/config.js'))).then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; })`);
+          ok(kept.id === back.id && kept.name === 'Smoke' && kept.top.join() === '9' && JSON.stringify(kept.queue) === JSON.stringify([{ keep: back.id, merge: third }]) && kept.rename?.id === back.id && kept.rename?.name === 'Smoke' && kept.status === (await tx('saveMergedInto')).replace('{other}', 'Third').replace('{name}', 'Smoke'), `Merge with this device kept keeps its id and name, takes the code's scores (${kept.top.join()}), queues the code's id into it and notes the name as a rename ("${kept.status}")`);
+        }
         // Scores flow down: a code carrying only this device's 160 loads; the board's best off (229, LV 6) and
         // on the toilet (261, LV 6), played on another device, join the list, the profile, the welcome line and
         // the code, and are filed as confirmed (no post back). Offline the code's list stands. Data API muzzled.
         {
           await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
           const mine = await evaluate(`import('./src/save.js').then((m) => m.exportCode({ id: '${back.id}', name: 'Smoke', top: [{ score: 160, toilet: false, level: 4 }, { score: 143, toilet: false, level: 3 }], exportedAt: null }))`);
+          // This player's own code in Merge is "That's already you." (plan 44), so it comes in the way a device signs
+          // back in: Sign out through its confirm, then Sign in with the code.
           await evaluate(`${play}.submitStore.clear(), ${play}.openSavePanel(), true`);
           await sleep(200);
-          await evaluate(`${el('save-load')}.value = ${JSON.stringify(mine)}, ${el('save-load-btn')}.click(), true`);
+          await pasteMerge(mine);
+          const same = await evaluate(`JSON.stringify({ status: ${el('save-status')}.textContent, cards: ${el('save-card-device')}.offsetParent !== null, go: !${el('save-merge-confirm')}.disabled })`).then(JSON.parse);
+          ok(same.status === (await tx('saveSamePlayer')) && !same.cards && !same.go, `this player's own code in Merge says "${same.status}" and offers no merge`);
+          await evaluate(`${el('save-merge-cancel')}.click(), ${el('save-clear-btn')}.click(), ${el('save-logout-confirm')}.click(), true`);
+          await sleep(100);
+          await evaluate(`${el('save-have-btn')}.click(), ${el('save-load')}.value = ${JSON.stringify(mine)}, ${el('save-load')}.dispatchEvent(new Event('input')), true`);
+          for (let i = 0; i < 40 && (await evaluate(`${el('save-load-btn')}.disabled`)); i += 1) await sleep(50);
+          await evaluate(`${el('save-load-btn')}.click(), true`);
           await sleep(500);
           const offline = await evaluate(`JSON.stringify({ top: ${play}.getSaveState().top.map((e) => e.score), pulled: ${play}.boardBestsFor })`).then(JSON.parse);
           ok(offline.top.join() === '160,143' && offline.pulled === null, `offline the board's scores cannot come down: the loaded code's list stands (${offline.top.join(' · ')}) and the next sync asks again`);
@@ -766,9 +906,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => {
           globalThis.__fetchPg = globalThis.fetch;
           globalThis.__pageAsks = [];
-          const N = 60;
+          globalThis.__pgN = 60; // the board's size (plan 35, 4.5 sets 50 below)
+          const N = () => globalThis.__pgN;
           const name = (p) => (p === 40 || p === 52 ? 'PageTester' : 'Pg' + p);
-          const pagePlaces = (b) => { const off = b.p_offset ?? 0; const lim = b.p_limit ?? 25; return Array.from({ length: Math.max(0, Math.min(lim, N - off)) }, (_, k) => off + k + 1); };
+          const pagePlaces = (b) => { const off = b.p_offset ?? 0; const lim = b.p_limit ?? 25; return Array.from({ length: Math.max(0, Math.min(lim, N() - off)) }, (_, k) => off + k + 1); };
           const withMe = (places, mk) => (places.includes(40) ? places.map(mk) : [...places.map(mk), mk(40)]).sort((a, b) => a.rank - b.rank);
           globalThis.fetch = async (url, init) => {
             const u = String(url);
@@ -778,10 +919,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
             if (['score_board', 'daily_board', 'tournament_board', 'education_board'].includes(fn)) globalThis.__pageAsks.push([fn, 'p_offset' in b ? b.p_offset : null]);
             const places = pagePlaces(b);
             if (fn === 'score_board') return json(places.map((p) => ({ name: name(p), score: 700 - 5 * p, toilet: p === 52, level: 3 })));
-            if (fn === 'player_rank') return json(b.p_toilet ? { rank: 52, total: N, score: 440, toilet: true, level: 3 } : { rank: 40, total: N, score: 500, toilet: false, level: 3 });
-            if (fn === 'daily_board') return json(withMe(places, (p) => ({ rank: p, name: name(p), score: 900 - p, level: 5, pipes: 10, me: p === 40, total: N })));
+            if (fn === 'player_rank') return json(b.p_toilet ? { rank: 52, total: N(), score: 440, toilet: true, level: 3 } : { rank: 40, total: N(), score: 500, toilet: false, level: 3 });
+            if (fn === 'daily_board') return json(withMe(places, (p) => ({ rank: p, name: name(p), score: 900 - p, level: 5, pipes: 10, me: p === 40, total: N() })));
             if (fn === 'tournament_board') return json(withMe(places, (p) => ({ rank: p, name: name(p), best_score: 10, gold: 100 - p, silver: 0, bronze: 0, events: 3, me: p === 40 })));
-            if (fn === 'education_board') return json(places.map((p) => ({ rank: p, name: 'Pg' + p, grade: 90 - p / 10, runs: 4, me: false, total: N })));
+            if (fn === 'education_board') return json(places.map((p) => ({ rank: p, name: 'Pg' + p, grade: 90 - p / 10, runs: 4, me: false, total: N() })));
             return new Response('{"message":"stub"}', { status: 503 });
           };
           return import('./src/config.js').then((m) => { globalThis.__apiPg = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; });
@@ -895,6 +1036,24 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const am = await asks();
         ok(m1.tab === 'medals' && m1.label === '1-25' && m1.footer.includes('#40') && m2.label === '26-50' && m2.first === '26.' && m2.pink === 1 && m2.footer.includes('#40'), `🏅 pages too: "${m1.label}" then "${m2.label}", the player's place in the footer on both ("${m2.footer}")`);
         ok(e1.tab === 'education' && e1.label === '1-25' && e2.label === '26-50' && e2.first === '26.' && e2.last === '50.' && am.some(([fn, o]) => fn === 'tournament_board' && o === 25) && am.some(([fn, o]) => fn === 'education_board' && o === null) && am.some(([fn, o]) => fn === 'education_board' && o === 25), `📚 pages too: "${e1.label}" then "${e2.label}" (${JSON.stringify(am)})`);
+        // A board of exactly 50 (plan 35, 4.5): page 2 is the last, › greyed, on 🏆 (no total) and 🏅 (no
+        // total) alike: the page asked one row past it (p_limit 26) and none came back.
+        await evaluate(`(globalThis.__pgN = 50, globalThis.__pageLimits = [], true)`);
+        await evaluate(`(() => { const f = globalThis.fetch; globalThis.__fetchPg50 = f; globalThis.fetch = (url, init) => { if (init?.body) { const b = JSON.parse(init.body); if ('p_limit' in b) globalThis.__pageLimits.push(b.p_limit); } return f(url, init); }; return true; })()`);
+        await pgTab(0);
+        const f1 = await pgView();
+        await pgTap(1);
+        const f2 = await pgView();
+        await pgTab(2);
+        const g1 = await pgView();
+        await pgTap(1);
+        const g2 = await pgView();
+        await pgTap(1);
+        const g3 = await pgView();
+        await asks();
+        const limits = await evaluate(`JSON.stringify(globalThis.__pageLimits)`).then(JSON.parse);
+        await evaluate(`(globalThis.fetch = globalThis.__fetchPg50, globalThis.__pgN = 60, true)`);
+        ok(f1.label === '1-25' && f1.next && f2.label === '26-50' && f2.n === 25 && !f2.next && g1.label === '1-25' && g1.next && g2.label === '26-50' && !g2.next && g3.label === '26-50' && limits.length > 0 && limits.every((l) => l === 26), `a board of exactly 50: 🏆 and 🏅 stop at "${f2.label}" / "${g2.label}" with › greyed, no empty page (asked p_limit ${[...new Set(limits)].join(', ')})`);
         await closeTop('Leaderboard');
         await sleep(300);
         await evaluate(`(globalThis.fetch = globalThis.__fetchPg, __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__apiPg; return import('./src/save.js'); }).then((m) => (${P}.setSaveState(m.saveLocal(${saved})), true)))`);
@@ -993,6 +1152,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       }
     });
     await section('run', async () => {
+      // Plan 35, 2.3: the sounds no run needs at once (the quiz's books, the sparkle, the bubble's pop, the
+      // two-player flush) load after Play's first frame instead of holding the splash; they are in within 5 s.
+      {
+        const lazy = await evaluate(`new Promise((res) => { const keys = ['book-open', 'book-flip', 'book-close', 'sparkle', 'bubble-pop', 'flush']; const t0 = Date.now(); const tick = () => { const v = keys.map((k) => __flappy.cache.audio.exists(k)); if (v.every(Boolean) || Date.now() - t0 > 5000) res(JSON.stringify(v)); else setTimeout(tick, 50); }; tick(); })`).then(JSON.parse);
+        ok(lazy.every(Boolean), `the six lazy sounds load after Play's first frame (${lazy.join(', ')})`);
+      }
       // A run: tap starts it; opening the board mid-run pauses; closing leaves it paused.
       await evaluate(`__flappy.scene.getScene('Play').flap(), true`);
       await sleep(1000);
@@ -1758,7 +1923,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const runAndDie = async (score, start) => {
           if (start) await evaluate(start);
           await waitUntil(`${play}.state === 'playing'`);
-          await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.score = ${score}; p.die(); return true; })()`);
+          // One pipe crossed: a run that crosses none is not counted, so it could set no best (plan 48).
+          await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.score = ${score}; p.pipesPassed = Math.max(p.pipesPassed, 1); p.die(); return true; })()`);
           await waitUntil(`__flappy.scene.isActive('Over')`);
           await sleep(TT.retryLockoutMs + 400);
           return evaluate(`JSON.stringify({ texts: ${O}.children.list.filter((c) => c.type === 'Text').map((c) => c.text), again: ${O}.buttons.again, card: JSON.stringify(${O}.cardData ?? {}) })`).then(JSON.parse);
@@ -1766,11 +1932,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`import('./src/save.js').then((m) => { const p = ${play}; p.setSaveState(m.saveLocal({ ...p.save, top: [{ score: 5, toilet: false, level: 1 }] })); localStorage.setItem(${JSON.stringify(TT.bestKey)}, '5'); return true; })`);
         const beat = await runAndDie(9, `${play}.flap(), true`);
         ok(beat.texts.includes(pb) && !beat.card.includes(pb) && beat.again, `a run that beats the best (9 > 5) shows "${pb}" on the panel, not on the card; Play again is offered`);
+        // Plan 35, 4.1: the page notes the frame Play reaches 'playing' after the click (Play again's slide is againSlideMs, not launchSlideMs).
+        await evaluate(`(() => { window.__againAt = performance.now(); window.__againPlaying = null; const tick = () => { if (${play}.state === 'playing' && !__flappy.scene.isActive('Over')) { window.__againPlaying = performance.now(); return; } requestAnimationFrame(tick); }; requestAnimationFrame(tick); return true; })()`);
         await tapAt(beat.again.x, beat.again.y);
         const restarted = await waitUntil(`!__flappy.scene.isActive('Over') && ${play}.state === 'playing'`);
+        const slideMs = await evaluate(`window.__againPlaying == null ? null : Math.round(window.__againPlaying - window.__againAt)`);
         const flag = await evaluate(`__flappy.registry.get('playAgain')`);
         const lower = await runAndDie(3);
         ok(restarted && flag === false && !lower.texts.includes(pb), `a real click on Play again starts a new run at once (flag cleared: ${flag}); a lower score shows no best line`);
+        ok(slideMs != null && slideMs >= TT.againSlideMs && slideMs < TT.launchSlideMs, `Play again's slide is the quick one: click to flying ${slideMs} ms (at least againSlideMs ${TT.againSlideMs}, under launchSlideMs ${TT.launchSlideMs})`);
         // Wide, 👥 on: Play again still starts a one-player run, and Home after it stays home.
         await evaluate(`(__flappy.scene.stop('Over'), __flappy.registry.set('versus', true), ${play}.scene.restart(), true)`);
         await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
@@ -2185,7 +2355,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await evaluate(`${play}.openSavePanel(), true`);
           await sleep(200);
           // Blur first, as a phone does when Save is tapped: that path must not store the word either.
-          await evaluate(`document.getElementById('save-name').value = ' ${typed} ', document.getElementById('save-name').dispatchEvent(new Event('blur')), document.getElementById('save-save-btn').click(), true`);
+          await evaluate(`(document.getElementById('save-name') ?? (document.getElementById('save-new-btn').click(), null)), document.getElementById('save-name').value = ' ${typed} ', document.getElementById('save-name').dispatchEvent(new Event('blur')), document.getElementById('save-save-btn').click(), true`); // signed out, the field is on Create user's screen (plan 44)
           await sleep(200);
           const seen = await evaluate(`JSON.stringify({ test: ${play}.isTestMode(), name: ${play}.getSaveState().name, stored: JSON.parse(localStorage.getItem('flappyPoop.save')).name, submit: localStorage.getItem('flappyPoop.leaderboard'), field: document.getElementById('save-name').value, status: document.getElementById('save-status').textContent, badge: ${play}.testBadge.visible ? ${play}.testBadge.text : null })`).then(JSON.parse);
           const wantStatus = await tx(wantOn ? 'testModeOn' : 'testModeOff');
@@ -2316,18 +2486,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${settings}.children.list.find((c) => c.type === 'Text' && c.text === '${await tx('testExit')}').emit('pointerdown'), true`);
         await sleep(500);
         const exited = await evaluate(`JSON.stringify({ test: ${play}.isTestMode(), run: ${play}.runIsTest, invincible: ${play}.testInvincible(), h: ${settings}.children.list.find((c) => c.type === 'Rectangle' && c.width === 600).height, active: __flappy.scene.isActive('Settings') })`).then(JSON.parse);
-        ok(!exited.test && exited.run && !exited.invincible && exited.h === 860 && exited.active, 'Exit test mode turns it off mid-run, redraws the plain 860 px Settings, and the run stays a test run');
+        ok(!exited.test && exited.run && !exited.invincible && exited.h === 1010 && exited.active, 'Exit test mode turns it off mid-run, redraws the plain 1010 px Settings (860 before plan 35, 4.2), and the run stays a test run');
         await closeTop('Settings');
         await sleep(400);
         const storesBefore = await stores();
-        await evaluate(`${play}.score = 999, true`);
+        await evaluate(`${play}.score = 999, ${play}.pipesPassed = Math.max(${play}.pipesPassed, 1), true`); // a pipe crossed, so only the test-run latch keeps it unrecorded (plan 48)
         await dieNow();
         ok((await stores()) === storesBefore, 'that run (test mode exited partway) still records nothing');
 
         await home();
         await startRun();
         const normal = await evaluate(`JSON.stringify({ test: ${play}.runIsTest, level: ${play}.level, badge: ${play}.testBadge.visible })`).then(JSON.parse);
-        await evaluate(`${play}.score = 999, true`);
+        await evaluate(`${play}.score = 999, ${play}.pipesPassed = Math.max(${play}.pipesPassed, 1), true`); // a run that counts crossed a pipe (plan 48)
         await dieNow();
         const top = await evaluate(`JSON.parse(localStorage.getItem('flappyPoop.save')).top[0]?.score ?? null`);
         ok(!normal.test && normal.level === 1 && !normal.badge && top === 999 && (await stores()) !== storesBefore, `after exiting, a normal run starts on level 1 with no badge and records again (top score ${top})`);
@@ -2516,7 +2686,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await evaluate(`${play}.setHand('left'), true`);
           const leftCode = await codeOf();
           await evaluate(`${play}.setHand('right'), true`);
-          await evaluate(`document.getElementById('save-load').value = ${JSON.stringify(leftCode)}, document.getElementById('save-load-btn').click(), true`);
+          // This player's own code (plan 44): Merge would say "That's already you.", so it comes in as a device
+          // signing back in does: Sign out through its confirm, then Sign in with the code.
+          const $ = (id) => `document.getElementById('${id}')`;
+          await evaluate(`${$('save-clear-btn')}.click(), ${$('save-logout-confirm')}.click(), true`);
+          await sleep(100);
+          await evaluate(`${$('save-have-btn')}.click(), ${$('save-load')}.value = ${JSON.stringify(leftCode)}, ${$('save-load')}.dispatchEvent(new Event('input')), true`);
+          for (let i = 0; i < 40 && (await evaluate(`${$('save-load-btn')}.disabled`)); i += 1) await sleep(50);
+          await evaluate(`${$('save-load-btn')}.click(), true`);
           let loaded = null;
           for (let i = 0; i < 40; i += 1) { await sleep(50); loaded = await evaluate(`JSON.stringify({ hand: ${play}.settings.load().hand, btn: ${play}.beanButton.x, name: ${play}.getSaveState().name, status: document.getElementById('save-status').textContent })`).then(JSON.parse); if (loaded.hand === 'left') break; }
           await evaluate(`${play}.setHand('right'), true`);
@@ -2524,7 +2701,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           const rightPayload = decode(rightCode);
           const leftPayload = decode(leftCode);
           ok(rightPayload.h === undefined && leftPayload.h === 'l' && leftPayload.n === rightPayload.n, `the save code carries the side only for left (right: no h, left: h ${JSON.stringify(leftPayload.h)})`);
-          ok(loaded.hand === 'left' && loaded.btn === inset && loaded.name === rightPayload.n, `loading a left-handed code on a right-handed device moves the button to x ${loaded.btn} (hand ${loaded.hand}, name ${loaded.name}, status "${loaded.status}")`);
+          ok(loaded.hand === 'left' && loaded.btn === inset && loaded.name === rightPayload.n, `signing in with a left-handed code on a right-handed device moves the button to x ${loaded.btn} (hand ${loaded.hand}, name ${loaded.name}, status "${loaded.status}")`);
         }
         await phone(390, 844);
         ok((await settle(720)) === 720, 'rotating back re-fits to the phone field');
@@ -2945,6 +3122,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await finish(P2, 9);
         ok(await until(`${VS}.match.status === 'over'`), 'P2 crosses the rectum\'s finish line and the match is over');
         await sleep(100);
+        // Both out (plan 35, 4.3): no "Waiting for P…" on either half, "Made it out!" on both until the panel.
+        const outBanners = await evaluate(`JSON.stringify([${P1}, ${P2}].map((p) => ({ title: p.levelTitle.visible ? p.levelTitle.text : null, hint: p.levelHint.visible ? p.levelHint.text : null })))`).then(JSON.parse);
+        ok(outBanners.every((b) => b.title === 'Made it out!' && b.hint === null), `once both are out, both halves read only "Made it out!" (${JSON.stringify(outBanners)})`);
         const ended = await evaluate(`JSON.stringify({ status: ${VS}.match.status, a: ${P1}.state, b: ${P2}.state, scores: ${VS}.match.slots.map((s) => s.score), won: ${VS}.match.slots.map((s) => s.won), ended: ${VS}.match.slots.map((s) => s.ended), over: __flappy.scene.isActive('Over'), panel: ${VS}.resultShown, faces: [${P1}.poop.texture.key, ${P2}.poop.texture.key] })`).then(JSON.parse);
         ok(ended.status === 'over' && ended.a === 'dead' && ended.b === 'dead' && ended.scores[0] === 5 + want.bonus && ended.scores[1] === 9 && ended.won[0] && ended.won[1] && ended.ended[0] && ended.ended[1] && !ended.over && !ended.panel && ended.faces.every((f) => f === 'poop'), `both out (${ended.scores.join(' / ')}), no Over, the panel waits for the delay`);
         // The beat before the panel: Esc / B (onPadBack), A (primary) and Bracket (home) hand nothing on;
@@ -3525,18 +3705,33 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const gaps1 = await gapsNow();
         ok(gaps0 === gaps1 && JSON.parse(gaps0).length >= 9 && new Set(JSON.parse(gaps0)).size > 3, `two runs on ${DAY} lay the same ${JSON.parse(gaps0).length} gaps (${gaps0})`);
 
-        // A run cut off mid-flight (a reload; restart stands in) is the day's result all the same.
+        // A run cut off mid-flight (a reload; restart stands in) once it crossed a pipe is the day's result all the same.
         await home();
         await evaluate(`${P}.startDaily({ day: '${DAY2}' })`);
         await waitFor(`${P}.state === 'playing'`);
-        await evaluate(`(${P}.graceLeftMs = 1e9, ${P}.score = 9, true)`);
+        await evaluate(`(${P}.graceLeftMs = 1e9, ${P}.score = 9, ${P}.pipesPassed = ${P}.daily.startPipes + 2, true)`);
         await sleep(200);
         await evaluate(`(globalThis.__dailyBoxes = ${P}.readyBoxes, ${P}.scene.restart(), true)`);
         await waitFor(`${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'ready'`);
         const r3a = await stored();
         await evaluate(`${P}.syncLeaderboard(), true`);
         const r3 = await stored();
-        ok(r3a.rec?.day === DAY2 && r3a.rec.final === false && r3.rec?.final === true && r3.rec.score === 9 && r3.queue.some((q) => q.day === DAY2 && q.score === 9), `a run abandoned at 9 is left unfinished (final ${r3a.rec?.final}); the next sync makes it final and queues it (${r3.queue.map((q) => q.day).join(', ')})`);
+        ok(r3a.rec?.day === DAY2 && r3a.rec.final === false && r3a.rec.pipes === 2 && r3.rec?.final === true && r3.rec.score === 9 && r3.queue.some((q) => q.day === DAY2 && q.score === 9), `a run abandoned at 9 after 2 pipes is left unfinished (final ${r3a.rec?.final}); the next sync makes it final and queues it (${r3.queue.map((q) => q.day).join(', ')})`);
+        // One cut off before its first pipe is no attempt (plan 48, call G): the next sync releases it,
+        // posts nothing and leaves the day free (the online check below finds no post for it).
+        const DAY3 = '2026-11-08';
+        await home();
+        await evaluate(`${P}.startDaily({ day: '${DAY3}' })`);
+        await waitFor(`${P}.state === 'playing'`);
+        await evaluate(`(${P}.graceLeftMs = 1e9, ${P}.score = 4, true)`);
+        await sleep(200);
+        await evaluate(`(globalThis.__dailyBoxes = ${P}.readyBoxes, ${P}.scene.restart(), true)`);
+        await waitFor(`${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'ready'`);
+        const r4a = await stored();
+        const free4a = await evaluate(`!${P}.dailyStore.spent('${DAY3}', ${P}.save.id)`);
+        await evaluate(`${P}.syncLeaderboard(), true`);
+        const r4 = await stored();
+        ok(r4a.rec?.day === DAY3 && r4a.rec.final === false && r4a.rec.pipes === 0 && free4a && r4.rec === null && !r4.queue.some((q) => q.day === DAY3) && r4.queue.some((q) => q.day === DAY2), `a run cut off at 0 pipes is not a spent attempt (free ${free4a}); the next sync releases it (record ${JSON.stringify(r4.rec)}) and queues nothing for its day (${r4.queue.map((q) => q.day).join(', ')})`);
 
         // Online (a stubbed board): the next sync posts both queued days once each, under the player's
         // current name (they were queued before it had one), and the queue empties.
@@ -3581,7 +3776,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(closeAt.x, closeAt.y);
         await waitFor(`!__flappy.scene.isActive('Daily')`, 20);
         const u2 = await popup();
-        ok(u0.halo && u1.open && u1.label === (await tx('dailyCreateUser')) && u1.note === (await tx('dailyNeedName')) && !u2.open && u2.state === 'ready', `unplayed, the 🌞 glows; a real click opens the popup ("${u1.label}" with no username) and ✕ goes back to the home screen (${u2.state})`);
+        ok(u0.halo && u1.open && u1.label === (await tx('dailyCreateUser')) && u1.note === (await evaluate(`import('./src/i18n.js').then((m) => m.fillDaily(m.t('en', 'dailyNeedName'), ${D}.glyph))`)) && !u2.open && u2.state === 'ready', `unplayed, the 🌞 glows; a real click opens the popup ("${u1.label}" with no username) and ✕ goes back to the home screen (${u2.state})`);
         // Create user: the save panel opens over the popup; a saved name turns the button into Play.
         await clickSun();
         await clickButton();
@@ -3596,6 +3791,36 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await waitFor(`${P}.state === 'playing'`);
         const run = await evaluate(`JSON.stringify({ daily: ${P}.runIsDaily, day: ${P}.daily?.day, level: ${P}.level, open: __flappy.scene.isActive('Daily') })`).then(JSON.parse);
         ok(run.daily && run.day === today.day && run.level === today.level && !run.open, `Play closes the popup and starts today's Daily Dump (${run.day}, LV ${run.level})`);
+        // A crash before the first pipe gives the attempt back (plan 48, call D): the 🌞 glows again and
+        // the popup offers Play; nothing is stored or queued for the day.
+        await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
+        await waitFor(`__flappy.scene.isActive('Over')`, 40);
+        await sleep(TT.retryLockoutMs + 300);
+        const e0 = await stored();
+        // Its panel (call H, Michael's pick at Preview A): Play again, the rank cell blank, the note in the countdown's place.
+        const freePanel = () => evaluate(`JSON.stringify((() => { const o = __flappy.scene.getScene('Over'); return { again: o.buttons.again ?? null, rank: o.rankText?.text ?? null, cd: o.countdown?.text ?? null, texts: o.children.list.filter((c) => c.type === 'Text').map((c) => c.text) }; })())`).then(JSON.parse);
+        const eo = await freePanel();
+        const freeNote = await tx('dailyNotCounted');
+        ok(eo.again && eo.rank === null && eo.cd === null && eo.texts.includes(freeNote), `its panel offers Play again (${Boolean(eo.again)}), leaves the rank cell blank (${eo.rank}) and says "${freeNote.replace('\n', ' ')}" where the countdown was (${eo.cd})`);
+        await home();
+        const e1 = await popup();
+        await clickSun();
+        const e2 = await popup();
+        ok(e0.rec === null && !e0.queue.some((q) => q.day === today.day) && e1.halo && e2.open && e2.label === (await tx('dailyPlay')), `a Daily Dump that crashes at pipe 0 can be started again: no record (${JSON.stringify(e0.rec)}), nothing queued, the 🌞 glows (${e1.halo}), the popup offers "${e2.label}"`);
+        // From the popup, and another crash at pipe 0: a real tap on the panel's Play again starts today's Daily Dump again.
+        await clickButton();
+        await waitFor(`${P}.state === 'playing'`);
+        await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
+        await waitFor(`__flappy.scene.isActive('Over')`, 40);
+        await sleep(TT.retryLockoutMs + 300);
+        const eo2 = await freePanel();
+        await evaluate(`globalThis.__dailyBoxes = ${P}.readyBoxes, true`);
+        await tapAt(eo2.again.x, eo2.again.y);
+        const againOk = await waitFor(`${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'playing' && ${P}.runIsDaily && ${P}.daily?.day === '${today.day}' && !__flappy.scene.isActive('Over')`, 60);
+        ok(againOk, `Play again on that panel starts today's Daily Dump again (${await evaluate(`${P}.state + ' ' + ${P}.runIsDaily + ' ' + (${P}.daily?.day ?? null)`)})`);
+        // And this time one pipe crossed: the day is spent.
+        await evaluate(`(${P}.graceLeftMs = 1e9, ${P}.pipesPassed = ${P}.daily.startPipes + 1, true)`);
+        await waitFor(`JSON.parse(localStorage.getItem('${keys[0]}') ?? 'null')?.pipes === 1`, 40);
         await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
         await waitFor(`__flappy.scene.isActive('Over')`, 40);
         await home();
@@ -3606,7 +3831,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await clickButton();
         await waitFor(`__flappy.scene.isActive('Over')`, 30);
         const res = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), daily: __flappy.scene.getScene('Over').scene.settings.data?.daily?.day ?? null, open: __flappy.scene.isActive('Daily') })`).then(JSON.parse);
-        ok(!p0.halo && p1.label === (await tx('dailySeeResult')) && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(p1.countdown ?? '') && res.over && res.daily === today.day && !res.open, `played: no glow; the popup offers "${p1.label}" with "${p1.countdown}", which opens today's result`);
+        ok(!p0.halo && p1.label === (await tx('dailySeeResult')) && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(p1.countdown ?? '') && res.over && res.daily === today.day && !res.open, `played (a pipe crossed): no glow; the popup offers "${p1.label}" with "${p1.countdown}", which opens today's result`);
         // Today's result is a finished screen: Play sits 'dead' under it, so no tap or key on it starts a
         // run behind it (it used to stay 'ready', and every tap on Over also reached Play's flap()).
         const playNow = () => evaluate(`JSON.stringify({ state: ${P}.state, launching: ${P}.launching, over: __flappy.scene.isActive('Over'), board: __flappy.scene.isActive('Leaderboard'), versus: __flappy.scene.isActive('Versus') })`).then(JSON.parse);
@@ -3887,8 +4112,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(gateTexts.includes(await t('statsGateTitle')) && gateTexts.includes(await t('statsGateBody')) && (await evaluate(`__career.profiles.length`)) === asked0, 'the gate invites them to create a user and asks the server nothing');
         await evaluate(`${ST}.createUser(), true`);
         await sleep(300);
-        const panel = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, focus: document.activeElement?.id ?? null, profile: document.getElementById('save-profile-btn').disabled })`).then(JSON.parse);
-        ok(panel.open && panel.focus === 'save-name' && panel.profile, `Create user opens the save panel on the name field (focus ${panel.focus}); its Profile button is greyed out without a name`);
+        const panel = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, focus: document.activeElement?.id ?? null, profile: document.getElementById('save-profile-btn').offsetParent === null, back: document.getElementById('save-back')?.offsetParent != null })`).then(JSON.parse);
+        ok(panel.open && panel.focus === 'save-name' && panel.profile && panel.back, `Create user opens the save panel on its Create user screen, the caret in the name field (focus ${panel.focus}); no Profile button without a name`);
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         ok((await active('Stats')) && (await evaluate(`${ST}.view?.state`)) === 'gate', 'closing the panel without a name leaves the gate up');
         await named();
@@ -3911,7 +4136,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await shut();
         await evaluate(`(${P}.openSavePanel(), true)`);
         await sleep(200);
-        ok(!(await evaluate(`document.getElementById('save-profile-btn').disabled`)), 'with a username the Profile button is enabled');
+        ok(await evaluate(`((b) => b.offsetParent !== null && !b.disabled)(document.getElementById('save-profile-btn'))`), 'with a username the dashboard shows the Profile button');
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         await evaluate(`globalThis.__profile = null, true`);
       }
@@ -3922,6 +4147,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await evaluate(`document.getElementById('save-profile-btn').click(), true`);
       ok((await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view && ${ST}.view.own`)) && (await evaluate(`document.getElementById('save-panel').hidden`)), "the save panel's Profile button closes the panel and opens the own profile");
       await shut();
+      // Closing a profile opened from the dashboard opens the dashboard again (plan 44); a profile opened any other way does not.
+      ok(await waitFor(`!document.getElementById('save-panel').hidden && document.getElementById('save-code').offsetParent !== null`), 'closing that profile opens the save panel on the dashboard again');
+      await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+      await evaluate(`(${P}.openStats(), true)`);
+      await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view && ${ST}.view.own`);
+      await shut();
+      await sleep(200);
+      ok(await evaluate(`document.getElementById('save-panel').hidden`), 'a profile opened another way closes to the home screen, no panel');
     });
 
     await section('education-unlock', async () => {
@@ -3964,7 +4197,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await evaluate(`${play}.openSavePanel(), true`);
           await sleep(200);
           // Blur first, as a phone does when Save is tapped: that path must not store the word either.
-          await evaluate(`document.getElementById('save-name').value = ' ${typed} ', document.getElementById('save-name').dispatchEvent(new Event('blur')), document.getElementById('save-save-btn').click(), true`);
+          await evaluate(`(document.getElementById('save-name') ?? (document.getElementById('save-new-btn').click(), null)), document.getElementById('save-name').value = ' ${typed} ', document.getElementById('save-name').dispatchEvent(new Event('blur')), document.getElementById('save-save-btn').click(), true`); // signed out, the field is on Create user's screen (plan 44)
           await sleep(200);
           const seen = await evaluate(`JSON.stringify({ save: localStorage.getItem('flappyPoop.save'), field: document.getElementById('save-name').value, name: ${play}.getSaveState().name ?? '', status: document.getElementById('save-status').textContent })`).then(JSON.parse);
           await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
@@ -4361,6 +4594,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(quitBox.x, quitBox.y);
         await sleep(200);
         const armed = await sideNow();
+        // The hold (plan 35, 4.6): a second tap inside explainMinMs does nothing, the button dimmed.
+        await tapAt(quitBox.x, quitBox.y);
+        await sleep(150);
+        const held = await evaluate(`JSON.stringify({ held: ${play}.breakQuitHeld(), state: ${play}.state, lb: ${play}.levelBreak, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
+        ok(held.held && held.state === 'paused' && held.lb && !held.over, `a quick second tap on the armed Quit does nothing while it is held (${JSON.stringify(held)})`);
+        for (let i = 0; i < 40 && (await evaluate(`${play}.breakQuitHeld()`)); i += 1) await sleep(100);
         await tapAt(quitBox.x, quitBox.y);
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Over')`)); i += 1) await sleep(100);
         const quitOver = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), state: ${play}.state, gaveUp: ${play}.breakGaveUp })`).then(JSON.parse);
@@ -4795,8 +5034,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // pays a coin and makes the coin's sound alone (plan 21, E1: the ding no longer plays with it;
         // a revive's and the bonus quiz's right answers, which pay nothing, still ding).
         const { listen, heard, unlisten } = quizSounds;
-        const loaded = await evaluate(`JSON.stringify(['book-open', 'book-flip', 'book-close', 'sparkle'].map((k) => __flappy.cache.audio.exists(k)))`).then(JSON.parse);
-        ok(loaded.every(Boolean), `Boot loaded the four quiz sounds (${loaded.join(', ')})`);
+        // Plan 35, 2.3: these load after Play's first frame, not in Boot; wait for them (at most 5 s).
+        const loaded = await evaluate(`new Promise((res) => { const keys = ['book-open', 'book-flip', 'book-close', 'sparkle']; const t0 = Date.now(); const tick = () => { const v = keys.map((k) => __flappy.cache.audio.exists(k)); if (v.every(Boolean) || Date.now() - t0 > 5000) res(JSON.stringify(v)); else setTimeout(tick, 50); }; tick(); })`).then(JSON.parse);
+        ok(loaded.every(Boolean), `Play's lazy load brought the four quiz sounds in (${loaded.join(', ')})`);
         await listen();
         await reopen();
         const sOpen = await heard();
@@ -5966,6 +6206,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const [offText, onText, shareBtn, stopBtn] = await Promise.all(['eduShareOff', 'eduShareOn', 'eduShareTitle', 'eduShareStop'].map(tx));
         ok(btnNow.unlocked && btnNow.hidden === false && btnNow.text === (await tx('saveEduData')) && d0.open && !savePanelOpen, `the user panel shows "${btnNow.text}" on every device; it closes that panel and opens the data panel`);
         ok(d0.state === offText && d0.btn === shareBtn && d0.disabled === true && d0.adult === false && !d0.keys, `the panel opens with sharing off, the 18+ box unticked and "${d0.btn}" waiting for it; the game's keyboard is off under it`);
+        // Opened from the dashboard, the data panel closes back to it (plan 44); the checks below work on one opened from Play.
+        await closeData();
+        const backToSave = await evaluate(`!document.getElementById('save-panel').hidden && document.getElementById('save-edu-btn').offsetParent !== null`);
+        await closeSave();
+        ok(backToSave === true, 'closing the data panel opened from the dashboard opens the dashboard again');
+        await evaluate(`${play}.openEduData(), true`);
+        await sleep(150);
         ok(d0.inviteNote === true && d0.shareHidden === true && d0.code === '' && !d0.invited, 'a player not yet invited sees the invitation note and the code field, and neither section (plan 28, 2.4)');
         const SMOKE_CODE = 'the-smoke-invite-2026';
         await evaluate(`(${el('edu-invite-code')}.value = '${SMOKE_CODE}', ${el('edu-invite-code')}.dispatchEvent(new Event('input', { bubbles: true })), true)`);
@@ -6212,24 +6459,25 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await closeData();
         ok(!ended.joined && ended.queued === 0 && endedPanel.status === pw.eduPilotEnded && endedAgain.status !== pw.eduPilotEnded, `told "not enrolled", the device stops recording and empties its queue; the panel says so once ("${endedPanel.status}")`);
 
-        // Clear warns a player who shares, or who sent answers as a tester, that those stay where they are; Clear then forgets both on this device.
+        // Sign out's confirm warns a player who shares, or who sent answers as a tester, that those stay where they are; Sign out then forgets both on this device.
         const clearWarning = async () => {
           await evaluate(`${play}.openSavePanel(), true`);
           await sleep(200);
-          await evaluate(`${el('save-clear-btn')}.click(), true`);
-          const text = await evaluate(`${el('save-status')}.textContent`);
+          await evaluate(`${el('save-clear-btn')}.click(), true`); // Sign out's confirm carries Clear's notes (plan 44)
+          const text = await evaluate(`${el('save-logout-notes')}.textContent`);
           await closeSave();
           return text;
         };
-        const [warnBase0, noteShared, notePilot, noteCards] = await Promise.all(['saveClearConfirm', 'saveClearNoteShared', 'saveClearNotePilot', 'saveClearNoteCards'].map(tx));
+        const [noteShared, notePilot, noteCards] = await Promise.all(['saveClearNoteShared', 'saveClearNotePilot', 'saveClearNoteCards'].map(tx));
         // A device with 📚 cards hears that they go too (plan 28, 3.1b; checked on its own in education-backup).
-        const warnBase = (await evaluate(`${play}.eduHasCards()`)) ? `${warnBase0} ${noteCards}` : warnBase0;
+        const warnBase = (await evaluate(`${play}.eduHasCards()`)) ? noteCards : '';
+        const joined = (...xs) => xs.filter(Boolean).join(' ');
         const warnPlain = await clearWarning();
         await evaluate(`${play}.eduShare.turnOn('2026-11-13T10:00:00.000+00:00', 'ShareSmoke'), true`);
         const warnShared = await clearWarning();
         await evaluate(`${play}.consentStore.join({ version: '${consentVersion}', phase: 'pilot', at: Date.now() }), true`);
         const warnBoth = await clearWarning();
-        ok(warnPlain === warnBase && warnShared === `${warnBase} ${noteShared}` && warnBoth === `${warnBase} ${noteShared} ${notePilot}`, 'Clear warns a player who shares that the grades stay on the 📚 board, and a tester that the answers stay on the server; a player who does neither gets the plain warning');
+        ok(warnPlain === warnBase && warnShared === joined(warnBase, noteShared) && warnBoth === joined(warnBase, noteShared, notePilot), 'Sign out\'s confirm warns a player who shares that the grades stay on the 📚 board, and a tester that the answers stay on the server; a player who does neither gets the plain warning');
         const forgot = await evaluate(`(() => { const p = ${play}; p.researchQueue.add(${JSON.stringify(e1)}); p.signOut(); return JSON.stringify({ joined: p.researchJoined(), queued: p.researchQueue.size(), sharing: p.eduShareOn(), consent: localStorage.getItem('flappyPoop.eduConsent') }); })()`).then(JSON.parse);
         ok(!forgot.joined && forgot.queued === 0 && !forgot.sharing && forgot.consent === null, 'Clear forgets the consent, the queue and the sharing on this device');
 
@@ -6307,8 +6555,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const clearWarning = async () => {
           await evaluate(`${play}.openSavePanel(), true`);
           await sleep(200);
-          await evaluate(`${el('save-clear-btn')}.click(), true`);
-          const text = await evaluate(`${el('save-status')}.textContent`);
+          await evaluate(`${el('save-clear-btn')}.click(), true`); // Sign out's confirm carries Clear's notes (plan 44)
+          const text = await evaluate(`${el('save-logout-notes')}.textContent`);
           await closeSave();
           return text;
         };
@@ -6316,7 +6564,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const withCards = await clearWarning();
         await evaluate(`localStorage.removeItem('${KEY}'), true`);
         const without = await clearWarning();
-        ok(withCards.includes(noteCards) && !without.includes(noteCards), `Clear's warning names the 📚 cards only when there are some ("${withCards}")`);
+        ok(withCards.includes(noteCards) && !without.includes(noteCards), `Sign out's confirm names the 📚 cards only when there are some ("${withCards}")`);
         // Over a paused run, restore is disabled with a line to go home; Back up stays.
         await evaluate(`localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(rec))}), true`);
         await home();
@@ -6662,22 +6910,35 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await home();
       ok((await evaluate(`${P}.dailyStreakText?.visible === false && ${P}.dailyStreakText.text === ''`)), 'no Daily Dump streak yet: no number on the 🌞');
 
-      // A one-player run (not education, not a test run) counts today's local day.
-      await evaluate(`${P}.flap(), true`);
-      await waitFor(`${P}.state === 'playing'`);
-      await sleep(400);
-      await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
-      await waitFor(`${P}.state === 'dead'`, 80);
-      await sleep(800);
-      const single = await evaluate(`JSON.stringify(${P}.streakStore.load().single ?? null)`).then(JSON.parse);
-      ok(single && single.day === today && single.streak >= 1, `a one-player run counts the local day for the Singleplayer streak (${JSON.stringify(single)}; today ${today})`);
+      // A one-player run (not education, not a test run) counts today's local day, once it crossed a
+      // pipe (plan 48): one that dies before the first pipe counts none.
+      const singleRun = async (pipes) => {
+        await evaluate(`${P}.flap(), true`);
+        await waitFor(`${P}.state === 'playing'`);
+        await sleep(400);
+        await evaluate(`(${P}.graceLeftMs = 0, ${P}.pipesPassed = ${pipes}, ${P}.die(), true)`);
+        await waitFor(`${P}.state === 'dead'`, 80);
+        await waitFor(`__flappy.scene.isActive('Over')`, 40);
+        await sleep(300);
+        return evaluate(`JSON.stringify({ day: ${P}.streakStore.load().single ?? null, texts: __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text').map((c) => c.text) })`).then(JSON.parse);
+      };
+      const note = await evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'runNotCounted'))`);
+      const empty = await singleRun(0);
+      ok(empty.day === null && empty.texts.includes(note), `a one-player run that crossed no pipe counts no Singleplayer day (${JSON.stringify(empty.day)}), and Over says "${note}"`);
+      await home();
+      const { day: single, texts: counted } = await singleRun(1);
+      ok(single && single.day === today && single.streak >= 1 && !counted.includes(note), `a one-player run counts the local day for the Singleplayer streak (${JSON.stringify(single)}; today ${today}), with no note on Over`);
 
-      // A Daily Dump counts its course day once claimed.
+      // A Daily Dump counts its course day once its run crosses a pipe (plan 48), not at the claim.
       await home();
       await evaluate(`${P}.startDaily({ day: '${utc}' })`);
       await waitFor(`${P}.state === 'playing' && ${P}.runIsDaily`, 80);
+      await evaluate(`${P}.graceLeftMs = 1e9, true`);
+      const claimed = await evaluate(`JSON.stringify(${P}.streakStore.load().daily ?? null)`).then(JSON.parse);
+      await evaluate(`${P}.pipesPassed = ${P}.daily.startPipes + 1, true`);
+      await waitFor(`${P}.streakStore.load().daily != null`, 40);
       const daily = await evaluate(`JSON.stringify(${P}.streakStore.load().daily ?? null)`).then(JSON.parse);
-      ok(daily && daily.day === utc && daily.streak >= 1, `a Daily Dump counts its course day at the start (${JSON.stringify(daily)}; course day ${utc})`);
+      ok(claimed === null && daily && daily.day === utc && daily.streak >= 1, `a Daily Dump counts its course day at its first pipe (at the claim ${JSON.stringify(claimed)}; then ${JSON.stringify(daily)}; course day ${utc})`);
       await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
       await waitFor(`${P}.state === 'dead'`, 80);
       await sleep(600);
@@ -7867,6 +8128,225 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
     });
 
+    await section('skip-splash', async () => {
+      // Skip to home when loaded (plan 35, 4.2). The live board blocked at the browser, as blocked-storage does.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const ex0 = exceptions.length;
+      const play = `__flappy.scene.getScene('Play')`;
+      const SETTINGS = `__flappy.scene.getScene('Settings')`;
+      await chrome('settings');
+      for (let i = 0; i < 20 && !(await active('Settings')); i += 1) await sleep(100);
+      const row0 = await evaluate(`JSON.stringify({ text: ${SETTINGS}.splashLabel.text, stored: ${play}.settings.load().skipSplash, scale: ${SETTINGS}.splashLabel.scaleX, right: ${SETTINGS}.splashLabel.getBounds().right, panelRight: ${SETTINGS}.cameras.main.width / 2 + 300 })`).then(JSON.parse);
+      await evaluate(`${SETTINGS}.splashLabel.emit('pointerdown'), true`);
+      const row1 = await evaluate(`JSON.stringify({ text: ${SETTINGS}.splashLabel.text, stored: ${play}.settings.load().skipSplash })`).then(JSON.parse);
+      await closeTop('Settings');
+      await sleep(TT.pauseResumeLockoutMs + 100);
+      ok(row0.text === 'Skip to home when loaded   OFF' && row0.stored === false && row0.scale <= 1 && row0.right < row0.panelRight && row1.text === 'Skip to home when loaded   ON' && row1.stored === true, `Settings' Skip to home when loaded: off by default, inside the panel (scale ${row0.scale.toFixed(2)}), a tap turns it on and stores it (${JSON.stringify({ row0, row1 })})`);
+      // A reload with it on: nothing pressed, the splash goes once Continue lights and Play reaches its ready screen.
+      const boot = async ({ press }) => {
+        await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+        let sp = null;
+        let lit = false;
+        for (let i = 0; i < 120; i += 1) {
+          await sleep(250);
+          sp = await splashNow().catch(() => null);
+          if (sp?.enabled) lit = true;
+          if (sp?.play || (sp && !sp.present && i > 4)) break;
+          if (press && sp?.enabled) break;
+        }
+        const waited = { present: Boolean(sp?.present), enabled: Boolean(sp?.enabled), play: Boolean(sp?.play) };
+        if (press && sp?.enabled) {
+          await sleep(1500); // lit and left alone: it must still wait
+          const still = await splashNow().catch(() => null);
+          waited.stillWaiting = Boolean(still?.present && still?.enabled && !still?.play);
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        let st = null;
+        for (let i = 0; i < 120 && st !== 'ready'; i += 1) {
+          await sleep(250);
+          st = await playState().catch(() => null);
+        }
+        const gone = await evaluate(`!document.getElementById('splash')`).catch(() => false);
+        return { ...waited, lit, state: st, gone };
+      };
+      const skipped = await boot({ press: false });
+      ok(skipped.state === 'ready' && skipped.gone && !skipped.stillWaiting, `with it on, a reload goes from the splash to the ready screen with no Continue press (${JSON.stringify(skipped)})`);
+      await evaluate(`${play}.settings.set({ skipSplash: false }), true`);
+      const waits = await boot({ press: true });
+      ok(waits.stillWaiting && waits.state === 'ready' && waits.gone, `with it off, Continue lit still waits for a press, then Play starts (${JSON.stringify(waits)})`);
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+    });
+
+    await section('christmas', async () => {
+      // December (plan 17, 1.16): the decorations on a 5 Dec pin, then none of them on a fresh page on the
+      // 15 Nov pin (the default every other section runs on). Each half reloads, since a pin takes effect on
+      // the next navigation; the live board is blocked at the browser (the reload drops the page's stubs).
+      // A ?perf read of one December run against one off-season run: logged, not judged (headless Chrome is
+      // not a phone; the phone check reads it by hand).
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const ex0 = exceptions.length;
+      const ART = await evaluate(`import('./src/advent.js').then((m) => JSON.stringify(m.ADVENT_ART))`).then(JSON.parse);
+      const files = Object.keys(ART.files);
+      const until = async (expr, tries = 60, ms = 100) => {
+        for (let i = 0; i < tries; i += 1) {
+          if (await evaluate(expr).catch(() => false)) return true;
+          await sleep(ms);
+        }
+        return false;
+      };
+      const load = async (query = '') => {
+        await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}${query}` });
+        let sp = null;
+        for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+          await sleep(500);
+          sp = await splashNow().catch(() => null);
+        }
+        if (sp?.enabled) {
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(250);
+        // The one lazy flight starts on Play's first frame: wait for it to land (or for nothing to be in flight).
+        await until(`(() => { const p = ${play}; return p.state === 'ready' && !__flappy.registry.get('lazyAudio') && __flappy.cache.audio.exists('flush'); })()`, 100);
+      };
+      const loaded = () => evaluate(`JSON.stringify(${JSON.stringify(files)}.filter((k) => __flappy.textures.exists(k)))`).then(JSON.parse);
+      const home = () =>
+        evaluate(`(() => { const p = ${play}; return JSON.stringify({
+          day: new Date().toISOString().slice(0, 10), stock: p.poopStockKey, shown: p.poop.texture.key, glyph: p.dailySun?.text ?? null,
+          line: p.countdownText?.visible ? p.countdownText.text : null, image: Boolean(p.countdownImage?.visible),
+          flakes: p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length, santa: localStorage.getItem('flappyPoop.santa'),
+        }); })()`).then(JSON.parse);
+      // A test-mode run on Invincible, the poop held mid-field (the pins do not change what a run records:
+      // test runs record nothing).
+      const startRun = async () => {
+        await evaluate(`${play}.setTestMode(true), ${play}.setTestSettings({ invincible: true }), true`);
+        await evaluate(`${play}.flap(), true`);
+        for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, true`);
+      };
+      const perfRun = async (ms) => {
+        await startRun();
+        await evaluate(`globalThis.__flappyPerf?.reset(), true`);
+        await sleep(ms);
+        const s = await evaluate(`JSON.stringify(globalThis.__flappyPerf?.summary() ?? null)`).then(JSON.parse);
+        // Back to the home screen with test mode off (a two-player race cannot start in test mode or mid-run).
+        await evaluate(`${play}.setTestMode(false), __flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
+        await until(`${play}.state === 'ready' && !${play}.launching`, 60);
+        return s;
+      };
+      const perfLine = (s) => (s ? `${s.frames} frames, ${s.fps.toFixed(1)} fps, cpu ${s.cpuMs.toFixed(2)} ms (max ${s.cpuMaxMs.toFixed(1)}), ${s.long} long, worst ${s.worstMs.toFixed(1)} ms` : 'no meter');
+      // A two-player race on the wide field (Michael, 26 Nov: the snow falls in both halves), its frame meter
+      // read as perfRun reads one half's; then back to single player at the phone size.
+      const metrics = (w, h) => cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+      const versusPerf = async (ms) => {
+        const P1 = play;
+        const P2 = `__flappy.scene.getScene('PlayB')`;
+        const VS = `__flappy.scene.getScene('Versus')`;
+        await metrics(1800, 1000);
+        await until(`__flappy.scale.width > 1000 && ${P1}.state === 'ready' && !${P1}.launching`, 60);
+        await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
+        const joined = await lobbyToRace();
+        await evaluate(`${P1}.onVersusKey('Space'), ${P1}.onVersusKey('ArrowUp'), true`);
+        const racing = await until(`${VS}.match?.status === 'playing' && ${P1}.state === 'playing' && ${P2}?.state === 'playing'`, 100);
+        if (!joined || !racing) {
+          const why = await evaluate(`JSON.stringify({ versus: __flappy.scene.isActive('Versus'), status: ${VS}?.match?.status ?? null, a: ${P1}.state, b: ${P2}?.state ?? null })`);
+          ok(false, `versusPerf: a two-player race started (${why})`);
+          return { s: null, snow: null, racing: false };
+        }
+        await evaluate(`[${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
+        const snow = await evaluate(`[${P1}, ${P2}].map((p) => p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length).join(',')`);
+        await evaluate(`globalThis.__flappyPerf?.reset(), true`);
+        await sleep(ms);
+        const s = await evaluate(`JSON.stringify(globalThis.__flappyPerf?.summary() ?? null)`).then(JSON.parse);
+        await leaveVersus();
+        await until(`!__flappy.scene.isActive('Versus') && ${P1}.state === 'ready' && ${P1}.match === null`, 60);
+        await evaluate(`__flappy.registry.set('versus', false), true`);
+        await metrics(720, 1280);
+        await until(`__flappy.scale.width === 720 && ${P1}.state === 'ready'`, 60);
+        return { s, snow, racing: Boolean(joined && racing) };
+      };
+
+      // --- 5 Dec ---
+      const dec = await pinClock('2026-12-05');
+      if (date) console.log(`note: christmas runs both halves on --date=${date}`);
+      await load();
+      const want = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => JSON.stringify({ season: l.adventSeason('${dec}', c.TUNING), line: l.countdownLine('${dec}', 'en', c.TUNING), santas: c.TUNING.advent.santas }))`).then(JSON.parse);
+      const h1 = await home();
+      const in1 = await loaded();
+      ok(want.season && h1.day === dec, `the page's day is the pin, ${dec}, in the season (${h1.day})`);
+      ok(in1.length === files.length, `every December file is in after the one lazy flight (${in1.length} / ${files.length}${in1.length < files.length ? `; missing ${files.filter((k) => !in1.includes(k)).join(', ')}` : ''})`);
+      ok(h1.stock === 'poop-speech' && h1.shown === 'poop-speech-santa', `the ready poop wears the hatted bubble frame, its state the stock key (${h1.stock} → ${h1.shown})`);
+      ok(want.santas.includes(h1.glyph) && h1.glyph !== '\u{1F31E}' && h1.santa === h1.glyph, `the 🌞 is this visit's 🎅 (${h1.glyph}), kept as the last pick`);
+      ok(h1.line === want.line?.text && h1.image, `Happy Bowelidays! over the title and the countdown line under it: "${h1.line}"`);
+      ok(h1.flakes === TT.advent.snow.count, `the home snowfall: ${h1.flakes} flakes (want ${TT.advent.snow.count})`);
+
+      // One run: the hatted frames follow the stock key, the pickups and the bottom pipes take their December look.
+      await startRun();
+      await sleep(4000); // pairs scroll in from the right edge
+      const run1 = await evaluate(`(() => { const p = ${play}; const twins = ${JSON.stringify(ART.twins)};
+        const bottoms = p.pipes.getChildren().filter((q) => q.originY === 0 && q.active);
+        const snowOk = bottoms.filter((q) => { const s = q.getData('snow'); return s?.active && s.texture.key === '${ART.snowCap}' && Math.abs(s.x - (q.x - ${TT.pipeWidth} / 2 + ${TT.advent.snowCap.ox})) < 0.5 && Math.abs(s.y - (q.y + ${TT.advent.snowCap.oy})) < 0.5; }).length;
+        const items = p.items.getChildren().filter((i) => i.active && twins[i.getData('kind')]);
+        const itemsOk = items.filter((i) => i.texture.key === twins[i.getData('kind')]).length;
+        return JSON.stringify({ state: p.state, stock: p.poopStockKey, shown: p.poop.texture.key, want: twins[p.poopStockKey] ?? p.poopStockKey, bottoms: bottoms.length, snowOk, items: items.length, itemsOk, kinds: items.map((i) => i.getData('kind') + ':' + i.texture.key), flakes: p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length, line: p.countdownText.visible, image: Boolean(p.countdownImage?.visible) }); })()`).then(JSON.parse);
+      ok(run1.state === 'playing' && !run1.stock.endsWith('santa') && run1.shown === run1.want, `in the run the poop wears its stock key's twin (${run1.stock} → ${run1.shown})`);
+      ok(run1.bottoms > 0 && run1.snowOk === run1.bottoms, `snow on every bottom pipe's cap, placed at TUNING.advent.snowCap (${run1.snowOk} / ${run1.bottoms})`);
+      ok(run1.itemsOk === run1.items, `every twinned pickup in the field wears its December twin (${run1.itemsOk} / ${run1.items}: ${run1.kinds.join(', ') || 'none in the field'})`);
+      ok(run1.flakes === TT.advent.snow.count && !run1.line && !run1.image, `in a run the snow keeps falling (${run1.flakes} flakes; Michael, 26 Nov) and the countdown line and Happy Bowelidays! hide`);
+      // A fart: the stock key stays poop-fart while the two hatted fart frames alternate on the stink frames' clock.
+      await evaluate(`(() => { const p = ${play}; p.effects.addBean(); p.effects.addBean(); p.setCharged(true); p.activatePower(); return true; })()`);
+      const farts = [];
+      for (let i = 0; i < 12; i += 1) {
+        farts.push(await evaluate(`${play}.poopStockKey + '|' + ${play}.poop.texture.key`));
+        await sleep(TT.beans.stinkFrameMs / 2);
+      }
+      const shownFarts = new Set(farts.filter((f) => f.startsWith('poop-fart|')).map((f) => f.split('|')[1]));
+      ok(farts.every((f) => f.startsWith('poop-fart|')) && shownFarts.size === 2 && [...shownFarts].every((k) => ART.fartFrames.includes(k)), `a fart alternates the two hatted fart frames, the state poop-fart throughout (${[...shownFarts].join(', ')})`);
+      // The crash: the stock dead frame (D13), then the hatted bubble frame on the home screen again.
+      await evaluate(`(() => { const p = ${play}; p.setTestSettings({ invincible: false }); if (p.effects.cancelPower()) p.endPower(); p.effects.clearPowerups(); p.graceLeftMs = 0; p.die(); return true; })()`);
+      const dead = await evaluate(`${play}.poopStockKey + '|' + ${play}.poop.texture.key`);
+      ok(dead === 'poop-dead|poop-dead', `the crash shows the stock dead frame (D13: no twin yet) (${dead})`);
+      await waitOver(300);
+      await evaluate(`__flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
+      for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+      await sleep(300);
+      const h2 = await home();
+      ok(h2.stock === 'poop-speech' && h2.shown === 'poop-speech-santa' && h2.flakes === TT.advent.snow.count && h2.line === want.line?.text, `back home after the run: the hatted bubble frame, the snowfall and the line again (${h2.shown}, ${h2.flakes} flakes)`);
+      ok(want.santas.includes(h2.glyph) && h2.glyph !== h1.glyph, `the home screen built again picks another 🎅 (${h1.glyph} → ${h2.glyph})`);
+
+      // A reload with ?perf on 5 Dec: a new 🎅 again, and the December run's frame meter.
+      await load('&perf');
+      const h3 = await home();
+      ok(want.santas.includes(h3.glyph) && h3.glyph !== h2.glyph, `a reload never repeats the last 🎅 (${h2.glyph} → ${h3.glyph})`);
+      const perfDec = await perfRun(6000);
+      ok(Boolean(perfDec?.frames > 60), `?perf on ${dec}: ${perfLine(perfDec)}`);
+      const vDec = await versusPerf(6000);
+      ok(vDec.racing && vDec.snow === `${TT.advent.snow.count},${TT.advent.snow.count}` && Boolean(vDec.s?.frames > 60), `?perf on ${dec}, a two-player race (snow ${vDec.snow}): ${perfLine(vDec.s)}`);
+
+      // --- 15 Nov (the default pin): a fresh page, none of it ---
+      const nov = await pinClock(SMOKE_PIN_DAY);
+      await load('&perf');
+      const h4 = await home();
+      const in4 = await loaded();
+      if (!date) {
+        ok(h4.day === SMOKE_PIN_DAY && in4.length === 0, `on ${SMOKE_PIN_DAY}, a fresh page loads no December file (${in4.join(', ') || 'none'})`);
+        ok(h4.stock === 'poop-speech' && h4.shown === 'poop-speech' && h4.glyph === '\u{1F31E}' && h4.line === null && !h4.image && h4.flakes === 0, `off season the home screen is stock: the bubble frame, the 🌞, no line, no snow (${JSON.stringify(h4)})`);
+      } else console.log(`note: --date=${date}: the off-season half is skipped (the page is on ${nov})`);
+      const perfNov = await perfRun(6000);
+      ok(Boolean(perfNov?.frames > 60), `?perf on ${nov}: ${perfLine(perfNov)}`);
+      const vNov = await versusPerf(6000);
+      ok(vNov.racing && (date || vNov.snow === '0,0') && Boolean(vNov.s?.frames > 60), `?perf on ${nov}, a two-player race (snow ${vNov.snow}): ${perfLine(vNov.s)}`);
+      if (vDec.s && vNov.s) console.log(`note: ?perf two-player race, December vs off season: cpu ${vDec.s.cpuMs.toFixed(2)} vs ${vNov.s.cpuMs.toFixed(2)} ms a frame, ${vDec.s.long} vs ${vNov.s.long} long frames, ${vDec.s.fps.toFixed(1)} vs ${vNov.s.fps.toFixed(1)} fps`);
+      if (perfDec && perfNov) console.log(`note: ?perf December vs off season: cpu ${perfDec.cpuMs.toFixed(2)} vs ${perfNov.cpuMs.toFixed(2)} ms a frame, ${perfDec.long} vs ${perfNov.long} long frames, ${perfDec.fps.toFixed(1)} vs ${perfNov.fps.toFixed(1)} fps`);
+      // Home again on a plain page, for the closing checks.
+      await evaluate(`${play}.scene.restart(), true`);
+      for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+    });
+
     const f2 = await frame();
     await sleep(500);
     ok((await frame()) > f2, 'game loop still advancing at the end');
@@ -7879,6 +8359,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     if (cdp?.exceptions.length) console.log(`  page exceptions:\n  ${cdp.exceptions.join('\n  ')}`);
     if (cdp?.consoleErrors.length) console.log(`  console errors/warnings:\n  ${cdp.consoleErrors.join('\n  ')}`);
   } finally {
+    Date.now = realNow;
     console.log(`\n${checks} checks; by section: ${ran.map((s) => `${s.name} ${s.checks}`).join(' · ') || 'none ran'}`);
     cdp?.close();
     const exited = new Promise((resolve) => proc.once('exit', resolve));
@@ -7901,8 +8382,8 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
     console.log(listSections());
     process.exit(0);
   }
-  console.log(`headless_check: ${args.url}${args.only ? ` (--only=${args.only.join(',')})` : ''}`);
-  const failures = await run(args.url, { only: args.only });
+  console.log(`headless_check: ${args.url}${args.only ? ` (--only=${args.only.join(',')})` : ''}${args.date ? ` (--date=${args.date})` : ''}`);
+  const failures = await run(args.url, { only: args.only, date: args.date });
   console.log(failures.length ? `\n${failures.length} check(s) failed` : '\nall checks passed');
   process.exit(failures.length ? 1 : 0);
 }

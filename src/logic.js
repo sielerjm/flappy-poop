@@ -6,14 +6,14 @@ import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 import { createJsonStore } from './store.js';
 import { TUNING, LEADERBOARD } from './config.js';
 
-export const VERSION = '0.28.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
+export const VERSION = '0.32.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 /** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
 export function versionText(locale, version = VERSION) {
   return t(locale, 'versionLine').replace('{version}', version);
 }
 
 /** Player-facing stamp on the About overlay: the time of the last push (written by `npm run push`). */
-export const LAST_UPDATED = '24 Nov 2026, 11:29';
+export const LAST_UPDATED = '26 Nov 2026, 07:30';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -195,15 +195,75 @@ export function loadedScriptUrls(api = globalThis) {
  * page), then navigate to reloadUrl(). A hung fetch cannot block the reload:
  * the refetch races a timeoutMs timer. Returns the URL navigated to (null when
  * there is no location).
+ * Under the service worker (plan 35, 3.0 D4): when the page itself answers from the network (sw.js
+ * never answers a fetch of the page, only its navigation), this scope's worker and our caches are removed
+ * first, so the reload is a clean network load and a player's way out of a bad cache; the worker comes
+ * back after Play's lazy sounds. When it does not answer, both stay and the reload runs from the cache,
+ * so Reload never strands a player offline. All inside the same timeoutMs.
  */
 export async function hardReloadGame(api = globalThis, { timeoutMs = 3000 } = {}) {
   if (!api.location || typeof api.location.replace !== 'function') return null;
   if (typeof api.fetch === 'function') {
-    const refetch = Promise.allSettled(loadedScriptUrls(api).map((u) => api.fetch(u, { cache: 'reload' })));
+    const page = api.location.href.split('#')[0];
+    const refetch = loadedScriptUrls(api).map((u) => {
+      const got = api.fetch(u, { cache: 'reload' });
+      return u === page ? Promise.resolve(got).then((res) => (res?.ok ? removeWorker(api) : false)) : got;
+    });
     const timer = new Promise((resolve) => (api.setTimeout ?? setTimeout)(resolve, timeoutMs));
-    await Promise.race([refetch, timer]);
+    await Promise.race([Promise.allSettled(refetch), timer]);
   }
   return reloadGame(api);
+}
+
+// --- The service worker's page side (plan 35, Stage 3; sw.js, src/swClient.js) ---
+
+/** The prefix of every Cache Storage name sw.js uses (`flappy-poop-<BUILD>`); nothing else is ever deleted. */
+export const SW_CACHE_PREFIX = 'flappy-poop-';
+
+/** The page's worker scope: the folder the page is in (`…/flappy-poop/`), whatever its query or file name. */
+export function workerScope(href) {
+  return new URL('./', href).href;
+}
+
+/**
+ * 'register' or 'off' for this page (3.0 D3, D5). ?nosw is off anywhere (the player's kill switch); a
+ * local host (localHost: npm start, the smoke, plan 44's server, a phone on the Wi-Fi) is off unless ?sw
+ * opts in (tools/sw_check.mjs), so a worker never serves a dev tree's stale copies, and one a ?sw left
+ * behind is removed. Off means: remove this scope's worker and our caches, and register nothing.
+ * @param {{ hostname?: string, search?: string } | undefined} loc
+ */
+export function swMode(loc) {
+  if (!loc) return 'off';
+  const q = new URLSearchParams(loc.search ?? '');
+  if (q.has('nosw')) return 'off';
+  if (localHost(loc.hostname) && !q.has('sw')) return 'off';
+  return 'register';
+}
+
+/**
+ * Unregister this scope's worker (never one at another scope on the shared github.io origin) and delete
+ * the flappy-poop-* caches. Never rejects; true when it removed something. A page it controls stays
+ * controlled until it navigates; the navigation then goes to the network.
+ */
+export async function removeWorker(api = globalThis) {
+  let removed = false;
+  try {
+    const sw = api.navigator?.serviceWorker;
+    if (typeof sw?.getRegistrations === 'function' && api.location?.href) {
+      const scope = workerScope(api.location.href);
+      for (const reg of await sw.getRegistrations()) if (reg.scope === scope) removed = (await reg.unregister()) || removed;
+    }
+  } catch {
+    /* no worker API (an http LAN page), or it refused: nothing to remove */
+  }
+  try {
+    if (typeof api.caches?.keys === 'function') {
+      for (const name of await api.caches.keys()) if (name.startsWith(SW_CACHE_PREFIX)) removed = (await api.caches.delete(name)) || removed;
+    }
+  } catch {
+    /* Cache Storage refused (a private window): nothing of ours in it */
+  }
+  return removed;
 }
 
 /**
@@ -561,7 +621,7 @@ export const HANDS = ['left', 'right'];
 // ones (plan 26; education.js NEW_ORDERS); eduNewPerLevel: the new cards a level break asks a visit, 3, 5
 // or 'all' (plan 28, Stage 3b; EDU_NEW_PER_LEVEL). (reviveGiveUpWarned, plan 26's "warned once on this device",
 // is gone since plan 26's A2: a revive's Quit warns on every card. A stored value is ignored.)
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: TUNING.education.newPerLevelDefault, eduShowHow: false, eduShowChoices: false };
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, skipSplash: false, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: TUNING.education.newPerLevelDefault, eduShowHow: false, eduShowChoices: false };
 const EDU_NEW_ORDERS = ['after', 'mixed', 'before']; // education.js NEW_ORDERS (logic.js does not import education.js)
 /** The 📚 popup's choices for new cards a level break asks a visit (plan 28, Stage 3b): a number, or 'all'. */
 export const EDU_NEW_PER_LEVEL = TUNING.education.newPerLevelChoices;
@@ -585,7 +645,7 @@ export function storedLocale(storage, key) {
 function normalizeSettings(raw) {
   const out = { ...SETTINGS_DEFAULTS };
   if (!raw || typeof raw !== 'object') return out;
-  for (const key of ['sound', 'music', 'haptics', 'education', 'eduInvited']) {
+  for (const key of ['sound', 'music', 'haptics', 'skipSplash', 'education', 'eduInvited']) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key];
   }
   // Settings from before plan 28 carry eduUnlocked: a device that was locked (or never unlocked) had no
@@ -1810,7 +1870,13 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   // The user button, its bottom at 1111: above the ground strip (1152) and the tray band (1168).
   // It does not move when the block above shifts.
   const profile = { id: 'profile', x: cx, y: 1111 - boxH / 2, width: 360, height: boxH };
-  return { title, poop, toilet, howto, daily, profile, ...switches };
+  // December's countdown line (plan 17, 1.12): in the gap between the title's ink (to y 414) and the bubble's top
+  // at its highest (481.5), as Gate A's sheet 7 placed it. Drawn only, never hit.
+  const countdown = { id: 'countdown', x: cx, y: 448, width: 460, height: 56 };
+  // The Bowelidays image (plan 17, 1.14; D16 (b)): above the title, under the top row's halos. Drawn only.
+  const bw = width * t.advent.bowelidays.widthFrac;
+  const bowelidays = { id: 'bowelidays', x: cx, y: t.advent.bowelidays.y, width: bw, height: bw * t.advent.bowelidays.aspect };
+  return { title, poop, toilet, howto, daily, profile, countdown, bowelidays, ...switches };
 }
 
 function inBox(x, y, box) {
@@ -2305,6 +2371,117 @@ export function utcDayKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
+/** True for a 'YYYY-MM-DD' string that names a real calendar day. */
+export function isDayKey(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && utcDayKey(d) === s;
+}
+
+/** `day` ('YYYY-MM-DD') moved by `step` whole days. */
+export function shiftDayKey(day, step) {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + step);
+  return utcDayKey(d);
+}
+
+/**
+ * The decorations' clock (plan 17, 1.6): the real time, or in test mode the Pretend date at the real
+ * time of day. `reg` is the game registry (anything with get), shared by every scene, so every scene
+ * reads the same day; 'testPretendDay' lives there for the session and counts only while 'testMode' is on.
+ * Only decorations read it in Stage 1: the Daily Dump's day, course, level and posts keep utcDayKey().
+ */
+export function dailyNow(reg, now = new Date()) {
+  const pretend = reg?.get?.('testMode') ? reg.get('testPretendDay') : null;
+  if (!isDayKey(pretend)) return now;
+  return new Date(now.getTime() + Date.parse(`${pretend}T00:00:00Z`) - Date.parse(`${utcDayKey(now)}T00:00:00Z`));
+}
+
+/** The day of dailyNow as 'YYYY-MM-DD'. */
+export function dailyDay(reg, now = new Date()) {
+  return utcDayKey(dailyNow(reg, now));
+}
+
+/** The Pretend date after a ◀ / ▶ step from the day shown: null (the real date again) when it lands on today. */
+export function nextPretendDay(reg, step, now = new Date()) {
+  const next = shiftDayKey(dailyDay(reg, now), step);
+  return next === utcDayKey(now) ? null : next;
+}
+
+/** The Daily Dump's glyph outside the season. */
+export const SUN = '\u{1F31E}';
+
+/** Christmas (plan 17): does `day` ('YYYY-MM-DD', from dailyDay) fall in the season (all of December by default)? */
+export function adventSeason(day, t) {
+  if (!isDayKey(day)) return false;
+  const month = Number(day.slice(5, 7));
+  const date = Number(day.slice(8, 10));
+  return month === t.advent.seasonMonth && date <= t.advent.seasonLastDay;
+}
+
+/**
+ * Christmas skins (plan 17, 1.10) in force on `day`: `art`'s twin map, fart frames and files (src/advent.js ADVENT_ART)
+ * while the season holds, nothing off season. Decoration only: it changes textures, never a hitbox or a rule.
+ */
+export function seasonalSkin(day, t, art) {
+  if (!adventSeason(day, t)) return { twins: {}, fartFrames: [], snowCap: null, files: {} };
+  return { twins: art.twins, fartFrames: art.fartFrames, snowCap: art.snowCap, files: art.files };
+}
+
+/**
+ * The texture to show for a stock key under `skin`: its twin once `has(twin)` (the file has loaded), else the
+ * stock key itself. 'poop-fart' shows fartFrames[fartFrame] in turn (the hat in the wind).
+ */
+export function twinKey(stock, skin, fartFrame = 0, has = () => true) {
+  const frames = skin.fartFrames;
+  const twin = stock === 'poop-fart' && frames.length ? frames[fartFrame % frames.length] : skin.twins[stock];
+  return twin && has(twin) ? twin : stock;
+}
+
+/**
+ * December's home lines (plan 17, 1.12 and 1.14): the Happy Bowelidays! image above the title every December day
+ * (Michael, 26 Nov; English for every player, since the pun has no Chinese), and under the title "N sleeps till
+ * Christmas" on 1–24 Dec and "Merry Christmas!" on the 25th, no line after. { text (or null), image (a texture
+ * key) } in season, null off season.
+ */
+export function countdownLine(day, locale, tune) {
+  if (!adventSeason(day, tune)) return null;
+  const image = 'bowelidays';
+  const date = Number(day.slice(8, 10));
+  if (date > 25) return { text: null, image };
+  const sleeps = 25 - date;
+  if (sleeps === 0) return { text: t(locale, 'countdownChristmas'), image };
+  return { text: sleeps === 1 ? t(locale, 'countdownSleep') : t(locale, 'countdownSleeps').replace('{n}', String(sleeps)), image };
+}
+
+/** The Daily Dump's glyph on `day`: this visit's 🎅 in the season (the first variant if none is picked yet), else the 🌞. */
+export function dailyGlyph(day, santa, t) {
+  if (!adventSeason(day, t)) return SUN;
+  return santa || t.advent.santas[0];
+}
+
+/** dailyGlyph for now: the decorations' day and this visit's pick, both from the game registry ('santa'). */
+export function dailyGlyphNow(reg, t, now = new Date()) {
+  return dailyGlyph(dailyDay(reg, now), reg?.get?.('santa'), t);
+}
+
+/** A 🎅 from `santas`, never `last` (unless it is the only one). `rng` returns [0, 1) (Math.random, never the course RNG). */
+export function pickSanta(rng, last, santas) {
+  const pool = santas.length > 1 ? santas.filter((s) => s !== last) : santas;
+  return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))];
+}
+
+/**
+ * The variants this device draws as one glyph: `measure(s)` is the drawn width; a missing skin tone or ZWJ join
+ * draws as two glyphs, wider than the plain first variant. Keeps the first variant when nothing passes.
+ */
+export function supportedSantas(santas, measure) {
+  const base = measure(santas[0]);
+  if (!(base > 0)) return santas.slice();
+  const ok = santas.filter((s) => measure(s) <= base * 1.25);
+  return ok.length ? ok : [santas[0]];
+}
+
 /** Milliseconds from `date` to the next 00:00 UTC (the next Daily Dump). */
 export function msUntilUtcMidnight(date = new Date()) {
   const next = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
@@ -2466,7 +2643,7 @@ export function statsLayout(cx, cy) {
 /**
  * Settings overlay geometry: the panel rect, the ✕, each row's centre y and the
  * hand row's box (👈 pill 👉, the whole row tappable). Without test mode it is a
- * 600 × 860 panel; with it the panel grows to 1240 px (20 px clear of the field's
+ * 600 × 1010 panel (860 until plan 35, 4.2 added Skip to home when loaded and its hint); with it the panel grows to 1240 px (20 px clear of the field's
  * top and bottom) and adds the test section: title, start level (◀ / ▶ hit
  * boxes), Invincible, a row of TEST_POWERS icon buttons, and Exit. Hit boxes are
  * at least trayHitMin.
@@ -2474,48 +2651,57 @@ export function statsLayout(cx, cy) {
 export function settingsLayout(width, height, t, { test = false } = {}) {
   const cx = width / 2;
   const cy = height / 2;
-  const panel = { x: cx, y: cy, width: 600, height: test ? 1240 : 860 };
+  const panel = { x: cx, y: cy, width: 600, height: test ? 1240 : 1010 };
   const top = cy - panel.height / 2;
   const bottom = cy + panel.height / 2;
   const close = { x: cx + 256, y: top + 54 };
   // The 👈 👉 hand row: a toilet-style pill between the two glyphs, its hit box the whole row.
   const handRow = (y) => ({ track: { x: cx, y, width: 120, height: 56 }, emojiX: cx + 110, leftX: cx - 110, y, width: 360, height: 88 });
   if (!test) {
-    const rows = { title: top + 70, sound: top + 210, haptics: top + 330, hint: top + 386, hand: top + 470, handHint: top + 526, reload: top + 620, about: top + 710, version: bottom - 60 };
+    const rows = { title: top + 70, sound: top + 210, haptics: top + 330, hint: top + 386, hand: top + 470, handHint: top + 526, splash: top + 620, splashHint: top + 676, reload: top + 770, about: top + 860, version: bottom - 60 };
     return { panel, close, rows, hand: handRow(rows.hand), test: null };
   }
+  // Plan 17, 1.6 added the Pretend date row under Start at; the rows above it close up so the panel stays 1240 px.
+  // Tappable rows keep 80 px; Start at and Pretend date are 90 apart so their ◀ / ▶ boxes do not touch.
   const rows = {
     title: top + 70,
-    sound: top + 170,
-    haptics: top + 270,
-    hint: top + 326,
-    hand: top + 400,
-    handHint: top + 456,
+    sound: top + 150,
+    haptics: top + 230,
+    hint: top + 282,
+    hand: top + 340,
+    handHint: top + 388,
+    splash: top + 440,
+    splashHint: top + 486,
     reload: top + 540,
-    about: top + 630,
-    testTitle: top + 730,
-    startLevel: top + 820,
-    invincible: top + 910,
-    powers: top + 1000,
-    exit: top + 1090,
-    version: bottom - 60,
+    about: top + 620,
+    testTitle: top + 702,
+    startLevel: top + 782,
+    pretendDate: top + 872,
+    invincible: top + 952,
+    powers: top + 1032,
+    exit: top + 1112,
+    version: bottom - 48,
   };
   const hit = Math.max(88, t.trayHitMin);
-  const arrow = (dx) => ({ x: cx + dx, y: rows.startLevel, width: hit, height: hit });
+  const arrow = (dx, y = rows.startLevel) => ({ x: cx + dx, y, width: hit, height: hit });
   const powers = TEST_POWERS.map((draw, i) => ({ id: draw, x: cx + (i - (TEST_POWERS.length - 1) / 2) * 96, y: rows.powers, width: hit, height: hit, icon: 72 }));
-  return { panel, close, rows, hand: handRow(rows.hand), test: { divider: top + 680, levelDown: arrow(-230), levelUp: arrow(230), powers } };
+  return {
+    panel,
+    close,
+    rows,
+    hand: handRow(rows.hand),
+    test: { divider: top + 662, levelDown: arrow(-230), levelUp: arrow(230), dayDown: arrow(-230, rows.pretendDate), dayUp: arrow(230, rows.pretendDate), powers },
+  };
 }
 
 // --- The debug / automation handle (globalThis.__flappy; src/main.js) ---
 
 /**
- * Whether the page sets globalThis.__flappy (plan 30): on this machine (localhost, a *.localhost name,
- * 127.x, ::1), a *.local name, or a private-network address (10/8, 172.16/12, 192.168/16: a phone on the
- * same Wi-Fi as tools/serve.py), or when a driver set globalThis.__flappyDebug = true before the page's
- * scripts ran (optIn; the smoke does, so it runs against any URL). Not on a public host.
+ * A host on this machine (localhost, a *.localhost name, 127.x, ::1), a *.local name, or a private-network
+ * address (10/8, 172.16/12, 192.168/16: a phone on the same Wi-Fi as tools/serve.py). The debug handle
+ * (plan 30) and the service worker (plan 35, 3.0 D3: never registered here) share this rule.
  */
-export function debugHandleAllowed(hostname, optIn = false) {
-  if (optIn === true) return true;
+export function localHost(hostname) {
   const h = String(hostname ?? '').toLowerCase().replace(/^\[|\]$/g, '');
   if (h === 'localhost' || h.endsWith('.localhost') || h === '::1' || /^[a-z0-9-]+(\.[a-z0-9-]+)*\.local$/.test(h)) return true;
   const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -2523,6 +2709,15 @@ export function debugHandleAllowed(hostname, optIn = false) {
   const [a, b, c, d] = m.slice(1).map(Number);
   if ([a, b, c, d].some((x) => x > 255)) return false;
   return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
+/**
+ * Whether the page sets globalThis.__flappy (plan 30): on a local host (localHost), or when a driver set
+ * globalThis.__flappyDebug = true before the page's scripts ran (optIn; the smoke does, so it runs
+ * against any URL). Not on a public host.
+ */
+export function debugHandleAllowed(hostname, optIn = false) {
+  return optIn === true || localHost(hostname);
 }
 
 // --- Frame meter (?perf; src/ui/perfMeter.js) ---

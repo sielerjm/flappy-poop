@@ -1,6 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { EDUCATION, GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, dailyGlyphNow } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { t, howToItems, metaFontSize } from '../i18n.js';
@@ -15,7 +15,6 @@ const EMOJI_ROWS = {
   controls: '🎮',
   twoPlayer: '👥',
   tournament: '🏅',
-  daily: '🌞',
   education: '📚',
   superQ: '\u2753', // plan 34: the challenge question (the see-through bubble art would lose its black ? on the dark panel)
   info: 'ℹ️',
@@ -69,13 +68,14 @@ export class HowTo extends Phaser.Scene {
     let nextY = cy - 190;
     let lastBottom = nextY;
     // The off switch (plan 28) hides the 📚 row: asked of Play, as the 📚 tab, Stats and the save panel ask (AUD-044).
-    howToItems(locale, { education: this.scene.get('Play')?.educationAvailable?.() ?? EDUCATION.enabled !== false }).forEach((item) => {
+    howToItems(locale, { education: this.scene.get('Play')?.educationAvailable?.() ?? EDUCATION.enabled !== false, daily: dailyGlyphNow(this.registry, T) }).forEach((item) => {
       const y = nextY;
       if (item.key === 'pipe') {
         // pipe.png is 128x1280 with the cap at the top: show a 64x80 cap slice.
         sv.add(this.add.image(cx - 220, y - 40, 'pipe').setOrigin(0.5, 0).setScale(0.5).setCrop(0, 0, 128, 160));
-      } else if (EMOJI_ROWS[item.key]) {
-        sv.add(this.add.text(cx - 220, y, EMOJI_ROWS[item.key], { fontFamily: 'sans-serif', fontSize: '56px' }).setOrigin(0.5));
+      } else if (item.key === 'daily' || EMOJI_ROWS[item.key]) {
+        const glyph = item.key === 'daily' ? dailyGlyphNow(this.registry, T) : EMOJI_ROWS[item.key]; // the 🌞, or December's 🎅 (plan 17)
+        sv.add(this.add.text(cx - 220, y, glyph, { fontFamily: 'sans-serif', fontSize: '56px' }).setOrigin(0.5));
       } else {
         sv.add(this.add.image(cx - 220, y, item.key).setDisplaySize(80, 80));
       }

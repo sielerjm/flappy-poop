@@ -17,7 +17,8 @@ Tip: on iPhone, turn **Silent mode off** to hear sound.
 | [👆 How to play](#how-to-play) | [🥦 Pickups & power-ups](#pickups--power-ups) |
 | [🏁 Levels & shop](#levels--shop) | [🎮 Controls](#controls) |
 | [👥 Two players](#two-players) | [🌞 Daily Dump](#daily-dump) |
-| [🏆 Save codes & leaderboard](#save-codes--leaderboard) | [🛠️ For developers](#for-developers) |
+| [🏆 Save codes & leaderboard](#save-codes--leaderboard) | [🎅 December](#december) |
+| [🛠️ For developers](#for-developers) | |
 
 ![Finish line](docs/finish-divider.svg)
 
@@ -123,7 +124,7 @@ A bean draw with a full bag becomes fiber instead.
 
 ### Ready screen
 
-Along the top: the **🌞** (the [Daily Dump](#daily-dump)) and the **?** (How to play). A small orange number on the 🌞 is your Daily Dump streak, the days in a row you have played it (on the 📚 switch, your learning streak); the 🌞 card and the 📚's “Your cards” say it too: “🔥 Current streak = 3”. Then, top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, and your **user button**: `Load user` until you set a name, then `name · best`; it opens Save / Load.
+Along the top: the **🌞** (the [Daily Dump](#daily-dump)) and the **?** (How to play). A small orange number on the 🌞 is your Daily Dump streak, the days in a row you have played it (on the 📚 switch, your learning streak); the 🌞 card and the 📚's “Your cards” say it too: “🔥 Current streak = 3”. Then, top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, and your **user button**: `Sign in` until you set a name, then `name · best`; it opens your player panel.
 
 ### During a run
 
@@ -195,7 +196,7 @@ Two players on two devices, by code (0.25.0; pause, rejoin, friends and invites 
 
 **Reload or relaunch.** Reloading, or reopening the home-screen app or the tab mid-race, rejoins it. Both players go back to the start of the level they were on, with the score, coins and powers they had there, and tap **Ready**. A second window of the game does not take the race over ("Your race is running in another window."). A reload after your own finish does not rejoin.
 
-**📱 Devices.** Your first device online is trusted. Another device of the same player (after Load user code) waits until you type the 6-digit pairing code that a trusted device shows. While it waits it races by code and its races are saved like any other; 🤝 Friends, 🏁 Recent races and 📱 Devices open only once it is paired. A device can switch to a different player online up to 10 times an hour. **🏁 Recent races** lists your last online races, private to you and shown only on a paired device. A race is saved when both devices report the same result: the winner earns gold and the loser silver on the 🏅 board, and both scores reach the 🏆 board, up to a daily limit (10 counted races a day per pair of players, 20 per player). A race shorter than 3 minutes is not saved, and neither is one left half-way.
+**📱 Devices.** Your first device online is trusted. Another device of the same player (after you sign in with your code) waits until you type the 6-digit pairing code that a trusted device shows. While it waits it races by code and its races are saved like any other; 🤝 Friends, 🏁 Recent races and 📱 Devices open only once it is paired. A device can switch to a different player online up to 10 times an hour. **🏁 Recent races** lists your last online races, private to you and shown only on a paired device. A race is saved when both devices report the same result: the winner earns gold and the loser silver on the 🏅 board, and both scores reach the 🏆 board, up to a daily limit (10 counted races a day per pair of players, 20 per player). A race shorter than 3 minutes is not saved, and neither is one left half-way.
 
 **🤝 Friends.** The online home has a **🤝 Friends** button. A friend is added only from a saved race together, played on two paired devices: tap **Add as a friend** on the results panel, or **Add friend** in an opponent's ⋯ under Recent opponents. There is no search, so nobody can look you up. The other player gets a request to **Accept** or **Decline**; you can take back one you sent. Each friend shows a dot and a word: 🟢 Online (in 🌐), 🟡 In a game, ⚪ Offline. The ⋯ on a row removes a friend or blocks a player (both ask twice). Blocking ends any friendship, stops their requests, and takes your races out of each other's lists; you can unblock from the Blocked list. You can send up to 20 requests a day, and 3 to the same player in a week.
 
@@ -231,17 +232,30 @@ The 🌞 board, like the others, is for friends, not prizes: the course comes fr
 
 ![Finish line](docs/finish-divider.svg)
 
+## 🎅 December
+
+All of December (UTC) the game dresses up. Only the look changes; every rule, hitbox and score stays the same.
+
+- The home screen says **Happy Bowelidays!** over the title, with a countdown under it: "20 sleeps till Christmas" on 1 to 24 December, **Merry Christmas!** on the 25th, no line after. (The image is English in every language; the countdown is translated.)
+- A 🎅 stands in for the 🌞, a different one each time the home screen opens (Santa, Mrs. Claus or Mx Claus, in every skin tone). The Daily Dump's texts say it too.
+- Your poop wears a Santa hat in every pose but the crash, and so do the bad bacteria; fiber becomes a candy cane, the probiotic a gingerbread figure, and snow sits on the bottom pipes. The pickup icons in the HUD, the cards and your profile stay as they are.
+- Snow falls on the home screen and in every game mode (a run, the Daily Dump, both halves of a match, the online race and 📚 runs). With "reduce motion" on in your device settings, it does not fall.
+
+![Finish line](docs/finish-divider.svg)
+
 ## 🏆 Save codes & leaderboard
 
 ### Username & save code
 
-1. Tap **Load user** (or your name, once set) on the ready screen.
-2. Pick a username and press **Save** — it appears on the public leaderboard with your best, and your profile (stats and achievements) is public too. A new username has 4–16 characters (at least 2 in Chinese, Japanese or Korean), no spaces or emoji, and no rude words; names chosen before these rules keep working. (The game checks this, not the server.)
-3. **Copy** your `fp1.…` user code and keep it somewhere safe.
-4. On another phone or browser, **Load** that code to bring your name and best 6 scores with you. Your best score on the leaderboard (with and without the toilet) comes back too, even if you played it on a different phone after you copied the code.
-5. To change your username, type a new one and press **Save**: every phone and browser that uses your code picks up the new name on its own.
+1. Tap **Sign in** (or your name, once set) on the ready screen. Signed out, you see two buttons: **Sign in** and **Create user**.
+2. To start a new player, tap **Create user**, pick a username and press **Create user** again. It appears on the public leaderboard with your best, and your profile (stats and achievements) is public too. A new username has 4–16 characters (at least 2 in Chinese, Japanese or Korean), no spaces or emoji, and no rude words; names chosen before these rules keep working. (The game checks this, not the server.)
+3. **Copy** your `fp1.…` user code and keep it somewhere safe. The panel shows it right after Create user, and any time you open it signed in.
+4. On another phone or browser, tap **Sign in** and paste that code to bring your name and best 6 scores with you. A preview shows who the code belongs to before you confirm. Whatever the device had played as a guest joins that player. Your best score on the leaderboard (with and without the toilet) comes back too, even if you played it on a different phone after you copied the code.
+5. To change your username, type a new one in the panel: every phone and browser that uses your code picks up the new name on its own.
+6. Made two players by mistake? Tap **Merge players…**, paste the other player's code and tap the one whose name stays (this device's by default). Scores, medals and badges join for good.
+7. **Sign out** (with a confirm that shows your code) signs this device out only: the board keeps your rows, and the code brings them back. It also unpairs the device from online play, so you may need to pair it again from another of your devices.
 
-A username belongs to one player on the board: if a name is taken, paste your code instead (or pick another name). **Clear** (two taps) signs this device out only — the board keeps your rows; the code brings them back.
+A username belongs to one player on the board: if a name is taken, sign in with your code instead (or pick another name).
 
 ### Leaderboard
 
