@@ -8,6 +8,20 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.35.0',
+    date: '26 Nov 2026',
+    notes: {
+      en: [
+        '🧩 The Advent puzzle: tap the 🧩 button at the top left of the home screen to watch your December pieces come together into one picture. A new piece flies into its place the first time you open the puzzle after finding it, and the button glows until you do. It also opens from the 🧩 line in the Daily Dump window and from YOUR PLAYER.',
+        '🏆 A new 🧩 tab on the leaderboard ranks everyone by pieces found, with a 🎄 or 🌲 beside each player who has earned a tree.',
+      ],
+      'zh-Hans': [
+        '🧩 圣诞拼图：点主页左上角的🧩按钮，看你十二月找到的拼图拼成一幅画。找到新拼图后第一次打开圣诞拼图时，它会飞到自己的位置上；在那之前按钮会一直发光。也可以从每日一拉窗口里的🧩那一行或“你的玩家”打开。',
+        '🏆 排行榜新增🧩标签，按找到的拼图数给所有人排名，获得圣诞树的玩家名字旁会显示🎄或🌲。',
+      ],
+    },
+  },
+  {
     version: '0.34.0',
     date: '26 Nov 2026',
     notes: {
