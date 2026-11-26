@@ -601,7 +601,7 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | adventTreeDecorated | 🎄 (all 24 found by 24 Dec) | 🎄 |
 | adventTreePlain | 🌲 (all 24 found, the last after 24 Dec) | 🌲 |
 | adventNoGift | No gift this run, play again (2.6: on Over after a December Daily run that offered a piece and ended without it) | 这局没有礼物，再来一局 |
-| adventCount | 🧩 {n}/{total} (2.6: the pieces found so far; on the home screen under the 🎅, the Daily popup and Over; {total} is 24) | 🧩 {n}/{total} |
+| adventCount | 🧩 {n}/{total} (2.6: the pieces found so far; the Daily popup and Over (the home Advent button shows the bare {n}/{total} since 2.15a); {total} is 24) | 🧩 {n}/{total} |
 | adventBookCount | {n} of {total} found (2.15: the Advent book's only line, over the puzzle; {total} is 24) | 已找到 {n}/{total} |
 | adventOnTrack | 🧩 {n}/{total} · 🎄 on track (2.6: every piece out so far found, through 24 Dec: the decorated tree is in reach) | 🧩 {n}/{total} · 🎄 进度正好 |
 | adventPlainOpen | 🧩 {n}/{total} · 🌲 by 31 Dec (2.6: 25 to 31 Dec, not all found: the plain tree is still open) | 🧩 {n}/{total} · 🌲 12月31日前 |

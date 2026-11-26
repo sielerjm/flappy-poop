@@ -421,7 +421,11 @@ day through the game registry.
   (`src/ui/snowfall.js`: `createSnowfall`, `makeFlakes`, `stepFlakes`, one renderer for later storms; nothing under `prefers-reduced-motion`).
 - **Smoke.** `tools/headless_check.mjs` pins the page's and its own clock (`SMOKE_PIN_DAY` 2026-11-15, `pinOffset`, `clockStubSource`; `--date=YYYY-MM-DD`
   overrides every pin), because every older check expects stock art and the 🌞; the `christmas` section runs on a 5 Dec pin and back,
-  and the `advent` section runs each of its parts on its own pin (5 Dec a real Daily, 7 Dec a storm, test mode on a Pretend 5 Dec).
+  and the `advent` section runs each of its parts on its own pin (5 Dec a real Daily, 7 Dec a storm, test mode on a Pretend 5 Dec). Its
+  book checks (plan 17, 2.18): the glowing button opens the book, the piece flies into its cell, the flight asks for its chimes and
+  the landing for its click, the glow is off after closing, a book closed mid-flight does not land the piece twice on the next open,
+  the Daily window's 🧩 line opens the book and closing goes back to the Daily window, and the 🧩 board tab reads a stubbed
+  `advent_board` with the trees beside the names.
   Checked by `tests/advent.test.js`, `tests/adventScene.test.js`, `tests/assets.test.js` and `tests/tools.test.js`.
 - **Advent pieces** (Stage 2b, v0.34.0; `TUNING.advent.piece`: `count` 24, `minPair` 3, `maxPair` 20, `pityStep` 3, `floorPair` 6,
   `todayWeight` 3). Piece k comes out on k Dec. A December Daily run (`runIsDaily` and `adventSeason`) offers one: `rollAdvent` in
@@ -434,10 +438,31 @@ day through the game registry.
   batch a player a sync, drained after `drainDaily` and before `drainCareer`, each piece waiting for its run's post (`waitsForDailyRun`);
   `submit_advent_piece` answers `{ stored, kept, refused }` (`kept` stays in the queue while its day is today or yesterday, `refused`
   leaves it and stays in the book, `too soon` keeps the batch). `advent_progress` is merged once a page load (a union, the earlier day
-  per piece). The look: the home chip (the count alone, "🧩 5/24", `readyLayout`'s `adventChip`), the Daily window's two lines
+  per piece). The look: the home Advent button (S14, 0.35.0; see **The Advent book** below; it replaced the home chip), the Daily window's two lines
   ("🧩 N of 24 found · M left", today's piece found or not), Over's found line, a 🎁 after the name on 🌞 rows
   (`normalizeDailyRow`'s `gift`). Old builds ignore both new keys and the new `best` field.
   Tests: `tests/adventPieces.test.js`, `tests/adventDaily.test.js`.
+- **The Advent book** (Stage 2c, v0.35.0; `src/scenes/Advent.js`, overlay id `advent`). A 4 x 6 picture that assembles as pieces are found
+  (`TUNING.advent.puzzle`: `cols`, `rows`, `cellPx` 332, `order`, one shuffle shared by every player: piece k fills cell `order[k - 1]`).
+  Locked cells are flat silhouettes (`TUNING.advent.book`: panel size, `lockFill`, a gold star on a piece found on its own day); its
+  only text is "N of 24 found" (`adventBookCount`). The pure parts are in `src/logic.js`: `adventBookLayout` (the panel, the ✕, the 24
+  slots), `adventBookPieces(found, season, t)` (which pieces fill which cells) and `adventBookSeason(day, t, hasPieces)` (December's own
+  season; after December, last season **read-only** while this device owns a piece, else no book). The sheet
+  `assets/advent/advent-puzzle.png` (4 x 6 cells of 332 px, 256 colours, cut by `tools/advent_puzzle.py`) loads in the Advent scene's
+  own `preload`, never in Boot, so the picture costs nothing until the book opens.
+  **Doors:** the home **Advent button** (top left, "N/24" on its corner, `TUNING.advent.button`; `chromeIntent`'s `advent` input, ready
+  screen or over the Daily window; it glows while a piece is unseen), the **Daily window's 🧩 line** (closing the book goes back to the
+  Daily window), and the **save panel's "🧩 Advent" button** (wears 🎄 or 🌲 once this device's pieces earn it, `adventTreeGlyph`; closing
+  goes back to the panel). **Seen flag:** the found-day store keeps `seen` (`unseen()` lists pieces the book has not shown, by day found;
+  `markSeen(pieces)` records them; a piece merged from another device arrives unseen), and that drives the glow.
+  **Add-piece animation** (`TUNING.advent.bookAnim`: `appearMs`, `flyMs`, `fadeMs`, `flights` 3): on open, the latest `flights` unseen
+  pieces fly from the grid's centre to their cell (chimes, then the lock click on landing); older ones land at once; under reduced motion
+  none flies; a tap inside the book skips the flight. A book closed mid-flight leaves nothing for its next open (the flight and its timer
+  reset in `create` and on shutdown). **Sounds** `Advent_PieceAdd.mp3` and `Advent_PieceLock.mp3` (`TUNING.advent.sound`: `addVolume`,
+  `lockVolume`), lazy-loaded in December like the other two. **The 🧩 board** is the Leaderboard's fifth tab (after 📚), shown while the
+  book has a season: `fetchAdventBoard` (RPC `advent_board`; rows `{ rank, name, pieces, onDay, award, me, total }`, null on junk) and
+  `Leaderboard.showAdvent` (rank, name with the server's tree, pieces found; the footer is your place, or how to join).
+  Tests: `tests/adventBook.test.js`, plus the smoke's `advent` section.
 - **The trees** (v0.34.0). `advent_tree_2026` (🎄, all 24 by 24 Dec) and `advent_pine_2026` (🌲, by 31 Dec) are `seasonal`
   `ACHIEVEMENTS`, quest rows in `achievement_defs` (1 to 31 Dec, claims close 2 Jan), claimed by the game from the found-day store
   (`adventAward`, mirrored by the server's `advent_award`; `claim_achievements` has no award check) and judged on a Daily run's own
@@ -542,7 +567,7 @@ and Esc: Play's `onlineRepeat(event)`, plan 39 5.2b, AUD-149 / AUD-144), tests/r
 **Service worker** (plan 35, Stage 3, 0.29.0): `sw.js` at the root, scope the game's folder
 (`registration.scope`). It gives an offline launch, and a launch more than 10 minutes after the last
 (GitHub Pages' `max-age=600`) no longer revalidates every module and asset one by one; only index.html
-goes to the network. About 4.7 MB per build in Cache Storage. Its page side is `src/swClient.js`.
+goes to the network. About 6.0 MB per build in Cache Storage (143 files; December's 0.4 MB picture and sounds are in it, and `tests/swStamp.test.js` caps a build at 6.5 MB, raised from 6 MB in 0.35.0; whether to keep that cap or drop the picture from the precache is Michael's call, still open). Its page side is `src/swClient.js`.
 - **Stamp.** `npm run push` writes `BUILD` and `FILES` into `sw.js` (`tools/sw_stamp.mjs`): `FILES` pairs
   every URL exactly as the page asks for it with the SHA-256 of its bytes: index.html, every module
   (`?h=<content hash>`, through the import map `index.html` also gets), art and sounds (`?v=<VERSION>`),
@@ -1344,7 +1369,7 @@ src/
                             worker precaches it, plus the Bowelidays image). Outside config.js on purpose:
                             tests/push.test.js stamps a copy of config.js alone. tests/advent.test.js.
                             (Stage 2 adds the piece, storm and sound logic to logic.js, TUNING.advent.piece /
-                            chipPx / storm / sound, and LEADERBOARD.adventKey / adventQueueKey; see "Christmas".)
+                            storm / sound / puzzle / book / bookAnim / button, and LEADERBOARD.adventKey / adventQueueKey; see "Christmas".)
   achievements.js           Achievements and lifetime counters (plan 08), NO
                             Phaser/DOM: ACHIEVEMENTS (id, kind 'run' / 'lifetime' /
                             'seasonal', glyph, title / desc i18n keys, n, counters,
@@ -1842,7 +1867,9 @@ src/
                             createDailyQueue (flappyPoop.dailyQueue, one entry per
                             player and day, outcome 'nameTaken' kept; addBetter, plan 17),
                             createAdventStore / createAdventQueue (flappyPoop.advent.<season>,
-                            flappyPoop.adventQueue), submitAdventPiece, fetchAdventProgress,
+                            flappyPoop.adventQueue; the store's `seen` list with unseen() /
+                            markSeen(), S14), submitAdventPiece, fetchAdventProgress,
+                            fetchAdventBoard (RPC advent_board, the 🧩 tab),
                             clearAdventStores (plan 17, Stage 2),
                             submitDailyScore ('ok' / 'keep' / 'rejected' /
                             'nameTaken'), fetchDailyBoard (rows with me and total).
@@ -2972,6 +2999,18 @@ src/
                             the version line; streakLine ("🔥 Current streak = n",
                             Play.streakNow('daily'); plan 34, round 2) in the note's
                             place unless a note shows. refresh() redraws it after a save.
+                            In December its 🧩 line opens the Advent book (chromeIntent
+                            'advent'); closing the book comes back here.
+    Advent.js               Overlay (plan 17, Stage 2c; overlay id 'advent'): the Advent
+                            book, a 4 x 6 picture filled as pieces are found. Opens from the
+                            home Advent button, the Daily window's 🧩 line and the save
+                            panel's 🧩 Advent button (onClose returns to the opener). Loads
+                            assets/advent/advent-puzzle.png in its own preload (never Boot).
+                            Layout adventBookLayout, pieces adventBookPieces, season
+                            adventBookSeason (src/logic.js); TUNING.advent.puzzle / book /
+                            bookAnim / button / sound. Flies the latest 3 unseen pieces in
+                            (a tap skips, none under reduced motion), then markSeen().
+                            tests/adventBook.test.js.
     (every overlay builds this.focus from pressable() items, ✕ first then its
                             rows (the Quiz is the exception: the challenge offer's Try it and
                             Decline lead, the ✕ last; AUD-068), and calls focus.show(), which only shows under a
@@ -3003,6 +3042,9 @@ src/
                             name on the three boards opens that player's profile
                             over the board (sv.link: a tap, not a drag; only while
                             the board is on top); the – rows are not names.
+                            A fifth tab, 🧩 ('advent'), after 📚, only while the Advent book
+                            has a season (showAdvent: rank, name + tree, pieces from
+                            fetchAdventBoard; adventBoardTitle / Header / You / Empty / Join).
                             A fourth tab, 📚 ('education'), only when
                             Play.educationAvailable() (tabList; leaderboardLayout takes
                             the tab count): showEducation draws rank, name, grade
@@ -3122,7 +3164,9 @@ assets/                     Contract PNGs + README.md (the art contract).
   poop-stink-falling1.png poop-stink-falling2.png poop-scared.png
   poop-stink-scared1.png poop-stink-scared2.png poop-fart.png
   poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png coin.png
-                            (advent/: the 17 December files (plan 17), listed in src/advent.js; each README row
+                            (advent/: the 17 December files (plan 17), listed in src/advent.js, plus
+                            advent-puzzle.png, the Advent book's 4 x 6 sheet, 332 px cells, 256 colours,
+                            loaded by scenes/Advent.js only; each README row
                             names its stock frame and body rule; tests/assets.test.js checks them)
                             (coin.png: the golden corn kernel's spin, 12 frames of
                             106x106 side by side (1272x106), loaded as a spritesheet;
@@ -3163,6 +3207,8 @@ assets/                     Contract PNGs + README.md (the art contract).
   sfx/Bubble_Pop.mp3        (lazy) The poop touching a challenge question's ❓ bubble (the offer opens on it, with no book sound).
   sfx/Advent_PieceFound.mp3 (lazy, in season, plan 17) A December piece caught (a twinkle).
   sfx/Advent_Blizzard.mp3   (lazy, in season, plan 17) A storm's loop, faded in from the banner and out as it ends.
+  sfx/Advent_PieceAdd.mp3   (lazy, in season, plan 17) The Advent book's chimes as a piece flies in.
+  sfx/Advent_PieceLock.mp3  (lazy, in season, plan 17) The lock click as it lands in its cell.
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant
@@ -3665,6 +3711,9 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   adventTrees.test.js       The 🎄 / 🌲 entries on found-day stores (adventAward).
   adventSchema.test.js      The 2a + 2b SQL in PGlite: utc_today, advent_season, pieces, progress, board, award, the
                             December branch of submit_daily_score, daily_board's gift, fold_player, the tree claims.
+  adventBook.test.js        The Advent book (plan 17, 2.15 to 2.16): adventBookLayout / Pieces / Season, chromeIntent's advent
+                            input, the overlay on the stack, the sheet in its own preload, the found-day store's seen flag,
+                            fetchAdventBoard, the 🧩 tab, adventTreeGlyph, the save panel's button.
   adventScene.test.js       The countdown line, and the December skin on the real Play prototype: the stock key
                             as state, the fart and boost alternation, the one lazy flight and its re-apply.
   ready.test.js             readyLayout boxes inside the field, non-overlapping,
