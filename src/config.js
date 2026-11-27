@@ -562,6 +562,19 @@ export const TUNING = {
     // row floor(c / cols)). Piece k (out on k Dec) fills cell order[k − 1]: one plain shuffle shared by every player
     // (Michael, S7, 26 Nov), made once with createRng(20261201) and Fisher-Yates and fixed here as data.
     puzzle: { cols: 4, rows: 6, cellPx: 332, order: [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6] },
+    // December's fairy lights (Stage 1c, 1c.9, T14; Gate A sheet 11, L1, Michael 27 Nov): assets/advent/fairy-lights.png
+    // (texW x texH, its ends evened by tools/process_art.py so it tiles) drawn at `scale` in a tile sprite the field's
+    // width, its wire's top at wireTop (the art's wire starts wireDy px down), at `depth`: over the pipes and the ceiling
+    // strip (5), under the snow (9), the home buttons (19 to 22) and the HUD (20). It scrolls with the ceiling (still on
+    // the home screen). Each bulb ([x, y, colour] in the art's px) glows by turns (glowPx, twinkle: peak alpha, each
+    // bulb's own period from minMs to maxMs); none under reduced motion. While it shows, the HUD's texts wear a faint white
+    // drop shadow and its icons a soft white copy (shadow; T14b, his idea at Gate A).
+    lights: {
+      texW: 768, texH: 152, scale: 0.5, wireTop: 104, wireDy: 6, depth: 6, glowPx: 26,
+      bulbs: [[44, 104, 0xd53e4f], [157, 84, 0x1b9e77], [244, 105, 0xfee08b], [345, 83, 0x3288bd], [425, 97, 0xd53e4f], [537, 102, 0x1b9e77], [617, 84, 0xfee08b], [725, 102, 0x3288bd]],
+      twinkle: { maxAlpha: 0.6, minMs: 900, maxMs: 2200 },
+      shadow: { color: 'rgba(255, 255, 255, 0.55)', blur: 8, dx: 0, dy: 3, iconAlpha: 0.4, iconGrow: 1.15 },
+    },
     // The Advent book (2.15, Gate A sheet 5, Michael 26 Nov): a width x height panel centred on the field, "N of 24 found"
     // (countPx) countDy from its centre, the grid's top gridDy from it; slots of cellPx x spriteDisplayScale (166) with no gaps.
     // A locked slot is a flat lockFill square with a 1 px lockLine; a piece found on its own day wears a gold star of

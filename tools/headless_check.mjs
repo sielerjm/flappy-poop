@@ -8321,6 +8321,11 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       const want = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => JSON.stringify({ season: l.adventSeason('${dec}', c.TUNING), line: l.countdownLine('${dec}', 'en', c.TUNING), santas: c.TUNING.advent.santas }))`).then(JSON.parse);
       const h1 = await home();
       const in1 = await loaded();
+      // December's fairy lights (plan 17, 1c.9, T14): a tile sprite along the ceiling at its depth, scrolled as far as the
+      // ceiling, no body, bulbs glowing; the HUD's white drop shadow while they show (T14b).
+      const lights = () => evaluate(`(() => { const p = ${play}; const f = p.fairyLights; return JSON.stringify(f?.active ? { depth: f.depth, w: f.width, tp: f.tilePositionX * f.tileScaleX, ceil: p.ceiling.tilePositionX * p.ceiling.tileScaleX, glows: p.lightGlows.filter((g) => g.visible).length, body: Boolean(f.body), shadow: p.scoreText.style.shadowBlur, field: p.fieldW } : null); })()`).then(JSON.parse);
+      const lit1 = await lights();
+      ok(Boolean(lit1) && lit1.depth === TT.advent.lights.depth && lit1.w === lit1.field && Math.abs(lit1.tp - lit1.ceil) < 0.5 && !lit1.body && lit1.glows > 0 && lit1.shadow > 0, `the home screen's fairy lights: depth ${lit1?.depth}, the field's width, scrolled with the ceiling (${lit1?.tp?.toFixed?.(1)} / ${lit1?.ceil?.toFixed?.(1)} px), no body, ${lit1?.glows} bulbs glowing, the HUD's white shadow (blur ${lit1?.shadow}) (1c.9)`);
       // The changing 🎅's pool (plan 17, 1b.2e, M3): the plain 🎅 🤶 🧑‍🎄 this device draws; the picker keeps every variant.
       const pool = await evaluate(`import('./src/logic.js').then((l) => JSON.stringify(l.plainSantas(__flappy.registry.get('santas') ?? [])))`).then(JSON.parse);
       ok(want.season && h1.day === dec, `the page's day is the pin, ${dec}, in the season (${h1.day})`);
@@ -8342,6 +8347,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       ok(run1.state === 'playing' && !run1.stock.endsWith('santa') && run1.shown === run1.want, `in the run the poop wears its stock key's twin (${run1.stock} → ${run1.shown})`);
       ok(run1.bottoms > 0 && run1.snowOk === run1.bottoms, `snow on every bottom pipe's cap, placed at TUNING.advent.snowCap (${run1.snowOk} / ${run1.bottoms})`);
       ok(run1.itemsOk === run1.items, `every twinned pickup in the field wears its December twin (${run1.itemsOk} / ${run1.items}: ${run1.kinds.join(', ') || 'none in the field'})`);
+      const litRun = await lights();
+      ok(Boolean(litRun) && Math.abs(litRun.tp - litRun.ceil) < 0.5 && litRun.ceil > (lit1?.ceil ?? 0), `in a run the lights ride the villi: the strip scrolled as far as the ceiling (${litRun?.tp?.toFixed?.(1)} / ${litRun?.ceil?.toFixed?.(1)} px) (1c.9)`);
       ok(run1.flakes === TT.advent.snow.count && !run1.line && !run1.image, `in a run the snow keeps falling (${run1.flakes} flakes; Michael, 26 Nov) and the countdown line and Happy Bowelidays! hide`);
       // The holly bean (plan 17, 1b.2b): level 1's scripted pairs bring one; the world bean wears the holly twin on the
       // stock bean's hitbox circle, and the HUD's bean wears it too (Stage 1c, T12: December art everywhere).
@@ -8491,6 +8498,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       const in4 = await loaded();
       if (!date) {
         ok(h4.day === SMOKE_PIN_DAY && in4.length === 0, `on ${SMOKE_PIN_DAY}, a fresh page loads no December file (${in4.join(', ') || 'none'})`);
+        const lit4 = await lights();
+        ok(lit4 === null, `off season no fairy lights (${JSON.stringify(lit4)})`);
         ok(h4.stock === 'poop-speech' && h4.shown === 'poop-speech' && h4.glyph === '\u{1F31E}' && h4.line === null && !h4.image && h4.flakes === 0, `off season the home screen is stock: the bubble frame, the 🌞, no line, no snow (${JSON.stringify(h4)})`);
       } else console.log(`note: --date=${date}: the off-season half is skipped (the page is on ${nov})`);
       const perfNov = await perfRun(6000);

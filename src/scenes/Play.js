@@ -140,6 +140,9 @@ import {
   stormCovers,
   stormWind,
   fartWind,
+  fairyLightsLayout,
+  lightsBulbs,
+  twinkleAlpha,
   swirlCentres,
   stormFlapMul,
   stormScrollMul,
@@ -159,7 +162,7 @@ import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
 import { activeOverlays, OVERLAY_SCENES } from '../ui/overlayStack.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
-import { createSnowfall } from '../ui/snowfall.js';
+import { createSnowfall, prefersReducedMotion } from '../ui/snowfall.js';
 import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
@@ -594,6 +597,9 @@ export class Play extends Phaser.Scene {
       this.adventShown = false;
     }
     this.snowfall = null;
+    this.fairyLights = null; // December's fairy lights along the ceiling (refreshLights), made once their file is in
+    this.lightGlows = [];
+    this.hudShadows = null; // T14b: the HUD icons' soft white copies while the lights show
     this.countdownImage = null; // the Bowelidays image (all December), made once its file has landed
     this.readyUiShown = true; // setReadyUiVisible's last word: the switches rebuilt by refreshReadySwitches follow it
     this.toiletToggle = this.versusToggle = this.educationToggle = this.eduDueText = this.eduStreakText = null; // a restart destroyed the last ones
@@ -4675,6 +4681,108 @@ export class Play extends Phaser.Scene {
       this.snowfall = null;
     }
     this.snowfall?.setVisible(true);
+    this.refreshLights();
+  }
+
+  // ---- December's fairy lights (plan 17, 1c.9, T14)
+
+  /** Whether December's look holds today (the season, on the pretend date in test mode). */
+  lightsSeason() {
+    return adventSeason(dailyDay(this.registry), T);
+  }
+
+  /**
+   * The fairy lights along the ceiling villi (Gate A sheet 11, L1): in December, once their file is in, a tile sprite
+   * the field's width at TUNING.advent.lights' depth (over the pipes and the ceiling, under the snow, the HUD and the
+   * home buttons) and a glow per bulb; every mode with a ceiling has them (runs, the Daily, both match halves, the
+   * online race, education, the home screen). Decoration only: no body. Off season they go. T14b: while they show,
+   * the HUD wears its white drop shadow (setHudShadow).
+   */
+  refreshLights() {
+    const want = this.lightsSeason() && this.textures.exists(ADVENT_ART.lights);
+    if (want && !this.fairyLights) {
+      const L = T.advent.lights;
+      const lay = fairyLightsLayout(this.fieldW, T);
+      this.fairyLights = this.add.tileSprite(0, lay.y, this.fieldW, lay.height, ADVENT_ART.lights).setOrigin(0, 0).setTileScale(lay.tileScale).setDepth(L.depth);
+      const n = lightsBulbs(0, this.fieldW, T).length + L.bulbs.length; // room for one more tile's worth as they scroll
+      this.lightGlows = Array.from({ length: n }, () =>
+        createGlow(this, 0, 0, { key: 'light-glow', radius: L.glowPx, fadeFrac: 0.5 }).setBlendMode('ADD').setDepth(L.depth + 0.1).setVisible(false),
+      );
+      this.setHudShadow(true);
+      this.syncLights(this.time?.now ?? 0);
+    } else if (!want && this.fairyLights) {
+      this.fairyLights.destroy();
+      this.fairyLights = null;
+      for (const g of this.lightGlows) g.destroy();
+      this.lightGlows = [];
+      this.setHudShadow(false);
+    }
+  }
+
+  /**
+   * One frame of the lights: the strip scrolled as far as the ceiling (its tilePositionX in display px over the tile
+   * scale, so the lights ride the villi and never jump), each bulb's glow on its bulb, twinkling (none under reduced
+   * motion: a still frame), and the HUD icons' white copies on their icons.
+   */
+  syncLights(now) {
+    const strip = this.fairyLights;
+    if (!strip) return;
+    const scroll = (this.ceiling?.tilePositionX ?? 0) * (this.ceiling?.tileScaleX ?? 1);
+    strip.tilePositionX = scroll / T.advent.lights.scale;
+    const still = this.lightsReduced ?? prefersReducedMotion();
+    const bulbs = still ? [] : lightsBulbs(scroll, this.fieldW, T);
+    this.lightGlows.forEach((g, k) => {
+      const b = bulbs[k];
+      if (!b) {
+        g.setVisible(false);
+        return;
+      }
+      g.setPosition(b.x, b.y).setTint(b.color).setAlpha(twinkleAlpha(b.i, now, T)).setVisible(true);
+    });
+    const sh = T.advent.lights.shadow;
+    for (const { icon, copy, local } of this.hudShadows ?? []) {
+      if (!icon.active || !copy.active) continue;
+      copy.setTexture(icon.texture.key, icon.frame?.name).setDisplaySize(icon.displayWidth * sh.iconGrow, icon.displayHeight * sh.iconGrow);
+      if (local) copy.setPosition(icon.x + sh.dx, icon.y + sh.dy);
+      else copy.setPosition(icon.x + sh.dx, icon.y + sh.dy).setVisible(icon.visible);
+    }
+  }
+
+  /**
+   * T14b (Michael's idea at Gate A sheet 11): a faint white drop shadow on the HUD so it stands apart from the lights:
+   * the score, the level line and the pickup counts by setShadow (no WebGL need), their icons by a soft white copy
+   * behind each. Off: no shadow, the copies gone.
+   */
+  setHudShadow(on) {
+    const sh = T.advent.lights.shadow;
+    for (const k of ['scoreText', 'dailyHud', 'probioticText', 'coinText', 'beanText']) {
+      const txt = this[k];
+      if (!txt?.setShadow) continue;
+      if (on) txt.setShadow(sh.dx, sh.dy, sh.color, sh.blur, true, false);
+      else txt.setShadow(0, 0, 'rgba(0, 0, 0, 0)', 0, false, false);
+    }
+    for (const { copy } of this.hudShadows ?? []) copy.destroy();
+    this.hudShadows = null;
+    if (!on) return;
+    // A white silhouette: Phaser 4's fill tint (setTintFill is gone); without TintModes, no copy.
+    const fill = globalThis.Phaser?.TintModes?.FILL;
+    const white = (icon) => (fill === undefined ? null : this.add.image(icon.x, icon.y, icon.texture.key, icon.frame?.name).setTint(0xffffff).setTintMode(fill).setAlpha(sh.iconAlpha));
+    const out = [];
+    for (const icon of [this.coinIcon, this.beanIcon]) {
+      if (!icon?.texture) continue;
+      const copy = white(icon);
+      if (!copy) continue;
+      copy.setDepth((icon.depth ?? 20) - 0.05);
+      out.push({ icon, copy, local: false });
+    }
+    if (this.probioticHud?.list && this.probioticIcon?.texture) {
+      const copy = white(this.probioticIcon);
+      if (copy) {
+        this.probioticHud.addAt(copy, 0); // inside the pulsing container, behind the icon
+        out.push({ icon: this.probioticIcon, copy, local: true });
+      }
+    }
+    this.hudShadows = out;
   }
 
   /** A world pickup's texture (plan 17, 1.11; D2): its December twin once loaded, else the stock one. The kind stays the item's data. */
@@ -6859,6 +6967,7 @@ export class Play extends Phaser.Scene {
       this.ground.tilePositionX += this.scrollSpeed() * dt;
       this.ceiling.tilePositionX += this.scrollSpeed() * dt;
     }
+    this.syncLights(this.time?.now ?? 0); // December's fairy lights ride the ceiling and twinkle (1c.9)
 
     if (this.state === 'playing') {
       // A Daily Dump attempt is rewritten whenever the score or pipe count moved, so a reload loses nothing.

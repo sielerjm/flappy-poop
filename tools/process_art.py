@@ -416,11 +416,42 @@ def process_item(src: Path, dest_name: str, size: int = SIZE, body_like=None, fi
     print(f"{dest_name}: {im.size}")
 
 
-def process_layer(src: Path, dest_name: str, scale: float = 0.5, anchor=None):
+def edge_band(im: Image.Image, x: int, cutoff: int = 128):
+    """(top, bottom) of the first run of alpha above `cutoff` in column x (the wire where a strip meets its edge), or None."""
+    a = im.getchannel("A")
+    on = [y for y in range(im.height) if a.getpixel((x, y)) > cutoff]
+    if not on:
+        return None
+    end = on[0]
+    while end + 1 in on:
+        end += 1
+    return on[0], end
+
+
+def even_seam(im: Image.Image, band: int) -> tuple:
+    """A strip that tiles left to right (plan 17, 1c.9: the fairy lights): the wire meets the left and right edges
+    at different heights, so its last `band` columns are shifted up (or down) on a linear ramp, 0 at the band's
+    start to the whole step at the right edge, until the right edge's wire centre sits on the left edge's.
+    Returns (the strip, the step in px before)."""
+    left, right = edge_band(im, 0), edge_band(im, im.width - 1)
+    if not left or not right:
+        raise SystemExit("even_seam: no wire at an edge")
+    step = (right[0] + right[1]) / 2 - (left[0] + left[1]) / 2
+    out = im.copy()
+    x0 = im.width - band
+    for x in range(x0, im.width):
+        s = step * (x - x0 + 1) / band  # sample from below: the content moves up by s
+        col = im.crop((x, 0, x + 1, im.height)).transform((1, im.height), Image.Transform.AFFINE, (1, 0, 0, 0, 1, s), resample=Image.Resampling.BILINEAR)
+        out.paste(col, (x, 0))
+    return out, step
+
+
+def process_layer(src: Path, dest_name: str, scale: float = 0.5, anchor=None, seam=None):
     """Layer mode (snow, light strips, a title image): no white knockout (soft white glows stay), scale
     by `scale` (default 0.5, 4x art to 2x), crop to the alpha bbox (any alpha above 0). With
     anchor=(ax, ay), a point in SOURCE px (the pipe cap's top-left, --anchor 96,128), print the crop's
-    offset from it: in source px, in output px, and in game px (output px at spriteDisplayScale 0.5)."""
+    offset from it: in source px, in output px, and in game px (output px at spriteDisplayScale 0.5).
+    With seam=N (output px), even the strip's two ends over its last N columns so it tiles (even_seam)."""
     im = Image.open(src).convert("RGBA")
     bbox = im.split()[-1].getbbox()  # on the source, so resampling's faint spill cannot grow the box
     if not bbox:
@@ -428,8 +459,13 @@ def process_layer(src: Path, dest_name: str, scale: float = 0.5, anchor=None):
     out = im.crop(bbox)
     if scale != 1:
         out = out.resize((max(1, int(round(out.width * scale))), max(1, int(round(out.height * scale)))), Image.Resampling.LANCZOS)
+    step = None
+    if seam:
+        out, step = even_seam(out, seam)
     save_png(out, OUT / dest_name)
     line = f"{dest_name}: {out.size}  (scale {scale}, crop box {bbox} of {im.size})"
+    if seam:
+        line += f"\n  seam evened over the last {seam} px: the right edge's wire moved {-step:+.1f} px; edges now {edge_band(out, 0)} / {edge_band(out, out.width - 1)}"
     if anchor:
         ox, oy = bbox[0] - anchor[0], bbox[1] - anchor[1]
         line += (f"\n  offset from anchor {tuple(anchor)}: source px ({ox:g}, {oy:g}),"
@@ -578,7 +614,7 @@ ENTRIES["advent"] = {"kind": "item", "src": "MysteryBox_Icon-xmas.png"}  # sourc
 # Scale 0.5 (4x art to 2x) is the layer default; the Bowelidays and fairy-light scales are not settled (see 1.2's report).
 ENTRIES["pipe-snow"] = {"kind": "layer", "src": "pipe-snow-layer.png", "scale": 0.5, "anchor": (96, 128)}
 ENTRIES["bowelidays"] = {"kind": "layer", "src": "Bowelidays-straight.png", "scale": 0.5}
-ENTRIES["fairy-lights"] = {"kind": "layer", "src": "fairy-lights.png", "scale": 0.5}
+ENTRIES["fairy-lights"] = {"kind": "layer", "src": "fairy-lights.png", "scale": 0.5, "seam": 96}  # tiled along the ceiling (1c.9, L1: drawn at 0.5 more, 384 x 76); its ends evened
 
 RUNNERS = {
     "bean-twin": process_bean_twin,
@@ -586,7 +622,7 @@ RUNNERS = {
     "twin": process_twin,
     "item": lambda name, s: process_item(SRC / s["src"], f"{name}.png", s.get("size", SIZE), s.get("body_like"), s.get("fit_height")),
     "sheet": lambda name, s: process_sheet(SRC / s["src"], f"{name}.png", s.get("size", SIZE)),
-    "layer": lambda name, s: process_layer(SRC / s["src"], f"{name}.png", s.get("scale", 0.5), s.get("anchor")),
+    "layer": lambda name, s: process_layer(SRC / s["src"], f"{name}.png", s.get("scale", 0.5), s.get("anchor"), s.get("seam")),
 }
 
 

@@ -2688,6 +2688,45 @@ export function adventBookLayout(width, height, t) {
 }
 
 /**
+ * December's fairy lights (plan 17, 1c.9, T14): the tile sprite's top y, height, one tile's width on screen and its
+ * tile scale, from TUNING.advent.lights (the wire's top at wireTop).
+ */
+export function fairyLightsLayout(fieldW, t) {
+  const L = t.advent.lights;
+  return { y: L.wireTop - L.wireDy * L.scale, height: L.texH * L.scale, tileW: L.texW * L.scale, tileScale: L.scale };
+}
+
+/**
+ * The bulbs on screen with the strip scrolled `scrollPx` (display px, as the ceiling): [{ x, y, color, i }], every
+ * tile's bulbs that reach the field (within glowPx of it). i names a bulb along the whole strip (its tile counted from
+ * the strip's start), so a bulb keeps its twinkle as it scrolls.
+ */
+export function lightsBulbs(scrollPx, fieldW, t) {
+  const L = t.advent.lights;
+  const lay = fairyLightsLayout(fieldW, t);
+  const base = Math.floor(scrollPx / lay.tileW);
+  const off = scrollPx - base * lay.tileW;
+  const out = [];
+  for (let k = -1; k * lay.tileW - off <= fieldW + L.glowPx; k += 1) {
+    L.bulbs.forEach(([bx, by, color], j) => {
+      const x = k * lay.tileW + bx * L.scale - off;
+      if (x >= -L.glowPx && x <= fieldW + L.glowPx) out.push({ x, y: lay.y + by * L.scale, color, i: (base + k) * L.bulbs.length + j });
+    });
+  }
+  return out;
+}
+
+/** Bulb i's glow at `nowMs`, 0 to twinkle.maxAlpha: dark most of the time, brightening on its own clock (period and phase from i). */
+export function twinkleAlpha(i, nowMs, t) {
+  const tw = t.advent.lights.twinkle;
+  const frac = (v) => v - Math.floor(v);
+  const period = tw.minMs + frac(Math.abs(i) * 0.6180339887) * (tw.maxMs - tw.minMs);
+  const phase = frac(Math.abs(i) * 0.7548776662) * Math.PI * 2;
+  const s = Math.max(0, Math.sin((2 * Math.PI * nowMs) / period + phase));
+  return tw.maxAlpha * s * s;
+}
+
+/**
  * The book's "to go" line after a piece lands (plan 17, 1c.7, T7; Gate A 11e): with `shown` pieces in the book,
  * { key: 'adventToGo', n (left), total, tree: '' }, or at all of them { key: 'adventAllFound', n: 0, total, tree },
  * the tree the set earns (adventAward: 🎄 with the last found by 24 Dec, else 🌲).

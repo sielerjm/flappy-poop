@@ -282,7 +282,13 @@ function seasonHome({ day = '2026-12-05', match = null, readyUiShown = true } = 
     events: { on() {}, once() {}, off() {} },
     add: {
       image: (x, y, key) => {
-        const d = { key, active: true, visible: true, setDisplaySize: () => d, setAlpha: () => d, setDepth: () => d, setPosition: () => d, setVisible: (v) => ((d.visible = v), d), destroy() {} };
+        const d = { key, active: true, visible: true, setDisplaySize: () => d, setAlpha: () => d, setDepth: () => d, setPosition: () => d, setVisible: (v) => ((d.visible = v), d), setBlendMode: () => d, setTint: () => d, setScale: () => d, destroy() {} };
+        dots.push(d);
+        return d;
+      },
+      // December's fairy lights (1c.9) come with the season too.
+      tileSprite: (x, y, w, h, key) => {
+        const d = { key, setOrigin: () => d, setTileScale: () => d, setDepth: () => d, destroy() {} };
         dots.push(d);
         return d;
       },
