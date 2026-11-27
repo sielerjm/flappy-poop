@@ -28,6 +28,7 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeStamp } from './sw_stamp.mjs';
+import { LEADERBOARD } from '../src/config.js';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
 const argv = process.argv.slice(2);
@@ -291,7 +292,12 @@ try {
   ok(await until(`Boolean(navigator.serviceWorker.controller)`, 10000), '1: it takes over the open page (clients.claim)');
   const size1 = await cacheSize(`flappy-poop-${first.build}`);
   ok(size1 === first.files.length, `1: flappy-poop-${first.build} holds every listed file (${size1} of ${first.files.length})`);
-  const dataApi = await evaluate(`import('./src/config.js').then((m) => m.LEADERBOARD.dataApi)`);
+  // The live project's URL as the game ships it, read here in Node: on 127.0.0.1 the page boots with no board
+  // (src/onlineNet.js applyDevBoard empties LEADERBOARD.dataApi on a dev host, 763a8ce), so the page's own value
+  // would make this probe a same-origin fetch that the local server answers. The page must still be refused it.
+  const dataApi = LEADERBOARD.dataApi;
+  const pageApi = await evaluate(`import('./src/config.js').then((m) => m.LEADERBOARD.dataApi)`);
+  ok(/^https:\/\/[^/]+\.supabase\.co\//.test(dataApi) && pageApi === '', `1: the page booted with no board on a dev host (dataApi ${JSON.stringify(pageApi)}); the probe aims at the shipped ${new URL(dataApi).host}`);
   const before = workerRequests.length;
   const probe = await evaluate(`(async () => {
     const rest = await fetch(${JSON.stringify(dataApi)} + '/scores?select=name&limit=1').then(() => 'answered', () => 'failed');
