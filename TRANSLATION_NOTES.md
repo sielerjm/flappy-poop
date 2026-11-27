@@ -606,6 +606,9 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 | adventNoGift | No gift this run, play again (2.6: on Over after a December Daily run that offered a piece and ended without it) | 这局没有礼物，再来一局 |
 | adventCount | 🧩 {n}/{total} (2.6: the pieces found so far; the Daily popup and Over (the home Advent button shows the bare {n}/{total} since 2.15a); {total} is 24) | 🧩 {n}/{total} |
 | adventBookCount | {n} of {total} found (2.15: the Advent book's only line, over the puzzle; {total} is 24) | 已找到 {n}/{total} |
+| adventToGo | {n} of {total} to go! (1c.7, T7: the Advent book's line after a piece lands, Michael's words; {n} is the pieces left) | 还剩 {n} 块！ |
+| adventAllFound | All {total} found! {tree} (1c.7, T7: at 24; {tree} is 🎄 or 🌲, the tree the set earns) | {total} 块全部找齐！{tree} |
+| adventBookHelp | A puzzle piece hides in every December Daily Dump run, from pipe 5 on. ... / A new piece comes out each day from 1 to 24 December. ... / Find all 24 by 24 December for the 🎄, or by 31 December for the 🌲. (1c.7, T8: the book's (?) card, Gate A 11j; blank lines between paragraphs) | 十二月的每一局每日一拉里都藏着一块拼图…… (line breaks by hand, as dailyHelp: the card wraps CJK badly; Gate A 11k's draft said 每日挑战, the game's name is 每日一拉) |
 | adventOnTrack | 🧩 {n}/{total} · 🎄 on track (2.6: every piece out so far found, through 24 Dec: the decorated tree is in reach) | 🧩 {n}/{total} · 🎄 进度正好 |
 | adventPlainOpen | 🧩 {n}/{total} · 🌲 by 31 Dec (2.6: 25 to 31 Dec, not all found: the plain tree is still open) | 🧩 {n}/{total} · 🌲 12月31日前 |
 | adventDecorated | 🧩 {n}/{total} · 🎄 (2.6: all 24 found by 24 Dec) | 🧩 {n}/{total} · 🎄 |

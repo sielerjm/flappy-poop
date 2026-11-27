@@ -2102,6 +2102,12 @@ export function chromeShown({ state, launching = false, quizOpen = false, shopOp
 }
 
 /**
+ * The overlays that draw the version line (it opens What's new): About (the ⓘ), How to play (home's ?) and Settings
+ * (plan 17, 1c.7, T15, Michael 27 Nov: "the other windows don't need it because it's redundant").
+ */
+export const VERSION_LINE_OVERLAYS = Object.freeze(['about', 'howto', 'settings']);
+
+/**
  * Decide what a tray / keyboard / overlay event should do. Scenes execute the
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
@@ -2162,8 +2168,8 @@ export function chromeIntent({
     if (input === 'advent' && overlay === 'daily') return { do: 'openAdvent', pause: false };
     // The 🎅 picker (plan 17, 1b.2e) opens over the 🌞 popup from its title 🎅, and only there.
     if (input === 'santapick' && overlay === 'daily') return { do: 'openSantaPicker', pause: false };
-    // A version line: What's new opens over any overlay (its own version links restart it instead).
-    if (input === 'changelog' && overlay !== 'changelog') return { do: 'openChangelog', pause: false };
+    // A version line: What's new opens over About, How to play and Settings, the three that have one (T15).
+    if (input === 'changelog' && VERSION_LINE_OVERLAYS.includes(overlay)) return { do: 'openChangelog', pause: false };
     return { do: 'ignore' };
   }
 
@@ -2673,11 +2679,23 @@ export function adventBookLayout(width, height, t) {
   return {
     panel: { x: cx, y: cy, width: b.width, height: b.height },
     close: { x: cx + b.width / 2 - 44, y: cy - b.height / 2 + 44 },
+    help: { x: cx - b.width / 2 + 44, y: cy - b.height / 2 + 44 }, // the (?) mirrors the ✕ (1c.7, T8)
     count: { x: cx, y: cy + b.countDy },
     slot,
     slots,
     centre: { x: cx, y: top + (p.rows * slot) / 2 },
   };
+}
+
+/**
+ * The book's "to go" line after a piece lands (plan 17, 1c.7, T7; Gate A 11e): with `shown` pieces in the book,
+ * { key: 'adventToGo', n (left), total, tree: '' }, or at all of them { key: 'adventAllFound', n: 0, total, tree },
+ * the tree the set earns (adventAward: 🎄 with the last found by 24 Dec, else 🌲).
+ */
+export function adventToGo(shown, found, season, t) {
+  const total = t.advent.piece.count;
+  if (shown < total) return { key: 'adventToGo', n: total - shown, total, tree: '' };
+  return { key: 'adventAllFound', n: 0, total, tree: adventAward(found, season, t) === 'plain' ? '\u{1F332}' : '\u{1F384}' };
 }
 
 /**

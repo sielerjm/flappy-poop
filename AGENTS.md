@@ -4708,7 +4708,8 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
 - New scene → `src/scenes/`, register in the `scene:` array in `src/main.js`.
   An overlay also needs an entry in `OVERLAY_SCENES` (`src/ui/overlayStack.js`,
   which `Play.chromeArgs` and `Play.padTop` read), an `isTopOverlay(this)` guard
-  in its `close()`, a version line that calls `openChangelog(this)`, a `case` in
+  in its `close()`, no version line (only About, How to play and Settings draw
+  one, `VERSION_LINE_OVERLAYS` in `src/logic.js`; plan 17, T15), a `case` in
   `Play.applyChrome`, rows in `tests/chrome.test.js`, an entry in `OVERLAYS` in
   `tools/headless_check.mjs` (the smoke opens every overlay), and a `this.focus`
   ring built from `pressable()` items (✕ first) with `focus.show()` so a

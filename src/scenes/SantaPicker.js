@@ -1,10 +1,10 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
-import { isTopOverlay, hasOverlayUnder, openChangelog } from '../ui/overlayStack.js';
+import { isTopOverlay, hasOverlayUnder } from '../ui/overlayStack.js';
 import { createButton } from '../ui/button.js';
-import { t, metaFontSize } from '../i18n.js';
+import { t } from '../i18n.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const CELL = 88; // = trayHitMin: each 🎅 is a thumb-sized target
@@ -73,14 +73,8 @@ export class SantaPicker extends Phaser.Scene {
     createButton(this, box, t(locale, 'santaPickSave'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' }, { depth: 2, fillAlpha: 1 });
     this.saveZone = this.add.zone(box.x, box.y, box.width, box.height).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.save());
 
-    const version = this.add
-      .text(cx, cy + 310, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: '#f8a0c8', fontStyle: 'normal' })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    version.on('pointerdown', () => openChangelog(this)); // What's new, over this panel (AGENTS.md's overlay rule)
-
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    this.focus = createFocus(this, T, { items: [pressable('close', close), ...this.cells.map((c, i) => pressable(`santa${i}`, c.zone)), pressable('save', this.saveZone), pressable('changelog', version)] });
+    this.focus = createFocus(this, T, { items: [pressable('close', close), ...this.cells.map((c, i) => pressable(`santa${i}`, c.zone)), pressable('save', this.saveZone)] });
     this.focus.show(); // only under a controller (registry padMode)
   }
 

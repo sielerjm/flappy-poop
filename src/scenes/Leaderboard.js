@@ -1,10 +1,10 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout, utcDayKey, dailyLevel, dailyGlyphNow, adventTreeGlyph } from '../logic.js';
+import { chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout, utcDayKey, dailyLevel, dailyGlyphNow, adventTreeGlyph } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
-import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
+import { isTopOverlay } from '../ui/overlayStack.js';
 import { createTabs, nearestTab } from '../ui/tabs.js';
-import { t, fillDaily, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText, eduYouText } from '../i18n.js';
+import { t, fillDaily, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText, eduYouText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
 import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, fetchAdventBoard, withOwnRows, boardPage } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
@@ -107,11 +107,6 @@ export class Leaderboard extends Phaser.Scene {
       .on('pointerdown', () => {
         if (isTopOverlay(this)) this.footerAction?.();
       });
-    const version = this.add
-      .text(cx, L.versionY, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: PINK, fontStyle: 'normal' })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    version.on('pointerdown', () => openChangelog(this)); // What's new, over this panel
 
     const close = this.add.text(L.close.x, L.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
@@ -120,7 +115,7 @@ export class Leaderboard extends Phaser.Scene {
     this.pager = createPager(this, { x: cx, ...L.pager, onTurn: (dir) => this.turnPage(dir) });
     this.pager.set({ prev: this.page > 0, next: false, label: pageRangeText(this.offset, 0, LEADERBOARD.limit) });
     // Everything outside the rows band stays on the main camera when the band becomes a scroll view.
-    this.fixed = [dimmer, panelRect, title, ...this.tabs.objects(), tabZone, this.status, this.footer, version, close, ...this.pager.objects()];
+    this.fixed = [dimmer, panelRect, title, ...this.tabs.objects(), tabZone, this.status, this.footer, close, ...this.pager.objects()];
     this.scroll = null; // the rows' scroll view, once the board has loaded
     this.input.keyboard?.on('keydown-ESC', () => this.close());
     this.input.keyboard?.on('keydown-LEFT', () => this.turnPage(-1)); // ← → turn pages (plan 28, 5.2), as ‹ ›
@@ -128,7 +123,7 @@ export class Leaderboard extends Phaser.Scene {
     // Controller: the ring sits on ✕ (A on the tabs moves to the next board); up / down scroll the rows once
     // they are in; left from the tabs reaches ‹, right goes on to › (a greyed arrow takes the ring but not A).
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close), pressable('tab', tabZone), pressable('prev', this.pager.prev), pressable('next', this.pager.next), { ...pressable('footer', this.footer), visible: () => Boolean(this.footerAction) }, pressable('changelog', version)],
+      items: [pressable('close', close), pressable('tab', tabZone), pressable('prev', this.pager.prev), pressable('next', this.pager.next), { ...pressable('footer', this.footer), visible: () => Boolean(this.footerAction) }],
       onVertical: (dir) => this.scroll?.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
     });
     this.focus.show(); // only under a controller (registry padMode)

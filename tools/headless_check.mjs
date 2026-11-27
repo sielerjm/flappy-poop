@@ -1001,7 +1001,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         ok(s1.active && s1.tab === 'scores' && s1.label === '1-25' && !s1.prev && s1.next && s1.first === '1.' && s1.last === '25.' && s1.n === 25 && s1.pink === 0 && s1.pinned && a1.some(([fn, o]) => fn === 'score_board' && o === null) && !a1.some(([, o]) => o !== null), `🏆 opens on page 1 ("${s1.label}", ‹ greyed, › live), the ‹ › row pinned under the window; page 1 asks with no p_offset (${JSON.stringify(a1)})`);
         ok(s1.footer.includes('#40') && s1.footer.includes('#52') && s1.footerTop >= s1.arrowBottom, `the 🏆 footer gives both places on page 1 ("${s1.footer.replace(/\n/g, ' / ')}"), its two lines clear of the arrows (top ${s1.footerTop}, arrows' bottom ${s1.arrowBottom})`);
         // The longest 🏆 footer (both places and the name note, five lines) shrinks to fit above the version line.
-        const fit = await evaluate(`import('./src/i18n.js').then((m) => { const s = ${PL}; s.setFooter(s.footer.text + '\\n' + m.t('en', 'leaderboardNameTaken')); const fb = s.footer.getBounds(); const v = s.children.list.find((c) => c.type === 'Text' && c.y === s.L.versionY); return JSON.stringify({ lines: s.footer.text.split('\\n').length, scale: s.footer.scaleY, bottom: Math.round(fb.bottom), top: Math.round(fb.y), versionTop: Math.round(v.getBounds().y), arrowBottom: Math.round(s.pager.prev.y + s.pager.prev.height / 2) }); })`).then(JSON.parse);
+        const fit = await evaluate(`import('./src/i18n.js').then((m) => { const s = ${PL}; s.setFooter(s.footer.text + '\\n' + m.t('en', 'leaderboardNameTaken')); const fb = s.footer.getBounds(); return JSON.stringify({ lines: s.footer.text.split('\\n').length, scale: s.footer.scaleY, bottom: Math.round(fb.bottom), top: Math.round(fb.y), versionTop: Math.round(s.L.versionY - 14), arrowBottom: Math.round(s.pager.prev.y + s.pager.prev.height / 2) }); })`).then(JSON.parse);
         ok(fit.scale < 1 && fit.top >= fit.arrowBottom && fit.bottom <= fit.versionTop, `a footer of both places and the name note (${fit.lines} lines before wrapping) shrinks (scale ${fit.scale.toFixed(2)}) to fit between the arrows (${fit.arrowBottom}) and the version line (${fit.versionTop}): ${fit.top} to ${fit.bottom}`);
         await pgTap(1);
         const s2 = await pgView();
@@ -1110,8 +1110,9 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         ok(old?.startsWith(`v${versions.at(-1)} `) && again?.startsWith(`v${versions[0]} `), `What's new reopens on the latest version ("${again}") after an older one was viewed ("${old}")`);
       }
 
-      // Every overlay's version line opens What's new over it (a real click; HowTo and About scroll to
-      // it first), and one real Esc closes only What's new. Board muzzled so the Leaderboard settles at once.
+      // The version line (plan 17, 1c.7, T15): About, How to play and Settings keep it, and a real click on it opens What's
+      // new over the panel (HowTo and About scroll to it first), one real Esc closing only What's new; Language,
+      // Feedback and the Leaderboard have none. Board muzzled so the Leaderboard settles at once.
       {
         await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
         const vt = await evaluate(`import('./src/logic.js').then((m) => m.versionText('en'))`);
@@ -1120,7 +1121,17 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
           await sleep(300);
         };
         const seen = [];
-        for (const [input, key, scrolled] of [['settings', 'Settings'], ['info', 'About', true], ['howto', 'HowTo', true], ['lang', 'Language'], ['feedback', 'Feedback'], ['leaderboard', 'Leaderboard']]) {
+        const none = [];
+        for (const [input, key] of [['lang', 'Language'], ['feedback', 'Feedback'], ['leaderboard', 'Leaderboard']]) {
+          await chrome(input);
+          await sleep(600);
+          const has = await evaluate(`__flappy.scene.getScene('${key}').children.list.some((c) => c.type === 'Text' && c.text === ${JSON.stringify(vt)})`);
+          await closeTop(key);
+          await sleep(300);
+          none.push({ key, has, closed: !(await active(key)) });
+        }
+        ok(none.every((n) => !n.has && n.closed), `no version line on ${none.map((n) => n.key).join(', ')} (T15)${none.some((n) => n.has) ? ` — found on ${none.filter((n) => n.has).map((n) => n.key).join(', ')}` : ''}`);
+        for (const [input, key, scrolled] of [['settings', 'Settings'], ['info', 'About', true], ['howto', 'HowTo', true]]) {
           await chrome(input);
           await sleep(600);
           // Scroll first and let a frame draw: the scroll camera's matrix (what input hit-tests) updates on render.
@@ -8598,7 +8609,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       // to the Daily window; the 🧩 board tab reads advent_board (stubbed) with the trees beside the names ---
       await homeAgain();
       const B = `__flappy.scene.getScene('Advent')`;
-      const bookNow = () => evaluate(`JSON.stringify((() => { const b = ${B}; const s = JSON.parse(localStorage.getItem('flappyPoop.advent.2026') || 'null'); return { active: __flappy.scene.isActive('Advent'), arrivals: (b.arrivals ?? []).map((p) => p.piece), flight: Boolean(b.flight), locks: b.locks?.size ?? null, count: b.countText?.text ?? null, art: b.children.list.filter((c) => c.texture?.key === 'advent-puzzle').map((c) => c.frame.name), seen: s?.seen ?? null, glow: Boolean(${play}.adventHalo?.visible), chip: ${play}.adventShown ? ${play}.adventCount.text : null }; })())`).then(JSON.parse);
+      const bookNow = () => evaluate(`JSON.stringify((() => { const b = ${B}; const s = JSON.parse(localStorage.getItem('flappyPoop.advent.2026') || 'null'); return { active: __flappy.scene.isActive('Advent'), arrivals: (b.arrivals ?? []).map((p) => p.piece), flight: Boolean(b.flight), locks: b.locks?.size ?? null, count: b.countText?.text ?? null, art: b.children.list.filter((c) => c.texture?.key === 'advent-puzzle').map((c) => c.frame.name), seen: s?.seen ?? null, glow: Boolean(${play}.adventHalo?.visible), chip: ${play}.adventShown ? ${play}.adventCount.text : null, toGo: b.children.list.find((c) => c.type === 'Text' && c.depth === 8 && c.active)?.text ?? null, help: Boolean(b.helpOpen), version: b.children.list.some((c) => c.type === 'Text' && /^v\d/.test(c.text)) }; })())`).then(JSON.parse);
       // The sounds the book asks Play for (a flight's chimes, a landing's click), whether or not their files have landed.
       await evaluate(`(() => { const p = ${play}; globalThis.__adSounds = []; const ps = p.playSample.bind(p); p.playSample = (key, ...rest) => (globalThis.__adSounds.push(key), ps(key, ...rest)); return true; })()`);
       await evaluate(`(${play}.handleChrome('advent'), true)`);
@@ -8612,6 +8623,19 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       const sounds = await evaluate(`JSON.stringify(globalThis.__adSounds)`).then(JSON.parse);
       ok(!b0.flight || JSON.stringify(sounds) === '["advent-add","advent-lock"]', `the flight asks for its chimes and the landing for its click (${JSON.stringify(sounds)})`);
       ok(b0.active && JSON.stringify(b0.arrivals) === '[5]' && b0.locks === 24 && b0.count === '0 of 24 found' && JSON.stringify(b0.seen) === '[5]' && b1.locks === 23 && b1.count === '1 of 24 found' && JSON.stringify(b1.art) === JSON.stringify([cell5]), `the glowing button opens the book: piece 5 arrives${b0.flight ? ' in flight' : ' (reduced motion: no flight)'} into cell ${cell5} (${b0.count} → ${b1.count}, locks ${b0.locks} → ${b1.locks}), marked seen on open (${JSON.stringify(b0.seen)})`);
+      // Stage 1c (1c.7): the "to go" line with the click (T7), gone by itself; the (?) and its card (T8); no version line (T15).
+      ok(b1.toGo === '23 of 24 to go!' && !b1.version, `with the click, "${b1.toGo}" over the book (T7); no version line in the book (T15)`);
+      await until(`!${B}.toGo`, 40);
+      const b1g = await bookNow();
+      await evaluate(`(${B}.helpZone.emit('pointerdown'), true)`);
+      await sleep(200);
+      const bh = await bookNow();
+      const helpText = await evaluate(`(() => { const c = ${B}.help; return c ? c.list.find((o) => o.type === 'Text' && o.text.length > 40)?.text ?? null : null; })()`);
+      const wantHelp = await evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'adventBookHelp'))`);
+      await evaluate(`(${B}.close(), true)`);
+      await sleep(200);
+      const bc = await bookNow();
+      ok(!b1g.toGo && bh.help && helpText === wantHelp && !bc.help && bc.active, `the line floats away by itself; the (?) opens the rules card (${bh.help}), and Esc / ✕ / B close the card first, the book stays (${bc.active})`);
       await evaluate(`(${B}.close(), true)`);
       await until(`!__flappy.scene.isActive('Advent')`, 40);
       const h1b = await bookNow();

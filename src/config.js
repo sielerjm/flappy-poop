@@ -571,7 +571,13 @@ export const TUNING = {
     // 332 px frame) over a white glow (glowPad px) with the book dimmed by `dim` (appearMs, the chimes building), flies to
     // its slot (flyMs), lands with the lock click while its glow fades (fadeMs). At most `flights` pieces fly when the
     // book opens (the latest ones); older ones land in place at once. Under reduced motion none flies.
-    bookAnim: { appearMs: 1000, flyMs: 1300, fadeMs: 1000, popMs: 300, glowPad: 28, dim: 0.45, flights: 3, lockDelayMs: 120 }, // lockDelayMs: the click after the landing (Michael, 27 Nov, T2)
+    bookAnim: {
+      appearMs: 1000, flyMs: 1300, fadeMs: 1000, popMs: 300, glowPad: 28, dim: 0.45, flights: 3, lockDelayMs: 120, // lockDelayMs: the click after the landing (Michael, 27 Nov, T2)
+      // The "N of 24 to go!" line with the click (1c.7, T7; Gate A 11e): bold gold at px (shrunk by 2 to fit maxW) on a
+      // dark pill, centred on the book; pops in (popMs, from 0.6), holds holdMs, floats up floatPx and fades (fadeMs).
+      // Under reduced motion it shows still for the same time, then goes.
+      toGo: { px: 48, minPx: 28, maxW: 600, popMs: 250, holdMs: 900, floatPx: 40, fadeMs: 500, padX: 24, padY: 14, pillR: 28, pillAlpha: 0.75 },
+    },
     // Snow storms (Stage 2, 2.7): December Daily runs only, from the day's shared course (course.storm), so every run of a
     // day meets the same storms at the same pairs. A pair at least firstPair pairs into the run, and pairs + gapPairs after
     // the last storm's first pair, starts one when its draw is under `chance`; a banner shows one pair ahead; the storm

@@ -1,10 +1,11 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, dailyDay, dailyLevel, msUntilUtcMidnight, countdownText, dailyGlyphNow, adventSeason } from '../logic.js';
+import { chromeIntent, overlayOutsideHit, dailyDay, dailyLevel, msUntilUtcMidnight, countdownText, dailyGlyphNow, adventSeason } from '../logic.js';
+import { helpButton, helpCard } from '../ui/helpCard.js';
 import { createFocus, pressable } from '../ui/focus.js';
-import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
+import { isTopOverlay } from '../ui/overlayStack.js';
 import { createButton } from '../ui/button.js';
-import { t, metaFontSize, levelLabel, fillDaily, adventDailyLines } from '../i18n.js';
+import { t, levelLabel, fillDaily, adventDailyLines } from '../i18n.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
@@ -76,14 +77,6 @@ export class Daily extends Phaser.Scene {
     this.countdown = this.add.text(cx, cy + 290, '', { ...MUTED, fontSize: '26px' }).setOrigin(0.5);
     this.time.addEvent({ delay: 1000, loop: true, callback: () => this.tick() });
 
-    const version = this.add
-      .text(cx, cy + 380, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: '#f8a0c8', fontStyle: 'normal' })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    version.on('pointerdown', () => {
-      if (!this.helpOpen) openChangelog(this); // What's new, over this panel
-    });
-
     const close = this.add.text(cx + 256, cy - 396, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => this.close());
@@ -91,11 +84,7 @@ export class Daily extends Phaser.Scene {
     // the picker (with a red dot until it has been opened once) when this device draws more than one 🎅.
     const items = [pressable('close', close)];
     if (this.season) {
-      const hx = cx - 256;
-      const hy = cy - 396;
-      this.add.circle(hx, hy, 24).setStrokeStyle(3, 0xffffff);
-      this.add.text(hx, hy, '?', { ...STYLE, fontSize: '30px' }).setOrigin(0.5);
-      this.helpZone = this.add.zone(hx, hy, T.trayHitMin, T.trayHitMin).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openHelp());
+      this.helpZone = helpButton(this, cx - 256, cy - 396, () => this.openHelp());
       items.push(pressable('help', this.helpZone));
     }
     if (play?.santaTappable?.()) {
@@ -105,7 +94,7 @@ export class Daily extends Phaser.Scene {
       items.push(pressable('santa', this.santaZone));
       this.placeSanta();
     }
-    items.push(...(this.adventLine ? [pressable('advent', this.adventLine)] : []), pressable('daily', this.buttonZone), pressable('changelog', version));
+    items.push(...(this.adventLine ? [pressable('advent', this.adventLine)] : []), pressable('daily', this.buttonZone));
     this.focus = createFocus(this, T, { items });
     this.checking = false; // asking the 🌞 board whether this player already played today (verify)
     this.draw();
@@ -228,20 +217,7 @@ export class Daily extends Phaser.Scene {
   /** The (?) card (December): the 🎅 choice and the Advent rules, over this popup; not an overlay of its own. */
   openHelp() {
     if (this.helpOpen || !isTopOverlay(this)) return;
-    const W = this.scale.width;
-    const cx = W / 2;
-    const cy = GAME_HEIGHT / 2;
-    const width = 560;
-    const body = this.add.text(cx - 240, 0, t(this.locale, 'dailyHelp'), { ...MUTED, fontSize: '28px', align: 'left', color: '#e2c8d6', wordWrap: { width: 480, useAdvancedWrap: true }, lineSpacing: 8 });
-    const height = 64 + body.height + 40;
-    const top = cy - height / 2;
-    body.setY(top + 64);
-    const dim = this.add.rectangle(cx, cy, W, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
-    dim.on('pointerdown', () => this.closeHelp());
-    const card = this.add.rectangle(cx, cy, width, height, 0x24101c, 1).setStrokeStyle(4, 0xf8a0c8).setInteractive(); // a tap on the card itself does nothing
-    const x = this.add.text(cx + width / 2 - 36, top + 36, '✕', { ...STYLE, fontSize: '40px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    x.on('pointerdown', () => this.closeHelp());
-    this.help = this.add.container(0, 0, [dim, card, body, x]).setDepth(40);
+    this.help = helpCard(this, t(this.locale, 'dailyHelp'), () => this.closeHelp());
     this.helpOpen = true;
   }
 

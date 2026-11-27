@@ -1,9 +1,10 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { VERSION, versionText, chromeIntent, overlayOutsideHit, adventBookLayout, adventBookPieces } from '../logic.js';
+import { VERSION, chromeIntent, overlayOutsideHit, adventBookLayout, adventBookPieces, adventToGo } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
-import { isTopOverlay, hasOverlayUnder, openChangelog } from '../ui/overlayStack.js';
-import { t, metaFontSize } from '../i18n.js';
+import { isTopOverlay, hasOverlayUnder } from '../ui/overlayStack.js';
+import { helpButton, helpCard } from '../ui/helpCard.js';
+import { t } from '../i18n.js';
 import { createRectGlow } from '../ui/glow.js';
 import { prefersReducedMotion } from '../ui/snowfall.js';
 
@@ -13,8 +14,9 @@ const V = `?v=${VERSION}`;
 /**
  * The Advent book (plan 17, 2.15; Gate A sheet 5, Michael 26 Nov): the season's picture as this device's pieces
  * assemble it, in a 4 x 6 grid with no gaps. A locked slot is a flat silhouette; piece k sits in cell order[k − 1]
- * (TUNING.advent.puzzle), with a gold star when it was found on its own day. Its only text is "N of 24 found": the
- * window is for the art. From the home screen's Advent button, the 🌞 popup's 🧩 line (closing returns there) and the
+ * (TUNING.advent.puzzle), with a gold star when it was found on its own day. Its only text is "N of 24 found" (and,
+ * a moment after each landing's click, "N of 24 to go!", which floats away by itself, 1c.7 T7): the window is for the
+ * art. A (?) at the top left (T8; the version line went, T15) opens a card with the rules. From the home screen's Advent button, the 🌞 popup's 🧩 line (closing returns there) and the
  * save panel (closing opens the panel again). ✕ / Esc / a tap outside / B close it. Read-only: Play.adventBook()
  * gives the season and its pieces (December's, or last December's while any piece is owned).
  */
@@ -39,6 +41,9 @@ export class Advent extends Phaser.Scene {
     this.flight = null;
     this.flightTimer = null;
     this.lockTimer = null;
+    this.helpOpen = false; // the (?) card: while it is up, only its ✕, a tap or Esc / B do anything
+    this.help = null;
+    this.toGo = null; // the "to go" line on screen, if any
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
     const W = this.scale.width; // the live field: the book stays centred
@@ -53,6 +58,7 @@ export class Advent extends Phaser.Scene {
 
     const book = play?.adventBook?.() ?? null;
     this.season = book?.season ?? null;
+    this.found = book?.found ?? {};
     this.pieces = book ? adventBookPieces(book.found, book.season, T) : [];
     const owned = new Map(this.pieces.map((p) => [p.cell, p]));
     this.hasArt = this.textures.exists('advent-puzzle'); // offline before its first load: owned slots show as lit squares
@@ -74,20 +80,16 @@ export class Advent extends Phaser.Scene {
     this.setCount(this.shownCount);
     this.arrivals = (book?.unseen ?? []).filter((k) => fresh.has(k)).map((k) => this.pieces.find((p) => p.piece === k));
 
-    const version = this.add
-      .text(L.panel.x - L.panel.width / 2 + 24, L.close.y, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: '#f8a0c8', fontStyle: 'normal' })
-      .setOrigin(0, 0.5)
-      .setDepth(3)
-      .setInteractive({ useHandCursor: true });
-    version.on('pointerdown', () => openChangelog(this)); // What's new, over the book
+    const help = helpButton(this, L.help.x, L.help.y, () => this.openHelp(), 3);
+    this.helpZone = help;
     const close = this.add.text(L.close.x, L.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setDepth(3).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('changelog', version)] });
+    this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('help', help)] });
     this.focus.show(); // only under a controller (registry padMode)
     // A tap inside the book skips the flight under way to its landing (the click still plays).
     this.input.on('pointerdown', (pointer) => {
-      if (this.flight && !overlayOutsideHit(pointer.x, pointer.y, L.panel)) this.flight.finish();
+      if (this.flight && !this.helpOpen && !overlayOutsideHit(pointer.x, pointer.y, L.panel)) this.flight.finish();
     });
     this.events.once('shutdown', () => {
       this.flight?.finish(true);
@@ -96,6 +98,9 @@ export class Advent extends Phaser.Scene {
       this.flightTimer = null;
       this.lockTimer?.remove();
       this.lockTimer = null;
+      this.toGo = null;
+      this.help = null;
+      this.helpOpen = false;
     });
     this.startArrivals();
   }
@@ -114,6 +119,7 @@ export class Advent extends Phaser.Scene {
     if (instant.length) {
       for (const p of instant) this.land(p, true);
       this.playSound('advent-lock', T.advent.sound.lockVolume);
+      if (!flyCount) this.showToGo(); // the flights that follow bring their own
     }
     const next = () => {
       const p = flying.shift();
@@ -165,6 +171,7 @@ export class Advent extends Phaser.Scene {
       this.lockTimer = this.time.delayedCall(a.lockDelayMs, () => {
         this.lockTimer = null;
         this.playSound('advent-lock', T.advent.sound.lockVolume);
+        this.showToGo(); // T7: with the click
       });
     };
     const end = () => {
@@ -215,6 +222,57 @@ export class Advent extends Phaser.Scene {
     this.scene.get('Play')?.playSample?.(key, volume, null);
   }
 
+  /**
+   * "N of 24 to go!" (or "All 24 found! 🎄") over the book's centre with the lock click (1c.7, T7; Gate A 11e): bold
+   * gold on a dark pill, popping in, holding, then floating up and fading, so it never stays over the picture. Under
+   * reduced motion it shows still for the same time, then goes. A newer landing replaces the line on screen.
+   */
+  showToGo() {
+    const g = T.advent.bookAnim.toGo;
+    const L = this.layout;
+    const line = adventToGo(this.shownCount, this.found, this.season, T);
+    const text = t(this.locale, line.key).replace('{n}', String(line.n)).replace('{total}', String(line.total)).replace('{tree}', line.tree);
+    this.toGo?.done();
+    const label = this.add.text(L.panel.x, L.panel.y, text, { ...STYLE, fontSize: `${g.px}px`, color: '#ffd600', stroke: '#1a0b14', strokeThickness: 8 }).setOrigin(0.5).setDepth(8);
+    for (let px = g.px; label.width > g.maxW && px > g.minPx; px -= 2) label.setFontSize(px - 2);
+    const w = label.width + 2 * g.padX;
+    const h = label.height + 2 * g.padY;
+    const pill = this.add.graphics({ x: L.panel.x, y: L.panel.y }).setDepth(7);
+    pill.fillStyle(0x1a0b14, g.pillAlpha);
+    pill.fillRoundedRect(-w / 2, -h / 2, w, h, Math.min(g.pillR, h / 2));
+    const parts = [pill, label];
+    const tweens = [];
+    let timer = null;
+    const done = () => {
+      for (const tw of tweens) tw.stop();
+      timer?.remove();
+      for (const o of parts) o.destroy();
+      if (this.toGo === entry) this.toGo = null;
+    };
+    const entry = { done };
+    this.toGo = entry;
+    if (prefersReducedMotion()) {
+      timer = this.time.delayedCall(g.popMs + g.holdMs + g.fadeMs, done);
+      return;
+    }
+    for (const o of parts) o.setScale(0.6).setAlpha(0);
+    tweens.push(this.tweens.add({ targets: parts, scale: 1, alpha: 1, duration: g.popMs, ease: 'Back.easeOut' }));
+    tweens.push(this.tweens.add({ targets: parts, y: `-=${g.floatPx}`, alpha: 0, delay: g.popMs + g.holdMs, duration: g.fadeMs, ease: 'Sine.easeIn', onComplete: done }));
+  }
+
+  /** The (?) card: how the pieces turn up, a piece a day to 24 December, the trees (T8; Gate A 11j / 11k). */
+  openHelp() {
+    if (this.helpOpen || !isTopOverlay(this)) return;
+    this.help = helpCard(this, t(this.locale, 'adventBookHelp'), () => this.closeHelp());
+    this.helpOpen = true;
+  }
+
+  closeHelp() {
+    this.help?.destroy();
+    this.help = null;
+    this.helpOpen = false;
+  }
+
   /** "N of 24 found". */
   setCount(n) {
     this.countText.setText(t(this.locale, 'adventBookCount').replace('{n}', String(n)).replace('{total}', String(T.advent.piece.count)));
@@ -248,7 +306,11 @@ export class Advent extends Phaser.Scene {
   }
 
   close() {
-    if (!isTopOverlay(this)) return; // What's new is over it
+    if (!isTopOverlay(this)) return; // another overlay is over it
+    if (this.helpOpen) {
+      this.closeHelp(); // Esc, B or ✕ take the (?) card down first; the book stays
+      return;
+    }
     const play = this.scene.get('Play');
     const result = chromeIntent({ state: play?.state ?? 'ready', overlay: 'advent', input: 'close', stackedUnder: hasOverlayUnder(this) });
     if (result.do !== 'closeTop') return;

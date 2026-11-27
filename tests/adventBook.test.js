@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { adventBookLayout, adventBookPieces, adventBookSeason, chromeIntent } from '../src/logic.js';
+import { adventBookLayout, adventBookPieces, adventBookSeason, adventToGo, chromeIntent } from '../src/logic.js';
+import { t, LOCALES } from '../src/i18n.js';
 import { OVERLAY_SCENES } from '../src/ui/overlayStack.js';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -62,7 +63,7 @@ test('chromeIntent: the book opens from the home screen and over the Daily windo
   assert.deepEqual(chromeIntent({ state: 'ready', overlay: 'leaderboard', input: 'advent' }), { do: 'ignore' });
   assert.deepEqual(chromeIntent({ state: 'ready', overlay: 'advent', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
   assert.deepEqual(chromeIntent({ state: 'ready', overlay: 'advent', input: 'close', stackedUnder: true }), { do: 'closeTop', armResumeLockout: false }, 'back to the Daily window');
-  assert.deepEqual(chromeIntent({ state: 'ready', overlay: 'advent', input: 'changelog' }), { do: 'openChangelog', pause: false });
+  assert.deepEqual(chromeIntent({ state: 'ready', overlay: 'advent', input: 'changelog' }), { do: 'ignore' }, 'no version line in the book (T15): its (?) has the corner');
 });
 
 test('the book is an overlay: on the stack, in main.js, and in the smoke\'s overlay list', () => {
@@ -192,6 +193,7 @@ test('the book: a flight\'s lock click comes lockDelayMs after it lands, and clo
       makeGlow: obj,
       playSound(key) { this.sounds.push(key); },
       land(p) { this.landed.push(p.cell); },
+      showToGo() { this.sounds.push('to-go'); },
     });
     return s;
   };
@@ -203,7 +205,7 @@ test('the book: a flight\'s lock click comes lockDelayMs after it lands, and clo
   assert.deepEqual(s.landed, [3]);
   assert.deepEqual(s.sounds, ['advent-add'], 'no click on the landing frame');
   fire(s, a.lockDelayMs);
-  assert.deepEqual(s.sounds, ['advent-add', 'advent-lock'], 'the click, lockDelayMs later');
+  assert.deepEqual(s.sounds, ['advent-add', 'advent-lock', 'to-go'], 'the click, lockDelayMs later, and the "to go" line with it (T7)');
   // Closed in the gap: never clicks.
   const c = book();
   c.fly({ cell: 7 }, () => {});
@@ -211,4 +213,80 @@ test('the book: a flight\'s lock click comes lockDelayMs after it lands, and clo
   c.flight.finish(true);
   fire(c, a.lockDelayMs);
   assert.deepEqual(c.sounds, ['advent-add'], 'the book closed before the click: none');
+});
+
+// --- Stage 1c (Michael, 27 Nov, Gate A sheet 11): T7 the "N of 24 to go!" line, T8 the book's (?) and its card ---
+
+test('adventToGo (T7): the pieces left after a landing, or all found with the tree the set earns (🎄 by 24 Dec, 🌲 after)', () => {
+  const found = (lastDay) => Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 1, i === 23 ? lastDay : `2026-12-${String(i + 1).padStart(2, '0')}`]));
+  assert.deepEqual(adventToGo(11, {}, 2026, T), { key: 'adventToGo', n: 13, total: 24, tree: '' });
+  assert.deepEqual(adventToGo(23, {}, 2026, T), { key: 'adventToGo', n: 1, total: 24, tree: '' });
+  assert.deepEqual(adventToGo(24, found('2026-12-24'), 2026, T), { key: 'adventAllFound', n: 0, total: 24, tree: '\u{1F384}' });
+  assert.deepEqual(adventToGo(24, found('2026-12-29'), 2026, T), { key: 'adventAllFound', n: 0, total: 24, tree: '\u{1F332}' });
+  for (const locale of LOCALES) {
+    assert.ok(t(locale, 'adventToGo').includes('{n}'), `${locale}: adventToGo has {n}`);
+    assert.ok(t(locale, 'adventAllFound').includes('{tree}'), `${locale}: adventAllFound has {tree}`);
+    assert.ok(t(locale, 'adventBookHelp').length > 40, `${locale}: the book's (?) card text`);
+  }
+  assert.equal(t('en', 'adventToGo').replace('{n}', '13').replace('{total}', '24'), '13 of 24 to go!', "his words (Gate A 11e)");
+  assert.equal(t('zh-Hans', 'adventToGo').replace('{n}', '13'), '还剩 13 块！');
+  const g = T.advent.bookAnim.toGo;
+  assert.deepEqual([g.popMs, g.holdMs, g.fadeMs, g.floatPx], [250, 900, 500, 40], 'pops in, holds about a second, floats up and fades (Gate A 11e)');
+});
+
+test('the book\'s (?) (T8) mirrors the ✕ at its top left, where the version line was (T15): (56, 128) on the 720 field', () => {
+  const L = adventBookLayout(720, 1280, T);
+  assert.deepEqual(L.help, { x: 56, y: 128 });
+  assert.equal(L.help.y, L.close.y);
+  assert.equal(L.help.x - (L.panel.x - L.panel.width / 2), L.panel.x + L.panel.width / 2 - L.close.x, 'mirrored');
+  const src = readFileSync(`${root}src/scenes/Advent.js`, 'utf8');
+  assert.ok(!/versionText\(/.test(src), 'no version line in the book');
+  assert.ok(/pressable\('help'/.test(src), 'the (?) on the controller ring');
+});
+
+test('the book\'s (?) card: while it is up a tap does not skip a flight and Esc / ✕ / B take the card down first; the book stays', async () => {
+  await import('./support/scenes.js'); // Phaser first
+  const { Advent } = await import('../src/scenes/Advent.js');
+  const calls = [];
+  const s = Object.assign(Object.create(Advent.prototype), {
+    helpOpen: true,
+    help: { destroy: () => calls.push('cardGone') },
+    scene: { key: 'Advent', get: () => null, isActive: (k) => k === 'Advent', getIndex: () => 1, stop: () => calls.push('stop') },
+  });
+  s.openHelp();
+  assert.deepEqual(calls, [], 'a second (?) does nothing');
+  s.close();
+  assert.deepEqual(calls, ['cardGone'], 'the card goes, the book stays');
+  assert.equal(s.helpOpen, false);
+});
+
+test('the "to go" line (T7) never sits over the picture: it shows, then goes by itself (a still line under reduced motion, gone after the same time)', async () => {
+  await import('./support/scenes.js');
+  const { Advent } = await import('../src/scenes/Advent.js');
+  const made = [];
+  const timers = [];
+  const tweens = [];
+  const obj = (kind) => {
+    const o = { kind, destroyed: false, w: 300, h: 50, setOrigin() { return o; }, setDepth() { return o; }, setScale() { return o; }, setAlpha() { return o; }, setFontSize() { return o; }, setStrokeStyle() { return o; }, destroy() { o.destroyed = true; } };
+    Object.defineProperty(o, 'width', { get: () => o.w });
+    Object.defineProperty(o, 'height', { get: () => o.h });
+    made.push(o);
+    return o;
+  };
+  const s = Object.assign(Object.create(Advent.prototype), {
+    locale: 'en',
+    layout: adventBookLayout(720, 1280, T),
+    season: 2026,
+    found: {},
+    shownCount: 11,
+    add: { text: () => obj('text'), graphics: () => Object.assign(obj('pill'), { fillStyle() { return this; }, fillRoundedRect() { return this; } }) },
+    tweens: { add: (cfg) => (tweens.push(cfg), { stop() {} }) },
+    time: { delayedCall: (ms, fn) => (timers.push({ ms, fn }), { remove() {} }) },
+  });
+  s.showToGo();
+  assert.equal(made.filter((o) => o.kind === 'text').length, 1, 'one line');
+  const done = tweens.find((tw) => tw.onComplete) ?? timers.at(-1);
+  assert.ok(done, 'it goes by itself');
+  (done.onComplete ?? done.fn)();
+  assert.ok(made.every((o) => o.destroyed), 'and leaves nothing behind');
 });
