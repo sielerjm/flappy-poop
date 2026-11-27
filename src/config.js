@@ -572,14 +572,17 @@ export const TUNING = {
     // Snow storms (Stage 2, 2.7): December Daily runs only, from the day's shared course (course.storm), so every run of a
     // day meets the same storms at the same pairs. A pair at least firstPair pairs into the run, and pairs + gapPairs after
     // the last storm's first pair, starts one when its draw is under `chance`; a banner shows one pair ahead; the storm
-    // lasts `pairs` pairs, its pull eased in and out over rampMs (none during a fart). While it blows the flap is flapMul
-    // as strong and the scroll scrollMul as fast (tests/adventStorm.test.js keeps the climb per pair at 85 % or more).
+    // lasts `pairs` pairs, its pull eased in and out over rampMs (none during a fart: the fart lifts it, and it comes back
+    // after). While it blows the flap is flapMul as strong and the scroll is dragged to scrollMul of the level's speed
+    // (Michael, 27 Nov, 1c.4: 30 % on every level); the moving pairs' drift slows by the same share (Play.stepPipeMove),
+    // so a gap shifts no more during a crossing than in calm air (tests/tuning.test.js). tests/adventStorm.test.js keeps
+    // the climb per pair at 85 % or more and the 700 ms grace after a fart that ends in a storm clear of a pipe column.
     // The look is Gate A's option B (Michael, 26 Nov): `extra` storm flakes over the light snow, falling fallMul times as
     // fast, minPx to maxPx, blown left to right at their mean fall (a 45° slant) with gusts of ±gust that never reverse,
     // and `swirls` whirls of radius swirlR (tangential speed up to swirlS) whose centres sit 2 × swirlR apart. A fart
     // blows the snow right to left at fartWind px/s, eased over fartRampMs, in every December run (Michael, 26 Nov).
     storm: {
-      firstPair: 6, chance: 0.15, pairs: 4, gapPairs: 8, rampMs: 600, flapMul: 0.92, scrollMul: 1.08,
+      firstPair: 6, chance: 0.15, pairs: 4, gapPairs: 8, rampMs: 600, flapMul: 0.92, scrollMul: 0.7,
       extra: 144, fallMul: 2, minPx: 5, maxPx: 14, gust: 0.35, swirls: 2, swirlR: 160, swirlS: 180,
       fartWind: 420, fartRampMs: 250, bannerPx: 48, bannerY: 320,
       // The gusts' wobble: two sines in [−1, 1] (share, period in s, phase), and how far from the field's edges a swirl's

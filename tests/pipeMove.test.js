@@ -57,6 +57,15 @@ test('pipeMoveShiftPx is the sine peak speed times the column crossing time', ()
   assert.equal(pipeMoveShiftPx(0, 2800, speed, T), 0);
 });
 
+test('pipeMoveShiftPx with a slowed drift (plan 17, 1c.4): the shift scales with driftShare; scroll and drift slowed by one share leave it unchanged', () => {
+  const speed = 325;
+  const calm = pipeMoveShiftPx(80, 4000, speed, T);
+  assert.equal(pipeMoveShiftPx(80, 4000, speed, T, 1), calm, 'driftShare defaults to 1');
+  assert.ok(Math.abs(pipeMoveShiftPx(80, 4000, speed, T, 0.5) - calm / 2) < 1e-9, 'half the drift, half the shift');
+  for (const share of [0.7, 0.85, 1]) assert.ok(Math.abs(pipeMoveShiftPx(80, 4000, speed * share, T, share) - calm) < 1e-9, `share ${share}`);
+  assert.ok(pipeMoveShiftPx(80, 4000, speed * 0.7, T) > calm * 1.4, 'a slower scroll alone lengthens the crossing and the shift with it');
+});
+
 test('rollPipeMove: null before fromLevel without touching the rng; null for the centred pair after a fart', () => {
   let draws = 0;
   const counting = () => {

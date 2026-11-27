@@ -1,15 +1,15 @@
 // Plan 17, Stage 2b, 2.7: December's snow storms and the fart wind on the snow. Storms come only in a December
 // Daily run, from the day's shared course (their own course stream, so two runs of a day meet the same storms at
 // the same pairs and no other draw moves), with a banner one pair ahead; while one blows the flap is a little
-// weaker and the scroll a little faster, ramped in and out, never during a fart, and no Advent piece shows on its
-// pairs. The look is Gate A's option B (Michael, 26 Nov): 144 storm flakes over the light 36, falling twice as
+// weaker and the scroll dragged to 0.7 of the level's speed, the moving pairs' drift slowed by the same share (1c.4,
+// Michael 27 Nov), ramped in and out, never during a fart, and no Advent piece shows on its pairs. The look is Gate A's option B (Michael, 26 Nov): 144 storm flakes over the light 36, falling twice as
 // fast, blown left to right at their mean fall (45°) with gusts of ±35 % that never reverse, and two swirls whose
 // centres sit 2R apart (tools/advent_preview.py's model). A fart blows the snow right to left, nearly flat
 // (Michael, 26 Nov; moved here from Stage 1b), in every December run.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createCourse, createRng, stormStartsHere, stormPhase, stormCovers, stormWind, fartWind, swirlCentres, stormFlapMul, stormScrollMul } from '../src/logic.js';
+import { createCourse, createRng, stormStartsHere, stormPhase, stormCovers, stormWind, fartWind, swirlCentres, stormFlapMul, stormScrollMul, levelSpeed, gapBobY, pipeMoveParams } from '../src/logic.js';
 import { makeFlakes, stepFlakes } from '../src/ui/snowfall.js';
 import { playScene } from './support/scenes.js';
 
@@ -78,14 +78,14 @@ test('stormPhase: the banner one pair ahead, the storm over its pairs, nothing e
   for (let passed = 0; passed < 80; passed += 1) assert.equal(stormCovers(starts, passed, T), stormPhase(passed, starts, T).phase === 'storm', `slot ${passed}`);
 });
 
-test('the storm\'s pull: flap and scroll multipliers ramp with the storm\'s level; at full strength the climb per pair keeps 85 % or more (the clearance invariant)', () => {
+test('the storm\'s pull: flap and scroll multipliers ramp with the storm\'s level; the scroll a drag (Michael\'s 30 %); at full strength the climb per pair keeps 85 % or more (the clearance invariant)', () => {
   assert.equal(stormFlapMul(0, T), 1);
   assert.equal(stormScrollMul(0, T), 1);
   assert.equal(stormFlapMul(1, T), S.flapMul);
   assert.equal(stormScrollMul(1, T), S.scrollMul);
   assert.ok(Math.abs(stormFlapMul(0.5, T) - (1 + S.flapMul) / 2) < 1e-9, 'linear in the level');
   assert.ok(S.flapMul >= 0.85 && S.flapMul <= 1, `flapMul ${S.flapMul}`);
-  assert.ok(S.scrollMul >= 1 && S.scrollMul <= 1.15, `scrollMul ${S.scrollMul}`);
+  assert.ok(S.scrollMul >= 0.6 && S.scrollMul <= 0.8, `scrollMul ${S.scrollMul}: a drag (1c.4, Michael 27 Nov: 30 % on every level)`);
   // The fastest climb is about the flap's speed, the time between pairs is spacing / speed: a storm keeps flapMul / scrollMul of it.
   assert.ok(S.flapMul / S.scrollMul >= 0.85, `climb per pair in a storm: ${(S.flapMul / S.scrollMul).toFixed(3)} of normal`);
   const hop = (v) => (v * v) / (2 * T.gravity);
@@ -175,7 +175,7 @@ function airScene({ starts = [20], passed = 0, farting = false, storm = true } =
   return { s, calls, banner };
 }
 
-test('Play.tickAir: the storm eases in over its pairs (flap weaker, scroll faster, the snow storm on), out after them; the banner one pair ahead', () => {
+test('Play.tickAir: the storm eases in over its pairs (flap weaker, scroll dragged, the snow storm on), out after them; the banner one pair ahead', () => {
   const { s, calls, banner } = airScene({ passed: 18 });
   s.tickAir(16);
   assert.equal(banner.visible, true, 'one pair before the storm');
@@ -187,6 +187,7 @@ test('Play.tickAir: the storm eases in over its pairs (flap weaker, scroll faste
   assert.equal(s.stormRun.level, 1);
   assert.equal(s.stormFlap, S.flapMul);
   assert.equal(s.stormScroll, S.scrollMul);
+  assert.ok(s.stormScroll < 1, 'a drag');
   assert.ok(calls.scroll > 0, 'the scroll was pushed onto the world');
   assert.equal(calls.storm.at(-1), 1);
   const air = calls.air.at(-1);
@@ -223,6 +224,79 @@ test('Play: a flap in a storm is stormFlap as strong; calmAir puts everything ba
   banner.visible = true;
   c.calmAir();
   assert.deepEqual([c.stormFlap, c.stormScroll, banner.visible, calls.storm.at(-1), calls.air.at(-1)], [1, 1, false, 0, null]);
+});
+
+test('Play.tickAir: a fart in a storm lifts the drag (the scroll, the flap and the pipes\' drift back to calm, eased over rampMs); after the fart the storm comes back (1c.4)', () => {
+  const { s } = airScene({ passed: 20 });
+  for (let i = 0; i < 40; i += 1) s.tickAir(S.rampMs / 20);
+  assert.deepEqual([s.stormRun.level, s.stormScroll, s.stormFlap], [1, S.scrollMul, S.flapMul], 'the full storm');
+  let on = true;
+  s.effects = { powerActive: () => on, powerElapsed: () => 1000 };
+  s.tickAir(S.rampMs / 2);
+  assert.ok(s.stormScroll > S.scrollMul && s.stormScroll < 1, `easing out (${s.stormScroll})`);
+  s.tickAir(S.rampMs / 2);
+  assert.deepEqual([s.stormRun.level, s.stormScroll, s.stormFlap], [0, 1, 1], 'no drag while the fart runs');
+  on = false;
+  for (let i = 0; i < 40; i += 1) s.tickAir(S.rampMs / 20);
+  assert.deepEqual([s.stormRun.level, s.stormScroll, s.stormFlap], [1, S.scrollMul, S.flapMul], 'the storm is back after it');
+});
+
+test('a fart ending inside a storm: the 700 ms grace still clears a pipe column at every Daily level while the drag eases back in (1c.4)', () => {
+  const need = T.pipeWidth + T.poopRadius; // the grace's own rule (tests/tuning.test.js), there at the base speed
+  for (const fps of [60, 30]) {
+    const dt = 1000 / fps;
+    for (let L = T.daily.minLevel; L <= T.daily.maxLevel; L += 1) {
+      const { s } = airScene({ passed: 20 }); // inside the storm's pairs, its level eased out by the fart (the test above)
+      s.effects = { powerActive: () => false, powerElapsed: () => 0 };
+      // Play.update after the fart's last frame: tickAir eases the storm back in, the grace counts down, the world
+      // moves at the frame's scroll. (The fart's own last frame, still at full speed, is left out: a margin.)
+      let grace = T.beans.graceMs;
+      let px = 0;
+      while (grace > 0) {
+        s.tickAir(dt);
+        grace = Math.max(0, grace - dt);
+        px += (levelSpeed(L, T) * s.stormScroll * dt) / 1000;
+      }
+      assert.ok(px >= need, `level ${L} at ${fps} fps: the grace covers ${px.toFixed(1)} px, a column needs ${need}`);
+      assert.ok(s.stormScroll < 1, 'the drag came back meanwhile');
+    }
+  }
+});
+
+test('Play.stepPipeMove: a moving pair\'s drift clock runs at the storm\'s share of the scroll (1c.4), so a crossing in the storm sees the gap move as far as a calm one; both columns keep the gap', () => {
+  const row = pipeMoveParams(7, T);
+  const move = { baseY: 640, amp: row.ampPx, periodMs: row.periodMs, phase: 0.4, holdMs: T.pipeMove.holdMs };
+  const gapH = T.gapHeight;
+  const pair = () => {
+    const data = { gapH, mate: { active: true, y: 0 } };
+    return { clockMs: 0, y: 0, mate: data.mate, getData: (k) => data[k] };
+  };
+  const plain = playScene({}); // off season, a match, a normal run: no storm field at all
+  const a = pair();
+  plain.stepPipeMove(a, move, 50);
+  assert.equal(a.clockMs, 50, 'real time outside a storm');
+  const storm = playScene({ stormScroll: S.scrollMul });
+  const b = pair();
+  storm.stepPipeMove(b, move, 100);
+  assert.ok(Math.abs(b.clockMs - 100 * S.scrollMul) < 1e-9, `the drift clock at ${S.scrollMul} of real time`);
+  const gapY = gapBobY(b.clockMs, move.baseY, move.amp, move.periodMs, move.phase, move.holdMs);
+  assert.ok(Math.abs(b.y - (gapY - gapH / 2)) < 1e-9 && Math.abs(b.mate.y - (gapY + gapH / 2)) < 1e-9, 'the top and its mate keep the gap');
+  // One column crossing on level 7, in 16 ms frames: in the full storm it lasts 1 / scrollMul as long, and the gap
+  // ends where a calm crossing leaves it.
+  const crossMs = (share) => (1000 * (T.pipeWidth + 2 * T.poopRadius)) / (levelSpeed(7, T) * share);
+  const fly = (scene, ms) => {
+    const p = pair();
+    for (let t = 0; t < ms - 1e-9; t += 16) scene.stepPipeMove(p, move, Math.min(16, ms - t));
+    return p;
+  };
+  const calmCross = fly(playScene({ stormScroll: 1 }), crossMs(1));
+  const stormCross = fly(storm, crossMs(S.scrollMul));
+  assert.ok(Math.abs(stormCross.clockMs - calmCross.clockMs) < 1e-6 && Math.abs(stormCross.y - calmCross.y) < 1e-6, `the gap at ${stormCross.y.toFixed(2)} after a storm crossing, ${calmCross.y.toFixed(2)} after a calm one`);
+  const inactive = pair();
+  inactive.getData('mate').active = false;
+  inactive.getData('mate').y = 5;
+  storm.stepPipeMove(inactive, move, 16);
+  assert.equal(inactive.getData('mate').y, 5, 'a mate already gone is left alone');
 });
 
 test('Play: the blizzard loop fades in from the banner, holds through the storm, fades out after it; pause holds it, calmAir stops it (2.7a)', () => {

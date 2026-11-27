@@ -82,8 +82,9 @@ lighter pink (`pipe-moving`, painted once by `createLightTexture` in `ui/pipeSha
 `pipeMove.lightenFrac`): `rollPipeMove` at spawn (after the item and bean
 draws; never for the centred pair after a fart; amplitude clamped into `gapBounds`), `gapBobY` in
 `update()` moving both columns, a probiotic / bacteria in that pair riding the gap centre (`bob: 'pair'`).
-`pipeMoveShiftPx` is the gap's shift during one column crossing; `tests/tuning.test.js` keeps every
-row under three quarters of the poop's clearance (and every period ≥ 4 s) so the motion alone can
+`pipeMoveShiftPx` is the gap's shift during one column crossing (its `driftShare`: a December storm slows the
+drift with the scroll, `Play.stepPipeMove`); `tests/tuning.test.js` keeps every
+row, in calm air and at every storm level, under three quarters of the poop's clearance (and every period ≥ 4 s) so the motion alone can
 never clip a centred poop. One spacing after a level's last pair a checkered finish
 line (generated texture, plain Image) scrolls in and no pair follows it outside a
 fart; crossing it (any level but the last) bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
@@ -478,7 +479,10 @@ day through the game registry.
   day. The Profile's quests drop the other tree once one is earned (`hiddenBy`). `tests/adventTrees.test.js`.
 - **Storms.** `course.storm(n)` (salt 17) on the shared Daily course, so every run of a day meets the same storms
   (`TUNING.advent.storm`; `stormStartsHere`, `stormPhase`). The banner "Snowstorm ahead!" shows one pair ahead; while it blows
-  `stormFlapMul` and `stormScrollMul` pull on the flap and the scroll (`doFlap`, `scrollSpeed`), eased in and out, never during a fart.
+  `stormFlapMul` (`flapMul` 0.92) and `stormScrollMul` (`scrollMul` 0.7, a drag of 30 % on every level: Michael, 27 Nov, plan 17 1c.4)
+  pull on the flap and the scroll (`doFlap`, `scrollSpeed`), and the moving pairs' drift clock runs at the same share
+  (`stepPipeMove`), so a gap shifts no more during a crossing than in calm air; eased in and out over `rampMs`, lifted
+  during a fart and back after it (the 700 ms grace after a fart that ends in a storm still clears a column).
   The snow gets one wind input (`setAir`, `setStorm` in `src/ui/snowfall.js`; `tickAir` in Play): the storm's gusts and swirls, or,
   in every December run, the fart wind that blows it right to left. `tests/adventStorm.test.js`.
 - **Sounds.** `Advent_PieceFound.mp3` (a piece caught) and `Advent_Blizzard.mp3` (a loop faded in from the banner and out as the storm
@@ -3720,7 +3724,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             store's best, addBetter, drain removing only what it sent.
   adventPieces.test.js      Advent pieces: one a run, free slot only, target from the backlog, pity shrink, the found-day
                             store and queue, the 'kept' / 'refused' / too-soon rules, the merge, Over's lines, the chip.
-  adventStorm.test.js       Storms: course.storm, phase, no piece in a storm, the pull per pair, the fart wind, the blizzard.
+  adventStorm.test.js       Storms: course.storm, phase, no piece in a storm, the pull per pair, the drag lifted by a fart and
+                            the grace after one, the drift clock (stepPipeMove), the fart wind, the blizzard.
   adventTrees.test.js       The 🎄 / 🌲 entries on found-day stores (adventAward).
   adventSchema.test.js      The 2a + 2b SQL in PGlite: utc_today, advent_season, pieces, progress, board, award, the
                             December branch of submit_daily_score, daily_board's gift, fold_player, the tree claims.

@@ -4493,7 +4493,22 @@ export class Play extends Phaser.Scene {
    */
   scrollSpeed() {
     if (this.respawning()) return 0;
-    return this.diff.pipeSpeed * this.scrollMul * (this.stormScroll ?? 1); // a December storm's push (plan 17, 2.7)
+    return this.diff.pipeSpeed * this.scrollMul * (this.stormScroll ?? 1); // a December storm's drag (plan 17, 2.7, 1c.4)
+  }
+
+  /**
+   * One frame of a moving pair: the gap centre follows its sine, the mate stays gapH below (Arcade reads the
+   * sprites' positions each step, so the bodies follow). Its clock runs at a December storm's share of the scroll
+   * (plan 17, 1c.4: the drag slows the drift as much as the world), so a gap shifts no more during a crossing than
+   * in calm air (tests/tuning.test.js); a fart's faster scroll leaves the drift at real time.
+   */
+  stepPipeMove(pipe, move, delta) {
+    pipe.clockMs += delta * (this.stormScroll ?? 1);
+    const gapY = gapBobY(pipe.clockMs, move.baseY, move.amp, move.periodMs, move.phase, move.holdMs); // rests at each end (pipeMove.holdMs)
+    const gapH = pipe.getData('gapH');
+    pipe.y = gapY - gapH / 2;
+    const mate = pipe.getData('mate');
+    if (mate?.active) mate.y = gapY + gapH / 2;
   }
 
   /** In a respawn, or paused in the middle of one (pausePlay keeps respawnPaused). */
@@ -6938,18 +6953,9 @@ export class Play extends Phaser.Scene {
     // Each walk is over a copy (eachChild, plan 35, 1.3): destroy() takes a child out of the group's live
     // array, and the one after it (a pair's mate leaves on the same frame) would miss this frame.
     eachChild(this.pipes.getChildren(), (pipe) => {
-      // A moving pair: the gap centre follows its sine (frozen while paused, like the items); the
-      // mate stays gapH below. Arcade reads the sprites' positions each step, so the bodies follow.
+      // A moving pair (frozen while paused, like the items): stepPipeMove.
       const move = pipe.getData('move');
-      if (move && this.state === 'playing') {
-        const elapsed = pipe.clockMs + delta;
-        pipe.clockMs = elapsed;
-        const gapY = gapBobY(elapsed, move.baseY, move.amp, move.periodMs, move.phase, move.holdMs); // rests at each end (pipeMove.holdMs)
-        const gapH = pipe.getData('gapH');
-        pipe.y = gapY - gapH / 2;
-        const mate = pipe.getData('mate');
-        if (mate?.active) mate.y = gapY + gapH / 2;
-      }
+      if (move && this.state === 'playing') this.stepPipeMove(pipe, move, delta);
       if (this.state === 'playing' && pipe.getData('scoring') && !pipe.getData('passed') && hasPassed(pipe.x, T.pipeWidth, this.poop.x)) {
         pipe.setData('passed', true);
         perfMark(PERF_TAGS.pipe);

@@ -1208,9 +1208,12 @@ export function pipeMoveAmplitude(baseY, bounds, ampPx) {
   return Math.max(0, Math.min(ampPx, baseY - bounds.minY, bounds.maxY - baseY));
 }
 
-/** Worst-case px a moving gap shifts while the poop crosses one column (pipeWidth + its diameter) at `speed` px/s. */
-export function pipeMoveShiftPx(ampPx, periodMs, speed, t) {
-  const peak = (ampPx * 2 * Math.PI) / (periodMs / 1000); // px/s at the sine's steepest
+/**
+ * Worst-case px a moving gap shifts while the poop crosses one column (pipeWidth + its diameter) at `speed` px/s,
+ * its drift clock running at `driftShare` of real time (a December storm slows it with the scroll: plan 17, 1c.4).
+ */
+export function pipeMoveShiftPx(ampPx, periodMs, speed, t, driftShare = 1) {
+  const peak = ((ampPx * 2 * Math.PI) / (periodMs / 1000)) * driftShare; // px/s at the sine's steepest
   return (peak * (t.pipeWidth + 2 * t.poopRadius)) / speed;
 }
 

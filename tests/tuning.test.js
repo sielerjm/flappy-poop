@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T, SHARE, FIELD, GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
-import { pipeSpacing, levelSpeed, pipeMoveShiftPx, pipeMoveParams } from '../src/logic.js';
+import { pipeSpacing, levelSpeed, pipeMoveShiftPx, pipeMoveParams, stormScrollMul } from '../src/logic.js';
 
 test('the ceiling strip mirrors the ground strip, and the play area between them is centred on mid-screen', () => {
   assert.equal(T.ceilingHeight, T.groundHeight);
@@ -209,6 +209,13 @@ test('moving pipes: from level 4, chances in (0, 1], slow periods, the swing fit
     assert.ok(M.ampPx[i] > 0 && M.ampPx[i] <= band / 2, `ampPx row ${i} fits the band`);
     const shift = pipeMoveShiftPx(M.ampPx[i], periodMs, levelSpeed(M.fromLevel + i, T), T);
     assert.ok(shift <= 0.75 * clearance, `row ${i}: the gap shifts ${shift.toFixed(1)} px during a crossing, over ${(0.75 * clearance).toFixed(1)}`);
+    // A December storm drags the scroll to stormScrollMul of the level's speed and slows the drift by the same share
+    // (plan 17, 1c.4; Play.stepPipeMove), so the shift per crossing holds at every storm level, ramp included.
+    for (const level of [0.25, 0.5, 0.75, 1]) {
+      const share = stormScrollMul(level, T);
+      const inStorm = pipeMoveShiftPx(M.ampPx[i], periodMs, levelSpeed(M.fromLevel + i, T) * share, T, share);
+      assert.ok(inStorm <= 0.75 * clearance, `row ${i}, storm level ${level}: the gap shifts ${inStorm.toFixed(1)} px during a crossing, over ${(0.75 * clearance).toFixed(1)}`);
+    }
   }
 });
 

@@ -42,12 +42,12 @@ export const CHANGELOG = [
       en: [
         '🧩 Advent, all December: every Daily Dump run hides a wrapped gift. Catch the day’s gift, or one from a day you missed, and collect all 24: by 24 Dec for the 🎄 Christmas Tree badge, or by 31 Dec for the 🌲 Evergreen.',
         '🌞 In December the Daily Dump stays open all day: play it as often as you like, and your best score of the day goes on the board. A 🎁 beside a name means that player found the day’s gift.',
-        '❄️ Snowstorms blow through December Daily Dump runs: the snow whips across the screen, each tap lifts you a little less and the pipes come a little faster. Watch for "Snowstorm ahead!". And a fart now blows the snow the other way.',
+        '❄️ Snowstorms blow through December Daily Dump runs: the snow whips across the screen, the wind slows you down and each tap lifts you a little less. Watch for "Snowstorm ahead!". And a fart now blows the snow the other way.',
       ],
       'zh-Hans': [
         '🧩 整个十二月的降临活动：每局每日一拉都藏着一份包好的礼物。找到当天的礼物，或补上错过那天的礼物，集齐全部24份：12月24日前集齐得🎄“2026 圣诞树”徽章，12月31日前集齐得🌲“2026 常青树”。',
         '🌞 十二月里每日一拉全天开放：想玩几次都行，当天的最好成绩记到排行榜上。名字旁边的🎁表示这位玩家找到了当天的礼物。',
-        '❄️ 十二月的每日一拉会刮暴风雪：雪花横扫屏幕，每次点击飞得低一点，管道也来得快一点。留意“前方有暴风雪！”。另外，放屁时雪会被吹往另一边。',
+        '❄️ 十二月的每日一拉会刮暴风雪：雪花横扫屏幕，狂风拖慢你的速度，每次点击也飞得低一点。留意“前方有暴风雪！”。另外，放屁时雪会被吹往另一边。',
       ],
     },
   },
