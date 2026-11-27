@@ -7,7 +7,7 @@ import { createJsonStore } from './store.js';
 import { TUNING, LEADERBOARD } from './config.js';
 
 export const VERSION = '0.36.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
-/** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
+/** The version line (About, How to play and Settings only: VERSION_LINE_OVERLAYS): `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
 export function versionText(locale, version = VERSION) {
   return t(locale, 'versionLine').replace('{version}', version);
 }

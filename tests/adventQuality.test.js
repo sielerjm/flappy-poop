@@ -1,8 +1,7 @@
 // Advent piece Quality, recording only (plan 17, 1c.Q; plan 54's Stage 1, Michael's Q1: pure odds, no per-run cap).
 // A day's clock per device: s, the chance the run's piece would still be hidden after the runs flown so far, and held,
 // the score frozen when a piece first shows (s x the roll's 1 - u). A catch of the day's own piece keeps held as its
-// Quality; a catch-up piece keeps none. Nothing here is drawn or sent: plan 54 shows it. Reference numbers:
-// .claude/plans/54-tools/audit54.py (private).
+// Quality; a catch-up piece keeps none. Nothing here is drawn or sent: plan 54 shows it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
