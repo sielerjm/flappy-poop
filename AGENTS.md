@@ -395,12 +395,20 @@ Pretend date at the real time of day. Decorations and the practice Daily read it
 `utcDayKey()`, so a test run on a pretend date posts nothing and the real course never moves. Every scene reads the same
 day through the game registry.
 - **🎅 for the 🌞.** `Play.pickVisitSanta` picks a new 🎅 each time the home screen is built, never the last one
-  (`pickSanta(Math.random, last, santas)`, never the course RNG). `TUNING.advent.santas` has 18 variants (Santa, Mrs. Claus, Mx Claus, plain
-  and five skin tones); `supportedSantas` drops, once per page, any variant this device draws as two glyphs (`registry.santas`). The last pick
-  lives in `flappyPoop.santa` (`LEADERBOARD.santaKey`; the registry when storage is blocked). Old builds never read that key; the new build
-  treats a missing or unknown value as no last pick. The glyph is `dailyGlyph(day, santa, T)` / `dailyGlyphNow`. The seven strings that
+  (`pickSanta(Math.random, last, plainSantas(santas))`, never the course RNG). The changing 🎅 draws only from the plain pool `plainSantas`
+  (`src/logic.js`: 🎅 🤶 🧑‍🎄). `TUNING.advent.santas` has 18 variants (Santa, Mrs. Claus, Mx Claus, plain and five skin tones);
+  `supportedSantas` drops, once per page, any variant this device draws as two glyphs (`registry.santas`, which keeps every supported
+  variant: the picker's list, and what makes a saved choice valid). The last pick lives in `flappyPoop.santa` (`LEADERBOARD.santaKey`; the
+  registry when storage is blocked). Old builds never read that key; the new build treats a missing or unknown value as no last pick.
+  **Choose your 🎅** (`src/scenes/SantaPicker.js`, overlay id `santapick`): it opens only over the Daily popup, from the title 🎅, which is
+  tappable only when this device draws 2 or more variants. A saved choice (`flappyPoop.santaChoice`, `LEADERBOARD.santaChoiceKey`) shows on
+  every visit; there is no way back to the changing 🎅 once one is saved. A red dot (`TUNING.advent.santaDot`; seen flag
+  `flappyPoop.santaDot`, `LEADERBOARD.santaDotKey`) sits on the home 🎅 and the Daily title's 🎅 until the picker is first opened. Both keys
+  survive Clear user and Sign out; `Play` owns both stores. `Play.applySanta()` redraws the home button and `Daily.setGlyph()` (title,
+  body, pictures line, note) with no restart. In December the Daily popup has a (?) at its top left that opens a help card (i18n
+  `dailyHelp`; not an overlay; `Daily.close()` takes the card down first). The glyph is `dailyGlyph(day, santa, T)` / `dailyGlyphNow`. The seven strings that
   named the 🌞 (`itemDailyDetail`, `itemLeaderboardDetail`, `dailyTitle`, `dailyBody`, `dailyNeedName`, `dailyBoardJoin`, `statsDaily`)
-  carry `{daily}`, filled by `fillDaily(text, glyph)` (`src/i18n.js`; `howToItems(locale, { daily })`); the loading splash keeps its literal 🌞.
+  carry `{daily}`, filled by `fillDaily(text, glyph)` (`src/i18n.js`; `howToItems(locale, { daily })`); the loading splash keeps its literal 🌞. The splash's bouncing poop wears its Santa hat in December: `index.html` holds a second, hidden `img.splash-poop-xmas` (`assets/advent/poop-santa.png`) and its own small guarded script swaps which image shows when the real UTC month is 12 or the URL has `?xmas=1` (a December class on the box; `tests/html.test.js`).
 - **Twins** (`src/advent.js`, `ADVENT_ART`: `twins`, `fartFrames`, `snowCap`, `files`). The map is data in its own module, not in
   `config.js`, because `tests/push.test.js` stamps a copy of `config.js` alone and `config.js` names no asset file. `seasonalSkin(day, T, art)`
   gives the twins in season and nothing off season; `twinKey(stock, skin, fartFrame, has)` gives the twin once it has loaded, else the stock key.
@@ -421,7 +429,7 @@ day through the game registry.
   (never a match half's); the snow falls in every mode: runs, the Daily, both match halves, the online race and 📚 runs
   (`src/ui/snowfall.js`: `createSnowfall`, `makeFlakes`, `stepFlakes`, one renderer for later storms; nothing under `prefers-reduced-motion`).
 - **Smoke.** `tools/headless_check.mjs` pins the page's and its own clock (`SMOKE_PIN_DAY` 2026-11-15, `pinOffset`, `clockStubSource`; `--date=YYYY-MM-DD`
-  overrides every pin), because every older check expects stock art and the 🌞; the `christmas` section runs on a 5 Dec pin and back,
+  overrides every pin), because every older check expects stock art and the 🌞; the `christmas` section runs on a 5 Dec pin and back (it also checks the holly bean: world `bean-holly`, the stock hitbox circle, the HUD bean stock; the plain-pool rotation; and the 🎅 choice: both red dots and their reload, the (?) card, the picker by a real tap and the pad, Save, B keeping the saved one, both keys removed at the end),
   and the `advent` section runs each of its parts on its own pin (5 Dec a real Daily, 7 Dec a storm, test mode on a Pretend 5 Dec). Its
   book checks (plan 17, 2.18): the glowing button opens the book, the piece flies into its cell, the flight asks for its chimes and
   the landing for its click, the glow is off after closing, a book closed mid-flight does not land the piece twice on the next open,
@@ -3002,6 +3010,10 @@ src/
                             place unless a note shows. refresh() redraws it after a save.
                             In December its 🧩 line opens the Advent book (chromeIntent
                             'advent'); closing the book comes back here.
+    SantaPicker.js          Overlay (plan 17, Stage 1b; overlay id 'santapick'): choose your
+                            🎅 from every supported variant. Opens only over the Daily popup
+                            (its title 🎅); Save stores LEADERBOARD.santaChoiceKey, B keeps the
+                            saved one. chromeIntent rows; in OVERLAY_SCENES and smoke OVERLAYS.
     Advent.js               Overlay (plan 17, Stage 2c; overlay id 'advent'): the Advent
                             book, a 4 x 6 picture filled as pieces are found. Opens from the
                             home Advent button, the Daily window's 🧩 line and the save
@@ -4451,7 +4463,8 @@ tools/
                             board's and the pilot's calls are stubbed at boot
                             (globalThis.__edu / __eduAnswer), like the career's.
                             OVERLAYS lists Quiz; NEEDS_RUN keeps the ready-screen
-                            overlay loops off it. Plan 35's skip-splash (4.2: the setting off then on, Continue pressed by itself, the failed splash not) and its other sections: phaser-fallback
+                            overlay loops off it. NEEDS_DAILY does the same for
+                            santapick, which opens only over the Daily popup. Plan 35's skip-splash (4.2: the setting off then on, Continue pressed by itself, the failed splash not) and its other sections: phaser-fallback
                             (the page reloaded with the CDN blocked, then stalled, boots from
                             assets/vendor/; both blocked, the splash reads Couldn't load and a
                             tap reloads; then back on the CDN) and error-card (an error thrown
@@ -4491,7 +4504,7 @@ tools/
                             the wait, a no and Resend in the same room. Plan 39's online-join-link (4.3): the
                             real page opened at ?join= takes the code out of the address, opens 🌐, keeps it
                             through a failed sign-in, joins on Retry; a gone room says the link expired.
-                            Full smoke: 46 sections, 1062 checks.
+                            Full smoke: 46 sections, 1076 checks.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
