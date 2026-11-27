@@ -31,6 +31,7 @@ import {
   adventSeason,
   seasonalSkin,
   twinKey,
+  seasonIcon,
   countdownLine,
   pickSanta,
   supportedSantas,
@@ -551,6 +552,7 @@ export class Play extends Phaser.Scene {
     // The icon sits in a container so its breathing pulse (setProbioticPulse) scales the container:
     // refreshProbioticHud re-runs setDisplaySize on the icon itself, which would reset a tween on it.
     this.probioticIcon = this.add.image(0, 0, 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize);
+    this.probioticStock = 'probiotic'; // the stock key it shows (probiotic or postbiotic); skinHud draws its December twin
     this.probioticHud = this.add.container(0, 156, [this.probioticIcon]).setDepth(20).setVisible(false);
     this.probioticTween = null;
     this.probioticText = this.add.text(0, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(1, 0.5).setDepth(20).setVisible(false);
@@ -796,7 +798,9 @@ export class Play extends Phaser.Scene {
       // Container so the pulse scales circle + icon together without touching the icon's own scale.
       this.beanButton = this.add.container(b.x, b.y, [bg, icon]).setDepth(30).setVisible(false);
       this.beanButtonBg = bg; // recoloured by applyRainbow() with three beans held
+      this.beanButtonIcon = icon;
     }
+    this.skinHud(); // December's twins on the HUD icons, if already loaded (the flight's landing re-applies them)
     this.rainbowMs = 0;
     this.rainbowMode = null; // null | 'charged' (superBeans held) | 'super' (super fart running)
 
@@ -4606,6 +4610,7 @@ export class Play extends Phaser.Scene {
   /** The lazy flight landed or the season changed (plan 17, 1.10): show the current stock key's twin now, or the stock face. */
   reapplySkin() {
     if (this.poop?.active && this.poopStockKey) this.setPoopTexture(this.poopStockKey);
+    this.skinHud();
     for (const item of this.items?.getChildren() ?? []) this.skinItem(item);
     for (const bean of this.beans?.getChildren() ?? []) this.skinItem(bean); // the world bean's holly twin (same circle)
     this.refreshSeasonHome(); // the Bowelidays image, once its file is in
@@ -4646,6 +4651,25 @@ export class Play extends Phaser.Scene {
   /** A world pickup's texture (plan 17, 1.11; D2): its December twin once loaded, else the stock one. The kind stays the item's data. */
   itemTexture(kind) {
     return twinKey(kind, this.skin, 0, (k) => this.textures.exists(k));
+  }
+
+  /** A stock icon's December texture and size factor (plan 17, T12; seasonIcon): the stock off season or before its file lands. */
+  seasonIcon(stock) {
+    return seasonIcon(stock, this.skin ?? { twins: {}, fartFrames: [] }, (k) => this.textures.exists(k), (k) => this.textures.get(k).getSourceImage().width);
+  }
+
+  /** Show `stock`'s icon on Image `img` in a px x px box, as its December twin when it has one (the twin at the stock's scale). */
+  setSeasonIcon(img, stock, px) {
+    const { key, mul } = this.seasonIcon(stock);
+    if (img.texture.key !== key) img.setTexture(key);
+    return img.setDisplaySize(px * mul, px * mul);
+  }
+
+  /** The HUD's probiotic and bean icons and the bean button's, in the current skin (T12: December everywhere, Michael, 27 Nov). */
+  skinHud() {
+    if (this.probioticIcon) this.setSeasonIcon(this.probioticIcon, this.probioticStock ?? 'probiotic', T.hudProbioticSize);
+    if (this.beanIcon) this.setSeasonIcon(this.beanIcon, 'bean', T.hudInventory.iconPx);
+    if (this.beanButtonIcon) this.setSeasonIcon(this.beanButtonIcon, 'bean', 56);
   }
 
   /** Re-skin a pickup already in the field (the flight landed, or the season changed): the texture, then its circle for that frame. */
@@ -4863,8 +4887,8 @@ export class Play extends Phaser.Scene {
     this.setMultiplierBadge(this.effects.hasPostbiotic());
     this.setProbioticPulse(show);
     if (!show) return;
-    const icon = this.effects.hasPostbiotic() ? 'postbiotic' : 'probiotic';
-    if (this.probioticIcon.texture.key !== icon) this.probioticIcon.setTexture(icon).setDisplaySize(T.hudProbioticSize, T.hudProbioticSize);
+    this.probioticStock = this.effects.hasPostbiotic() ? 'postbiotic' : 'probiotic';
+    this.setSeasonIcon(this.probioticIcon, this.probioticStock, T.hudProbioticSize); // the gingerbread in December (T12)
     this.probioticText.setText(`×${n}`);
     const { textX, iconX } = hudRightLayout(this.col.x + this.col.width, this.probioticText.width, { iconSize: T.hudProbioticSize });
     this.probioticText.setX(textX);
@@ -5529,7 +5553,7 @@ export class Play extends Phaser.Scene {
     const rows = {};
     for (const row of L.rows) {
       const button = createButton(this, row, '', nameStyle, { depth: 28 });
-      const icon = this.add.image(row.iconX, row.y, icons[row.id]).setDisplaySize(row.icon, row.icon).setDepth(29);
+      const icon = this.setSeasonIcon(this.add.image(row.iconX, row.y, icons[row.id]), icons[row.id], row.icon).setDepth(29); // December's twins (T12)
       const extra = row.id === 'superBean' ? this.add.text(row.iconX + row.icon / 2 - 4, row.y + 18, `×${T.beans.superBeans}`, { ...TEXT_STYLE, fontSize: '28px' }).setOrigin(0.5).setDepth(29) : null;
       const name = this.add.text(row.nameX, row.y, '', nameStyle).setOrigin(0, 0.5).setDepth(29);
       const price = createCoinText(this, row.priceX, row.y, nameStyle, { align: 'right', depth: 29, px: 40 }); // the kernel and the price, or "Bag full"
@@ -5613,7 +5637,7 @@ export class Play extends Phaser.Scene {
     marker.strokeRoundedRect(L.x - R.pitchPx / 2 + 6, L.y - L.height / 2 + 14, R.pitchPx - 12, L.height - 28, 16);
     const strip = faces.map((f) => {
       const face = mysteryFace(f);
-      const parts = [this.add.image(0, 0, face.key).setDisplaySize(R.iconPx, R.iconPx)];
+      const parts = [this.setSeasonIcon(this.add.image(0, 0, face.key), face.key, R.iconPx)];
       if (face.count) parts.push(this.add.text(R.iconPx / 2 - 6, R.iconPx / 2 - 8, `×${face.count}`, { ...TEXT_STYLE, fontSize: '28px' }).setOrigin(0.5));
       return this.add.container(L.x, L.y, parts).setDepth(31);
     });
@@ -5707,7 +5731,7 @@ export class Play extends Phaser.Scene {
     if (face.emoji) {
       parts.push(this.add.text(0, 0, face.emoji, { fontFamily: 'sans-serif', fontSize: '72px' }).setOrigin(0.5));
     } else {
-      parts.push(this.add.image(0, 0, face.key).setDisplaySize(2 * T.items.itemRadius, 2 * T.items.itemRadius)); // the pickup's size, whatever the texture's
+      parts.push(this.setSeasonIcon(this.add.image(0, 0, face.key), face.key, 2 * T.items.itemRadius)); // the pickup's size, whatever the texture's (its December twin, T12)
       if (face.count) parts.push(this.add.text(T.items.itemRadius, 0, `×${face.count}`, { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5));
     }
     const reveal = this.add.container(x, y, parts).setDepth(depth);

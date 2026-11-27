@@ -8333,10 +8333,10 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       ok(run1.itemsOk === run1.items, `every twinned pickup in the field wears its December twin (${run1.itemsOk} / ${run1.items}: ${run1.kinds.join(', ') || 'none in the field'})`);
       ok(run1.flakes === TT.advent.snow.count && !run1.line && !run1.image, `in a run the snow keeps falling (${run1.flakes} flakes; Michael, 26 Nov) and the countdown line and Happy Bowelidays! hide`);
       // The holly bean (plan 17, 1b.2b): level 1's scripted pairs bring one; the world bean wears the holly twin on the
-      // stock bean's hitbox circle, and the HUD's bean stays the stock one.
+      // stock bean's hitbox circle, and the HUD's bean wears it too (Stage 1c, T12: December art everywhere).
       await until(`${play}.beans.getChildren().some((b) => b.active)`, 120);
       const bean = await evaluate(`(() => { const p = ${play}; const b = p.beans.getChildren().find((q) => q.active); return JSON.stringify(b ? { key: b.texture.key, kind: b.getData('kind'), circle: b.body.isCircle, w: b.body.width, radius: b.getData('radius'), hud: p.beanIcon.texture.key } : null); })()`).then(JSON.parse);
-      ok(bean?.key === 'bean-holly' && bean.kind === 'bean' && bean.circle && Math.abs(bean.w - 2 * TT.beans.beanRadius) < 1 && bean.radius === TT.beans.beanRadius && bean.hud === 'bean', `the world bean wears bean-holly on the stock bean's circle (radius ${TT.beans.beanRadius}), the HUD bean stays stock (${JSON.stringify(bean)})`);
+      ok(bean?.key === 'bean-holly' && bean.kind === 'bean' && bean.circle && Math.abs(bean.w - 2 * TT.beans.beanRadius) < 1 && bean.radius === TT.beans.beanRadius && bean.hud === 'bean-holly', `the world bean wears bean-holly on the stock bean's circle (radius ${TT.beans.beanRadius}), the HUD bean too (T12) (${JSON.stringify(bean)})`);
       // A fart: the stock key stays poop-fart while the two hatted fart frames alternate on the stink frames' clock.
       await evaluate(`(() => { const p = ${play}; p.effects.addBean(); p.effects.addBean(); p.setCharged(true); p.activatePower(); return true; })()`);
       const farts = [];

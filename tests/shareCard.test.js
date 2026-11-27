@@ -94,3 +94,17 @@ test('renderShareCard resolves the PNG blob, or null when it cannot draw or enco
   assert.equal(await renderShareCard({ ...args, doc: doc(canvasWith({ toBlob: () => { throw new Error('tainted'); } })) }), null);
   assert.equal(await renderShareCard({ ...args, doc: { createElement() { throw new Error('no DOM'); } } }), null);
 });
+
+test('a December twin drawn larger than its box (the holly bean) grows about the cell\'s centre by its scale; others keep the box', () => {
+  const ctx = fakeCtx();
+  const L = shareCardLayout(T);
+  drawShareCard(ctx, L, DATA, IMAGES, { bean: 346 / 192 });
+  const at = (key) => ctx.log.find((e) => e.op === 'drawImage' && e.img.key === key).a;
+  const cellOf = (kind) => L.rows.flat().find((c) => c.kind === kind);
+  const [bx, by, bw, bh] = at('bean');
+  const c = cellOf('bean');
+  assert.ok(Math.abs(bw - c.iconPx * 346 / 192) < 1e-9 && Math.abs(bh - bw) < 1e-9);
+  assert.ok(Math.abs(bx + bw / 2 - c.iconX) < 1e-9 && Math.abs(by + bh / 2 - c.y) < 1e-9, 'centred on the cell');
+  const [, , fw] = at('fiber');
+  assert.equal(fw, cellOf('fiber').iconPx, 'no scale: the box');
+});

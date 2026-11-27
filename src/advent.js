@@ -21,10 +21,11 @@ export const ADVENT_ART = {
     'poop-fart': 'poop-fart-santa1',
     'poop-dead': 'poop-dead-santa',
     'poop-speech': 'poop-speech-santa',
-    // The world pickups only (D2; 1.11): the HUD, the cards, Over and Stats keep the stock items.
+    // The pickups: in the field (1.11) and, since Stage 1c (T12, Michael, 27 Nov: December art everywhere), the HUD, the
+    // bean button, Over and the share card, How to play and the shop's rows and reel (seasonIcon); the emoji sites stay.
     fiber: 'candy-cane',
     probiotic: 'gingerbread',
-    bean: 'bean-holly', // the world bean only (Michael, 26 Nov): same bean size and the same hitbox circle, the holly sticks out
+    bean: 'bean-holly', // same bean size and the same hitbox circle, the holly sticks out (Michael, 26 Nov); icons at the stock's scale (T12)
     bacteria: 'bacteria-santa',
   },
   fartFrames: ['poop-fart-santa1', 'poop-fart-santa2'],

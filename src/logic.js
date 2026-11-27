@@ -2461,6 +2461,16 @@ export function twinKey(stock, skin, fartFrame = 0, has = () => true) {
   return twin && has(twin) ? twin : stock;
 }
 
+/**
+ * A stock icon's texture under `skin` (Stage 1c, T12: the December art at the HUD, the bean button, Over and the share
+ * card, How to play, the shop): `key` its twin once loaded, else the stock; `mul` the twin's frame width over the
+ * stock's, so a box sized for the stock draws the item itself at its usual size (the holly bean's leaves stick out).
+ */
+export function seasonIcon(stock, skin, has, width) {
+  const key = twinKey(stock, skin, 0, has);
+  return { key, mul: key === stock ? 1 : width(key) / width(stock) };
+}
+
 // Advent pieces (plan 17, 2.6). `found` is the found-day store's map { piece: 'YYYY-MM-DD' } (createAdventStore).
 
 /** The highest piece out on `day` (piece k on k Dec): 0 off season, else the date, at most advent.piece.count. */

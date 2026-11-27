@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { playScene, registry, absorb } from './support/scenes.js';
 import { TUNING as T } from '../src/config.js';
 import { ADVENT_ART } from '../src/advent.js';
-import { countdownLine, seasonalSkin } from '../src/logic.js';
+import { countdownLine, seasonalSkin, seasonIcon } from '../src/logic.js';
 import { t } from '../src/i18n.js';
 
 const ON = seasonalSkin('2026-12-05', T, ADVENT_ART);
@@ -312,4 +312,64 @@ test('a match half (versus, the online race) has the snow too, never the line or
   assert.equal(off.flakes(), 0);
   assert.ok(!off.text.visible && !off.image());
   assert.equal(off.s.snowfall, null);
+});
+
+// --- Stage 1c, T12 (Michael, 27 Nov): the December art at the HUD, the bean button, Over and the share card,
+// How to play and the shop (the emoji sites stay as they are) ---
+
+test('seasonIcon: the twin once loaded, drawn at the stock\'s scale (the holly bean keeps the bean\'s size); off season or not loaded, the stock', () => {
+  const W = { bean: 192, 'bean-holly': 346, bacteria: 192, 'bacteria-santa': 196, probiotic: 192, gingerbread: 192, fiber: 192, 'candy-cane': 192, coin: 106 };
+  const all = () => true;
+  const width = (k) => W[k];
+  assert.deepEqual(seasonIcon('bean', ON, all, width), { key: 'bean-holly', mul: 346 / 192 });
+  assert.deepEqual(seasonIcon('bacteria', ON, all, width), { key: 'bacteria-santa', mul: 196 / 192 });
+  assert.deepEqual(seasonIcon('probiotic', ON, all, width), { key: 'gingerbread', mul: 1 });
+  assert.deepEqual(seasonIcon('fiber', ON, all, width), { key: 'candy-cane', mul: 1 });
+  assert.deepEqual(seasonIcon('coin', ON, all, width), { key: 'coin', mul: 1 }, 'no twin: the stock');
+  assert.deepEqual(seasonIcon('postbiotic', ON, all, width), { key: 'postbiotic', mul: 1 });
+  assert.deepEqual(seasonIcon('bean', ON, () => false, width), { key: 'bean', mul: 1 }, 'not loaded yet');
+  assert.deepEqual(seasonIcon('bean', OFF, all, width), { key: 'bean', mul: 1 }, 'off season');
+});
+
+/** An Image stand-in: its key and display size, the frame width from its key. */
+function iconStub(key, widths) {
+  const im = {
+    texture: { key },
+    display: null,
+    setTexture(k) {
+      im.texture.key = k;
+      return im;
+    },
+    setDisplaySize(w, h) {
+      im.display = [w, h];
+      return im;
+    },
+  };
+  im.widths = widths;
+  return im;
+}
+
+test('the HUD\'s probiotic, the bean row and the bean button wear the twins once the flight lands, the holly bean at the bean\'s scale', () => {
+  const W = { bean: 192, 'bean-holly': 346, probiotic: 192, gingerbread: 192, postbiotic: 192 };
+  const hi = T.hudInventory;
+  const parts = () => ({ probioticIcon: iconStub('probiotic'), beanIcon: iconStub('bean'), beanButtonIcon: iconStub('bean') });
+  const { s, have } = scene({ ...parts(), probioticStock: 'probiotic' });
+  s.textures.get = (k) => ({ getSourceImage: () => ({ width: W[k] }) });
+  s.skinHud();
+  assert.equal(s.beanIcon.texture.key, 'bean', 'before the flight: the stock bean');
+  for (const k of ['bean-holly', 'gingerbread']) have.add(k);
+  s.reapplySkin();
+  assert.equal(s.probioticIcon.texture.key, 'gingerbread');
+  assert.deepEqual(s.probioticIcon.display, [T.hudProbioticSize, T.hudProbioticSize]);
+  assert.equal(s.beanIcon.texture.key, 'bean-holly');
+  assert.ok(s.beanIcon.display.every((d) => Math.abs(d - hi.iconPx * (346 / 192)) < 1e-9), 'the bean itself keeps its size; the holly sticks out');
+  assert.equal(s.beanButtonIcon.texture.key, 'bean-holly');
+  // A postbiotic shows its own icon (no twin), and off season everything is stock.
+  s.probioticStock = 'postbiotic';
+  s.skinHud();
+  assert.equal(s.probioticIcon.texture.key, 'postbiotic');
+  const off = scene({ ...parts(), skin: OFF, loaded: ['bean-holly', 'gingerbread'], probioticStock: 'probiotic' }).s;
+  off.textures.get = s.textures.get;
+  off.skinHud();
+  assert.deepEqual([off.probioticIcon.texture.key, off.beanIcon.texture.key, off.beanButtonIcon.texture.key], ['probiotic', 'bean', 'bean']);
 });

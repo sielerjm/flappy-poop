@@ -77,7 +77,8 @@ export class HowTo extends Phaser.Scene {
         const glyph = item.key === 'daily' ? dailyGlyphNow(this.registry, T) : EMOJI_ROWS[item.key]; // the 🌞, or December's 🎅 (plan 17)
         sv.add(this.add.text(cx - 220, y, glyph, { fontFamily: 'sans-serif', fontSize: '56px' }).setOrigin(0.5));
       } else {
-        sv.add(this.add.image(cx - 220, y, item.key).setDisplaySize(80, 80));
+        const ic = this.seasonIcon(item.key); // December's twin (T12)
+        sv.add(this.add.image(cx - 220, y, ic.key).setDisplaySize(80 * ic.mul, 80 * ic.mul));
       }
       sv.add(this.add.text(cx - 160, y - 34, item.name, { ...STYLE, fontSize: '32px', color: '#f8a0c8' }).setOrigin(0, 0.5));
       // Top-aligned under the name so a three-line detail grows downward.
@@ -129,6 +130,11 @@ export class HowTo extends Phaser.Scene {
       onVertical: (dir) => sv.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
     });
     this.focus.show(); // only under a controller (registry padMode)
+  }
+
+  /** A stock icon's December twin and size factor from Play's skin (plan 17, T12); the stock when there is no Play. */
+  seasonIcon(stock) {
+    return this.scene.get('Play')?.seasonIcon?.(stock) ?? { key: stock, mul: 1 };
   }
 
   close() {

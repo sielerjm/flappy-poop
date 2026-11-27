@@ -181,7 +181,8 @@ export class Over extends Phaser.Scene {
       } else if (CELL_GLYPH[cell.id]) {
         inBand(this.add.text(cell.iconX, cell.y, CELL_GLYPH[cell.id], { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5));
       } else {
-        inBand(this.add.image(cell.iconX, cell.y, CELL_ICON[cell.id] ?? cell.id).setDisplaySize(48, 48));
+        const ic = this.seasonIcon(CELL_ICON[cell.id] ?? cell.id); // December's twin (T12)
+        inBand(this.add.image(cell.iconX, cell.y, ic.key).setDisplaySize(48 * ic.mul, 48 * ic.mul));
       }
       inBand(this.add.text(cell.textX, cell.y, `×${n ?? '–'}`, { ...style, fontSize: big ? '40px' : '32px', color: '#c9b8dc' }).setOrigin(0, 0.5));
       inBand(this.add.zone(cell.x, cell.y, cell.width, cell.height).setInteractive({ useHandCursor: true })); // the hand cursor; Over's own handlers route the tap
@@ -425,7 +426,7 @@ export class Over extends Phaser.Scene {
     const n = this.cellCounts?.[id];
     this.card.show({
       glyph: CELL_GLYPH[id] ?? '',
-      icon: CELL_GLYPH[id] ? null : (CELL_ICON[id] ?? id),
+      ...(CELL_GLYPH[id] ? { icon: null } : (({ key, mul }) => ({ icon: key, iconMul: mul }))(this.seasonIcon(CELL_ICON[id] ?? id))),
       title: t(locale, CELL_NOTE[id]),
       lines: [t(locale, 'overCardRun').replace('{n}', n === null || n === undefined ? '–' : String(n))],
     });
@@ -467,12 +468,21 @@ export class Over extends Phaser.Scene {
    * loaded textures, encode it off the main thread, keep it as this.shareFile,
    * then show Share. A failure leaves Share hidden.
    */
+  /** A stock icon's December twin and size factor from Play's skin (plan 17, T12); the stock when there is no Play. */
+  seasonIcon(stock) {
+    return this.scene.get('Play')?.seasonIcon?.(stock) ?? { key: stock, mul: 1 };
+  }
+
   makeShareCard({ headline, won, scoreLine, collected, pipes, locale }) {
     const token = {};
     this.cardToken = token;
     const images = {};
+    const scales = {}; // December's twins under the stock keys, each at its size factor (T12)
     for (const key of ['poop', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery-icon', 'pipe']) {
-      if (this.textures.exists(key)) images[key] = this.textures.get(key).getSourceImage();
+      const ic = key === 'pipe' ? { key, mul: 1 } : this.seasonIcon(key);
+      if (!this.textures.exists(ic.key)) continue;
+      images[key] = this.textures.get(ic.key).getSourceImage();
+      if (ic.mul !== 1) scales[key] = ic.mul;
     }
     const tan = levelColor(1, LEVEL_COLORS, T.levels.whiteBlend);
     const data = {
@@ -484,7 +494,7 @@ export class Over extends Phaser.Scene {
       pipes,
       footer: shareCardFooter(locale, SHARE.url),
     };
-    renderShareCard({ layout: shareCardLayout(T), data, images }).then((blob) => {
+    renderShareCard({ layout: shareCardLayout(T), data, images, scales }).then((blob) => {
       if (!blob || this.cardToken !== token || !this.sys.isActive()) return; // failed, or closed / reopened meanwhile
       let file;
       try {
