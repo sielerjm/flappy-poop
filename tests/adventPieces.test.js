@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T, LEADERBOARD } from '../src/config.js';
-import { adventReleased, adventBacklog, rollAdventTarget, adventSpawnPair, adventPairChance, adventSpawnHere, adventStatus, createRng, shiftDayKey } from '../src/logic.js';
+import { adventReleased, adventBacklog, rollAdventTarget, adventSpawnPair, adventPairChance, adventSpawnHere, adventStatus, adventClock, createRng, shiftDayKey } from '../src/logic.js';
 import { createAdventStore, createAdventQueue, submitAdventPiece, fetchAdventProgress, fetchDailyBoard, waitsForDailyRun } from '../src/leaderboard.js';
 import { fakeStorage, playScene, registry } from './support/scenes.js';
 import { ADVENT_ART } from '../src/advent.js';
@@ -144,6 +144,98 @@ test('the found-day store: one record per season, a piece once with its earliest
   const sandbox = createAdventStore(null, 2026);
   sandbox.add(1, '2026-12-01');
   assert.deepEqual(sandbox.found(), { 1: '2026-12-01' });
+});
+
+test("the Quality clock in the store (1c.Q): the day's clock beside its misses, written at once, a fresh one each UTC day; a miss keeps it; old records read as before", () => {
+  const storage = fakeStorage();
+  const key = `${LEADERBOARD.adventKey}.2026`;
+  const s = createAdventStore(storage, 2026);
+  const DAY = '2026-12-05';
+  assert.deepEqual(s.clock(DAY), adventClock(), 'nothing flown yet');
+  const shown = { s: 0.5, held: { q: 4200, run: 2, pipes: 19, today: true }, runs: 1, pipes: 12 };
+  s.setClock(DAY, shown);
+  assert.deepEqual(createAdventStore(storage, 2026).clock(DAY), shown, 'written at once: a reload after the piece showed reads the same score');
+  assert.equal(s.misses(DAY), 0, 'a clock with no miss yet (the first run showed the piece)');
+  s.addMiss(DAY);
+  assert.deepEqual(s.clock(DAY), shown, 'a miss keeps the clock');
+  assert.equal(s.misses(DAY), 1);
+  s.setClock(DAY, { ...shown, runs: 2 });
+  assert.equal(s.misses(DAY), 1, 'the clock keeps the misses');
+  const copy = s.clock(DAY);
+  copy.held.q = 1;
+  assert.equal(s.clock(DAY).held.q, 4200, 'a copy: changing it changes nothing stored');
+  // A new UTC day: a fresh clock and no misses; the day before is gone with them.
+  assert.deepEqual(s.clock('2026-12-06'), adventClock());
+  s.setClock('2026-12-06', { s: 0.9, held: null, runs: 1, pipes: 6 });
+  assert.equal(s.misses('2026-12-06'), 0);
+  assert.deepEqual(s.clock(DAY), adventClock());
+  s.addMiss('2026-12-07');
+  assert.deepEqual(s.clock('2026-12-07'), adventClock(), "a miss on a new day starts that day's clock fresh");
+  assert.deepEqual(s.clock('2026-12-06'), adventClock());
+  s.setClock('nope', shown);
+  assert.equal(s.misses('2026-12-07'), 1, 'a bad day writes nothing');
+  // 1c.5's record ({ day, n }) reads as before, with a fresh clock and no Quality.
+  storage.setItem(key, JSON.stringify({ found: { 3: '2026-12-03' }, miss: { day: DAY, n: 2 }, seen: [3] }));
+  assert.equal(s.misses(DAY), 2);
+  assert.deepEqual(s.clock(DAY), adventClock());
+  assert.deepEqual(s.found(), { 3: '2026-12-03' });
+  assert.deepEqual(s.unseen(), []);
+  assert.deepEqual(s.quality(), {});
+  // Junk in the clock reads as its fresh parts; a held score out of range reads as none.
+  storage.setItem(key, JSON.stringify({ miss: { day: DAY, n: 1, s: 7, held: { q: 10001, run: 1, pipes: 0 }, runs: -1, pipes: 'x' } }));
+  assert.deepEqual(s.clock(DAY), adventClock());
+  assert.equal(s.misses(DAY), 1);
+  storage.setItem(key, JSON.stringify({ miss: { day: DAY, n: 0, s: 0, held: { q: 0, run: 3, pipes: 40 }, runs: 2, pipes: 40 } }));
+  assert.deepEqual(s.clock(DAY), { s: 0, held: { q: 0, run: 3, pipes: 40, today: false }, runs: 2, pipes: 40 }, 'the rarest score is kept; a held without today reads false');
+  storage.setItem(key, JSON.stringify({ miss: { day: DAY, n: 0 } }));
+  assert.deepEqual(s.clock(DAY), adventClock());
+  assert.equal(s.misses(DAY), 0);
+  // The practice sandbox keeps its clock in memory.
+  const sandbox = createAdventStore(null, 2026);
+  sandbox.setClock(DAY, shown);
+  assert.deepEqual(sandbox.clock(DAY), shown);
+});
+
+test("the Quality map (1c.Q): a caught on-day piece keeps its score; a catch-up piece keeps none; a day changed by the board drops it; Sign out clears it with the pieces", async () => {
+  const { clearAdventStores } = await import('../src/leaderboard.js');
+  const map = new Map();
+  const storage = fakeStorage(map);
+  Object.defineProperty(storage, 'length', { get: () => map.size });
+  storage.key = (i) => [...map.keys()][i] ?? null;
+  const key = `${LEADERBOARD.adventKey}.2026`;
+  const s = createAdventStore(storage, 2026);
+  const q = { q: 4200, run: 2, pipes: 19 };
+  assert.equal(s.add(5, '2026-12-05', q), true);
+  assert.deepEqual(s.quality(), { 5: q }, 'piece 5 on 5 Dec: on its own day');
+  assert.deepEqual(createAdventStore(storage, 2026).quality(), { 5: q }, 'stored');
+  assert.equal(s.add(3, '2026-12-05', q), true, 'a catch-up piece is still added');
+  assert.deepEqual(s.quality(), { 5: q }, '... with no score: late, its look comes from its day');
+  assert.equal(s.add(5, '2026-12-05', { q: 1, run: 1, pipes: 0 }), false, 'found already');
+  assert.deepEqual(s.quality(), { 5: q }, 'the first score stays');
+  assert.equal(s.add(6, '2026-12-06'), true, 'no score given');
+  assert.deepEqual(s.quality(), { 5: q });
+  assert.equal(s.add(7, '2026-12-07', { q: 20000, run: 1, pipes: 0 }), true);
+  assert.deepEqual(s.quality(), { 5: q }, 'a junk score is not kept');
+  const copy = s.quality();
+  copy[5].q = 1;
+  assert.equal(s.quality()[5].q, 4200, 'a copy');
+  // advent_progress: a piece whose day is unchanged keeps its score; one whose day the board moves loses it.
+  assert.equal(s.merge([{ piece: 5, day: '2026-12-05' }]), 0);
+  assert.deepEqual(s.quality(), { 5: q });
+  storage.setItem(key, JSON.stringify({ found: { 5: '2026-12-05', 8: '2026-12-08' }, quality: { 5: q, 8: q } }));
+  assert.equal(s.merge([{ piece: 8, day: '2026-12-07' }]), 1);
+  assert.deepEqual(s.quality(), { 5: q }, 'piece 8 now from an earlier day: no score');
+  // Junk in storage: a score for a piece not found, found late, or out of range is dropped.
+  storage.setItem(key, JSON.stringify({ found: { 5: '2026-12-05', 9: '2026-12-10', 11: '2026-12-11' }, quality: { 5: q, 9: q, 10: q, 11: { q: -1, run: 1, pipes: 0 }, x: q } }));
+  assert.deepEqual(s.quality(), { 5: q });
+  // Sign out: the scores go with the pieces.
+  clearAdventStores(storage);
+  assert.deepEqual(createAdventStore(storage, 2026).quality(), {});
+  // The practice sandbox keeps its scores in memory, as its pieces.
+  const sandbox = createAdventStore(null, 2026);
+  sandbox.add(5, '2026-12-05', q);
+  assert.deepEqual(sandbox.quality(), { 5: q });
+  assert.deepEqual(createAdventStore(storage, 2026).quality(), {}, 'the real record untouched');
 });
 
 test('Sign out forgets the pieces (2.11): clearAdventStores empties every season\'s record and nothing else; a store can clear itself', async () => {

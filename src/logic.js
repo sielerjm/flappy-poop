@@ -2528,13 +2528,77 @@ export function adventPairChance(pair, misses, t) {
  * reaches 1 within (1 - startChance) / stepChance pairs, so the walk always ends.
  */
 export function adventSpawnPair(misses, rng, t) {
+  return adventSpawnRoll(misses, rng, t).pair;
+}
+
+/**
+ * adventSpawnPair's draw with its rest kept (1c.Q, plan 54): { pair, keep: 1 − u }. `keep` lies between the chance
+ * the piece stays hidden through `pair` and through the pair before (adventHidden), so it is the piece's Quality
+ * factor for its run: scored from the roll, never from the pair it showed at, a busy slot or a storm cannot move it.
+ */
+export function adventSpawnRoll(misses, rng, t) {
   const u = rng();
   let none = 1;
   for (let pair = t.advent.piece.minPair; ; pair += 1) {
     const c = adventPairChance(pair, misses, t);
     none *= 1 - c;
-    if (u < 1 - none || c >= 1) return pair;
+    if (u < 1 - none || c >= 1) return { pair, keep: 1 - u };
   }
+}
+
+/** The chance a run's piece stays hidden through pair `reach` (from the run's first) at `misses`: 1 before minPair. */
+export function adventHidden(reach, misses, t) {
+  let none = 1;
+  for (let pair = t.advent.piece.minPair; pair <= reach; pair += 1) none *= 1 - adventPairChance(pair, misses, t);
+  return none;
+}
+
+// Piece Quality, recording only (plan 17, 1c.Q; plan 54 draws it; Michael's Q1: pure odds, no per-run cap). Per device
+// and UTC day a clock: s, the chance the run's piece would still be hidden after the day's runs so far; held, the score
+// frozen the first time a piece shows ({ q, run, pipes, today }), so skipping a piece never improves it; runs and pipes,
+// the hidden runs and the pairs they spawned (for plan 54's card). Lower is rarer. Private: made on the device, unchecked.
+
+/** A fresh clock (a day's first run, or after a catch). */
+export function adventClock() {
+  return { s: 1, held: null, runs: 0, pipes: 0 };
+}
+
+/** A share (0 to 1) as the stored Quality score, an integer 0 to 10000; anything but a number reads as the plainest. */
+export function adventQualityScore(x) {
+  const v = typeof x === 'number' && !Number.isNaN(x) ? x : 1;
+  return Math.round(Math.min(1, Math.max(0, v)) * 10000);
+}
+
+/**
+ * A run's piece showed at `pair` (from the run's first), its roll's `keep` (adventSpawnRoll); `today`: the day's own
+ * piece. The clock's first showing freezes held = s × keep, with this run's number on the clock and the pairs spawned
+ * before the one it showed at; a later showing only marks today's piece as shown (adventClockCaught).
+ */
+export function adventClockShown(clock, { keep, pair, today }) {
+  const h = clock.held;
+  if (h) return today && !h.today ? { ...clock, held: { ...h, today: true } } : clock;
+  return { ...clock, held: { q: adventQualityScore(clock.s * keep), run: clock.runs + 1, pipes: clock.pipes + Math.max(0, pair - 1), today: Boolean(today) } };
+}
+
+/**
+ * A run ended and its piece never showed: s times the chance it stays hidden through `reach` (the last pair the run
+ * spawned, from its first) at `misses` (the day's, at the run's start). Nothing once a score is held. A run whose piece
+ * showed and was not caught calls nothing (plan 54's step 4).
+ */
+export function adventClockHidden(clock, { reach, misses }, t) {
+  if (clock.held) return clock;
+  return { ...clock, s: clock.s * adventHidden(reach, misses, t), runs: clock.runs + 1, pipes: clock.pipes + Math.max(0, reach) };
+}
+
+/**
+ * A piece caught: { quality, clock }. The day's own piece (`today`) takes held's { q, run, pipes } and the clock
+ * restarts. A catch-up piece takes none (it is late) and restarts the clock too, so today's piece gets a fresh roll;
+ * but once today's piece has shown on it the clock is kept, else skipping it and catching a catch-up piece would re-roll it.
+ */
+export function adventClockCaught(clock, { today }) {
+  const h = clock.held;
+  if (today) return { quality: h ? { q: h.q, run: h.run, pipes: h.pipes } : null, clock: adventClock() };
+  return { quality: null, clock: h?.today ? clock : adventClock() };
 }
 
 /**

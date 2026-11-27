@@ -589,18 +589,48 @@ export function createDailyQueue(storage = browserStorage(), { key = LEADERBOARD
 
 const PIECE_OK = (k) => Number.isInteger(k) && k >= 1 && k <= TUNING.advent.piece.count;
 
-/** A season's record, or the empty one: { found: { piece: day }, miss: { day, n } | null, seen: [piece] } (seen: S14, the pieces the book has shown added). */
+const COUNT_OK = (n) => Number.isInteger(n) && n >= 0;
+const QUALITY_OK = (q) => Number.isInteger(q) && q >= 0 && q <= 10000;
+const DAY_OK = (day) => typeof day === 'string' && DAY_RE.test(day);
+
+/** Is `day` piece k's own day (k December)? Only a find on it carries a Quality score (1c.Q); a later one is late. */
+const onOwnDay = (piece, day) => Number(day.slice(5, 7)) === TUNING.advent.seasonMonth && Number(day.slice(8, 10)) === piece;
+
+/** A day's Quality clock (1c.Q, logic.js adventClock): { s, held, runs, pipes }, each junk part read as a fresh clock's. */
+function normalizeClock(m) {
+  const h = m.held;
+  const held = h && typeof h === 'object' && QUALITY_OK(h.q) && Number.isInteger(h.run) && h.run >= 1 && COUNT_OK(h.pipes) ? { q: h.q, run: h.run, pipes: h.pipes, today: h.today === true } : null;
+  return { s: typeof m.s === 'number' && m.s >= 0 && m.s <= 1 ? m.s : 1, held, runs: COUNT_OK(m.runs) ? m.runs : 0, pipes: COUNT_OK(m.pipes) ? m.pipes : 0 };
+}
+
+/**
+ * A season's record, or the empty one: { found: { piece: day }, miss: { day, n, s, held, runs, pipes } | null, seen: [piece],
+ * quality: { piece: { q, run, pipes } } } (seen: S14, the pieces the book has shown added; miss: the day's misses and its
+ * Quality clock, 1c.Q; quality: the scores of pieces found on their own day). A record without the 1c.Q keys reads as before.
+ */
 function normalizeAdvent(raw) {
   const found = {};
   const src = raw && typeof raw === 'object' && raw.found && typeof raw.found === 'object' ? raw.found : {};
   for (const [k, day] of Object.entries(src)) {
     const piece = Number(k);
-    if (PIECE_OK(piece) && String(piece) === k && typeof day === 'string' && DAY_RE.test(day)) found[piece] = day;
+    if (PIECE_OK(piece) && String(piece) === k && DAY_OK(day)) found[piece] = day;
   }
   const m = raw?.miss;
-  const miss = m && typeof m === 'object' && typeof m.day === 'string' && DAY_RE.test(m.day) && Number.isInteger(m.n) && m.n > 0 ? { day: m.day, n: m.n } : null;
+  let miss = null;
+  if (m && typeof m === 'object' && DAY_OK(m.day) && COUNT_OK(m.n)) {
+    const clock = normalizeClock(m);
+    const fresh = clock.s === 1 && !clock.held && clock.runs === 0 && clock.pipes === 0;
+    if (m.n > 0 || !fresh) miss = { day: m.day, n: m.n, ...clock };
+  }
   const seen = Array.isArray(raw?.seen) ? [...new Set(raw.seen.filter((k) => PIECE_OK(k) && found[k]))].sort((a, b) => a - b) : [];
-  return { found, miss, seen };
+  const quality = {};
+  const qs = raw?.quality && typeof raw.quality === 'object' ? raw.quality : {};
+  for (const [k, v] of Object.entries(qs)) {
+    const piece = Number(k);
+    if (!PIECE_OK(piece) || String(piece) !== k || !found[piece] || !onOwnDay(piece, found[piece])) continue;
+    if (v && typeof v === 'object' && QUALITY_OK(v.q) && Number.isInteger(v.run) && v.run >= 1 && COUNT_OK(v.pipes)) quality[piece] = { q: v.q, run: v.run, pipes: v.pipes };
+  }
+  return { found, miss, seen, quality };
 }
 
 /**
@@ -610,14 +640,19 @@ function normalizeAdvent(raw) {
  * that ended without their piece: the spawn window's pity). `storage` null keeps it in memory (the practice
  * sandbox: a test run or a Pretend date never touches the real record). unseen() lists the pieces the book has not shown
  * added yet (by day found, then piece; S14: the Advent button glows while there is one), markSeen(pieces) records them
- * (a piece merged from another device arrives unseen). Nothing here throws.
+ * (a piece merged from another device arrives unseen). Piece Quality (1c.Q, recording only; plan 54 draws it):
+ * clock(day) / setClock(day, clock) the day's clock (logic.js adventClock; fresh on another day; written at once, so a
+ * reload after a piece showed keeps its score), add(piece, day, quality) keeps a found piece's { q, run, pipes } when it is
+ * found on its own day, quality() the scores; a piece whose day changes (an earlier one, or the board's) loses its score.
+ * Nothing here throws.
  */
 export function createAdventStore(storage = browserStorage(), season, { prefix = LEADERBOARD.adventKey } = {}) {
   const box = createJsonStore(storage, `${prefix}.${season}`, normalizeAdvent);
   const put = (rec, piece, day) => {
-    if (!PIECE_OK(piece) || typeof day !== 'string' || !DAY_RE.test(day)) return false;
+    if (!PIECE_OK(piece) || !DAY_OK(day)) return false;
     if (rec.found[piece] && rec.found[piece] <= day) return false;
     rec.found[piece] = day;
+    delete rec.quality[piece]; // a new day: the score, if any, was another day's
     return true;
   };
   return {
@@ -637,11 +672,23 @@ export function createAdventStore(storage = browserStorage(), season, { prefix =
       rec.seen = [...seen].sort((a, b) => a - b);
       box.write(rec);
     },
-    add(piece, day) {
+    add(piece, day, quality = null) {
       const rec = box.read();
       if (!put(rec, piece, day)) return false;
+      if (quality) rec.quality[piece] = { q: quality.q, run: quality.run, pipes: quality.pipes }; // kept on its own day only (normalizeAdvent)
       box.write(rec);
       return true;
+    },
+    quality: () => box.read().quality,
+    clock(day) {
+      const m = box.read().miss;
+      return m && m.day === day ? { s: m.s, held: m.held, runs: m.runs, pipes: m.pipes } : { s: 1, held: null, runs: 0, pipes: 0 };
+    },
+    setClock(day, clock) {
+      if (!DAY_OK(day)) return;
+      const rec = box.read();
+      rec.miss = { ...clock, day, n: rec.miss?.day === day ? rec.miss.n : 0 };
+      box.write(rec);
     },
     merge(list) {
       const rec = box.read();
@@ -655,9 +702,10 @@ export function createAdventStore(storage = browserStorage(), season, { prefix =
       return m && m.day === day ? m.n : 0;
     },
     addMiss(day) {
-      if (typeof day !== 'string' || !DAY_RE.test(day)) return;
+      if (!DAY_OK(day)) return;
       const rec = box.read();
-      rec.miss = { day, n: (rec.miss?.day === day ? rec.miss.n : 0) + 1 };
+      const same = rec.miss?.day === day;
+      rec.miss = { ...(same ? rec.miss : {}), day, n: (same ? rec.miss.n : 0) + 1 }; // the day's Quality clock stays (1c.Q)
       box.write(rec);
     },
     clear: () => box.clear(),
