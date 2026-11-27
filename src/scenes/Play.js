@@ -136,6 +136,7 @@ import {
   adventBookPieces,
   adventAward,
   stormStartsHere,
+  runStorms,
   stormPhase,
   stormCovers,
   stormWind,
@@ -157,7 +158,7 @@ import { createResumeStore, pageTab, resumeKey, ONLINE_HOST_KEY } from '../onlin
 import { createOnlineAccount } from '../onlineAccount.js';
 import { createStatusBeat } from '../onlineFriends.js';
 import { countsAsRun, runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
-import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
+import { unlock, attachGame, setMuted, isMuted, sfx, stepLoop } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
 import { activeOverlays, OVERLAY_SCENES } from '../ui/overlayStack.js';
@@ -494,7 +495,7 @@ export class Play extends Phaser.Scene {
     this.scoreText = this.add.text(W / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
     // December's storm warning (plan 17, 2.7; Gate A 4b (a), text only): one pair before a Daily run's storm, under the popup rows.
     this.stormBanner = this.add.text(W / 2, T.advent.storm.bannerY, '', { ...TEXT_STYLE, fontSize: `${T.advent.storm.bannerPx}px` }).setOrigin(0.5).setDepth(20).setVisible(false);
-    this.stormRun = null; // a December Daily run's storms (start)
+    this.stormRun = null; // a December Daily run's or match's storms (stormRunFor)
     this.stormFlap = 1; // the storm's share of the flap and of the scroll (tickAir)
     this.stormScroll = 1;
     // A split-screen half's player name at the bottom of its half, above the tray row, on a pill so it
@@ -1093,8 +1094,8 @@ export class Play extends Phaser.Scene {
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 };
     this.advent = this.rollAdvent(daily, begin.pipes); // December: this Daily run's Advent piece, or null (plan 17, 2.6)
     this.calmAir(); // no storm carries over from the last run
-    // December: a Daily run's snow storms (plan 17, 2.7), walked from the day's shared course as its pairs spawn.
-    this.stormRun = daily && adventSeason(daily.day, T) ? { startN: begin.pipes, starts: [], level: 0, air: 0, ms: 0, swirls: [] } : null;
+    // December: a Daily run's or a match's snow storms (plan 17, 2.7; T16), walked from the shared course as its pairs spawn.
+    this.stormRun = this.stormRunFor(daily, begin);
     this.runFarts = 0; // this run's farts and super farts, for the career counters
     this.runSuperFarts = 0;
     this.runFalls = 0; // ‼️ long falls this run (fallStarted)
@@ -1559,6 +1560,7 @@ export class Play extends Phaser.Scene {
    */
   startLevelBreak() {
     if (this.state !== 'playing') return;
+    this.calmAir(); // a storm never carries across a level line (plan 17, T16, 1c.S1 (5)): the next level starts calm
     this.levelBreak = true;
     this.breakMissed = []; // each break starts with nothing missed (plan 25)
     this.breakNewAsked = 0; // nor any of its new or due cards asked (plan 28, Stage 3b)
@@ -1917,7 +1919,25 @@ export class Play extends Phaser.Scene {
     this.snowfall.setStorm(look, T.advent.storm);
   }
 
-  /** Calm air (a run's end and start): no storm pull, no banner, the snow back to its light fall. */
+  /**
+   * The storms of the run starting now (plan 17, 2.7; T16), or null for a calm one (runStorms): a December Daily walks
+   * from its level's start and never leaves that level; a December match walks its level table (Play.tune) from the
+   * match's start, so a race rewound to a level (begin.pipes) walks the pairs before it at once and meets the storms it
+   * would have met: both devices, after a reload too.
+   */
+  stormRunFor(daily, begin) {
+    if (!runStorms({ dailyDay: daily?.day ?? null, matchDay: daily || !this.match ? null : (this.match.day ?? null) }, T)) return null;
+    const st = { startN: daily ? begin.pipes : 0, levels: daily ? null : this.tune, starts: [], level: 0, air: 0, ms: 0, swirls: [] };
+    for (let n = st.startN + 1; n <= begin.pipes; n += 1) this.walkStorm(st, n);
+    return st;
+  }
+
+  /** Pair `n` of the course, in spawn order: a storm starts there when stormStartsHere says so (kept in st.starts). */
+  walkStorm(st, n) {
+    if (stormStartsHere(this.course.storm(n), n, st.starts.at(-1) ?? null, st.startN, T, st.levels)) st.starts.push(n);
+  }
+
+  /** Calm air (a run's end and start, a level break): no storm pull, no banner, the snow back to its light fall. */
   calmAir() {
     if (this.stormRun) {
       this.stormRun.level = 0;
@@ -1937,20 +1957,13 @@ export class Play extends Phaser.Scene {
 
   /**
    * The blizzard loop at `level` 0 to 1 of advent.sound.blizzardVolume (2.7a): started on the first level above 0 once
-   * its file is in, stopped and dropped at 0. Phaser's global mute covers it; pause holds it (pauseEffects).
+   * its file is in, stopped and dropped at 0 (stepLoop). Phaser's global mute covers it; pause holds it (pauseEffects).
+   * A split-screen half hands its level to the match's host instead (T16, 1c.S1 (6): one loop for both halves, at the
+   * louder one, Versus.mixBlizzard); the online race's one half keeps its own (its host answers false).
    */
   setBlizzard(level) {
-    if (level > 0 && !this.blizzard && this.cache?.audio?.exists('advent-blizzard')) {
-      this.blizzard = this.sound.add('advent-blizzard', { loop: true, volume: 0 });
-      this.blizzard.play();
-    }
-    if (!this.blizzard) return;
-    if (level > 0) this.blizzard.setVolume(T.advent.sound.blizzardVolume * level);
-    else {
-      this.blizzard.stop();
-      this.blizzard.destroy();
-      this.blizzard = null;
-    }
+    if (this.match && this.versusHost()?.mixBlizzard?.(this.player === 2 ? 1 : 0, level)) return;
+    this.blizzard = stepLoop(this, this.blizzard ?? null, 'advent-blizzard', T.advent.sound.blizzardVolume * level);
   }
 
   // ---- December's Advent pieces (plan 17, 2.6)
@@ -3872,7 +3885,7 @@ export class Play extends Phaser.Scene {
    */
   versusHost() {
     const key = matchHostKey(this.match);
-    return key ? this.scene.get(key) : null;
+    return key ? (this.scene?.get?.(key) ?? null) : null; // calmAir asks it at every start and break (plan 17, T16): never throw for a half with no scene manager
   }
 
   /** Pause the run: a match's shared pause (both halves under one banner), else this scene's own. */
@@ -4325,9 +4338,9 @@ export class Play extends Phaser.Scene {
     // held stretch (spawnHeldByFart), so it never shows there.
     // December's storms (plan 17, 2.7): pair n starts one when its course draw says so; no Advent piece on a storm's pairs.
     const st = this.stormRun;
-    if (st && stormStartsHere(this.course.storm(n), n, st.starts.at(-1) ?? null, st.startN, T)) st.starts.push(n);
+    if (st) this.walkStorm(st, n);
     // Pair n's slot is flown inside a storm that starts at pair n + 1 too: look one pair ahead (2.11).
-    const stormy = Boolean(st && (stormCovers(st.starts, n, T) || stormStartsHere(this.course.storm(n + 1), n + 1, st.starts.at(-1) ?? null, st.startN, T)));
+    const stormy = Boolean(st && (stormCovers(st.starts, n, T) || stormStartsHere(this.course.storm(n + 1), n + 1, st.starts.at(-1) ?? null, st.startN, T, st.levels)));
     if (adventSpawnHere(this.advent, n, slotTaken || stormy, this.textures.exists(ADVENT_ART.piece))) {
       this.advent.spawned = true;
       this.spawnBandItem(ADVENT_ART.piece, still ? stillY() : null, shift);

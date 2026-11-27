@@ -591,8 +591,14 @@ export const TUNING = {
       // Under reduced motion it shows still for the same time, then goes.
       toGo: { px: 48, minPx: 28, maxW: 600, popMs: 250, holdMs: 900, floatPx: 40, fadeMs: 500, padX: 24, padY: 14, pillR: 28, pillAlpha: 0.75 },
     },
-    // Snow storms (Stage 2, 2.7): December Daily runs only, from the day's shared course (course.storm), so every run of a
-    // day meets the same storms at the same pairs. A pair at least firstPair pairs into the run, and pairs + gapPairs after
+    // Snow storms (Stage 2, 2.7): December Daily runs and, while `matches` is on, every match (Versus, a tournament race,
+    // an online race; plan 17, T16, Michael 27 Nov), from the shared course (course.storm), so every run of a day, both
+    // halves of a match and both devices of a race meet the same storms at the same pairs; Singleplayer waits for 2027.
+    // A match storms from level fromLevel on (firstPair counted from that level's start; levels 1 and 2 stay calm, 1c.S1
+    // (3)), and each storm, its banner included, stays inside one level: none on a level's first pair (its banner would
+    // show before the line) or in its last linePairs pairs (it would blow across the line, 1c.S1 (5)); a level break
+    // calms the air. The switch, the schedule, the pull and the season are in the race's protocol version (online.js).
+    // A pair at least firstPair pairs into the run, and pairs + gapPairs after
     // the last storm's first pair, starts one when its draw is under `chance`; a banner shows one pair ahead; the storm
     // lasts `pairs` pairs, its pull eased in and out over rampMs (none during a fart: the fart lifts it, and it comes back
     // after). While it blows the flap is flapMul as strong and the scroll is dragged to scrollMul of the level's speed
@@ -607,6 +613,7 @@ export const TUNING = {
     // eased over fartRampMs, in every December run, each flake drawn as a streak fartTau (superTau) s of its speed long
     // (TUNING.advent.snow.streak); in a storm the fart's look takes over over the same ramp while the pull keeps rampMs.
     storm: {
+      matches: true, fromLevel: 3, linePairs: 3, // T16: storms in every match, from level 3, none within 3 pairs of a level line
       firstPair: 6, chance: 0.15, pairs: 4, gapPairs: 8, rampMs: 600, flapMul: 0.92, scrollMul: 0.7,
       extra: 200, fallMul: 2, minPx: 5, maxPx: 14, angleDeg: 20, gust: 0.5, swirls: 4, swirlR: 120, swirlS: 300, swirlPull: 0.45,
       fartWind: 560, superWind: 760, fartTau: 0.035, superTau: 0.06, fartRampMs: 250, bannerPx: 48, bannerY: 320,

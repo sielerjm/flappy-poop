@@ -61,11 +61,11 @@ test('settingsLayout in test mode: the Pretend date row sits under Start at, its
   assert.ok(L.test.dayDown.x === L.test.levelDown.x && L.test.dayUp.x === L.test.levelUp.x, 'the arrows line up with Start at');
 });
 
-test('The Daily Dump stays on the real day: dailyDay is read by decorations (Settings\' row, Play\'s 🎅 pick) and the practice Daily (2.2: its start, the popup\'s day; 2.3: the How to play\'s December copy)', () => {
+test('The Daily Dump stays on the real day: dailyDay is read by decorations (Settings\' row, Play\'s 🎅 pick), the practice Daily (2.2: its start, the popup\'s day; 2.3: the How to play\'s December copy) and a local match\'s day (T16: Versus\'s lobby, the tournament\'s races)', () => {
   const dir = new URL('../src/', import.meta.url).pathname;
   const files = [...readdirSync(dir).map((f) => join(dir, f)), ...readdirSync(join(dir, 'scenes')).map((f) => join(dir, 'scenes', f)), ...readdirSync(join(dir, 'ui')).map((f) => join(dir, 'ui', f))].filter((f) => f.endsWith('.js'));
   const readers = files.filter((f) => !f.endsWith('/logic.js') && /\bdailyDay\(|\bdailyNow\(/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(dir.length));
-  assert.deepEqual(readers, ['scenes/Daily.js', 'scenes/HowTo.js', 'scenes/Play.js', 'scenes/Settings.js']);
+  assert.deepEqual(readers, ['scenes/Daily.js', 'scenes/HowTo.js', 'scenes/Play.js', 'scenes/Settings.js', 'scenes/Versus.js', 'ui/tournamentPanel.js']);
   // What stores, posts or reads the board keeps the real UTC day (2.2; tests/adventDaily.test.js checks Play's).
   for (const f of ['scenes/Leaderboard.js', 'scenes/Stats.js']) assert.match(readFileSync(join(dir, f), 'utf8'), /utcDayKey\(\)/, f);
   assert.equal(utcDayKey(NOW), '2026-11-25');

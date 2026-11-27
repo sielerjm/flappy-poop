@@ -1,6 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T } from '../config.js';
-import { fieldWidth, uiColumn, overButtonsLayout, overHit, canRestart, fitScale } from '../logic.js';
+import { fieldWidth, uiColumn, overButtonsLayout, overHit, canRestart, fitScale, utcDayKey } from '../logic.js';
 import { createMatch } from '../versus.js';
 import { t, levelLabel } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
@@ -208,7 +208,8 @@ export class OnlineRace extends Phaser.Scene {
     this.holds = false; // 2.3b: the record is this page's (written by it, not cleared since)
     this.aside = false; // 2.3b: another page took the race over; this one stepped aside
     this.ownEnd = false;
-    this.match = createMatch(this.plan.seed, { names: this.plan.names });
+    // Its day is the UTC day of the server GO (plan 17, T16): the same on both devices and after a reload; no Pretend date.
+    this.match = createMatch(this.plan.seed, { names: this.plan.names, day: Number.isFinite(this.plan.startAt) ? utcDayKey(new Date(this.plan.startAt)) : null });
     if (this.rewound) {
       const snap = this.levels[this.rewound.level];
       Object.assign(this.match.slots[0], { level: snap.level, score: snap.score, deaths: snap.deaths, levelWins: snap.levelWins });
@@ -906,6 +907,11 @@ export class OnlineRace extends Phaser.Scene {
   pauseOverBreak() {
     const half = this.half();
     return Boolean(half?.levelBreak && this.isPaused());
+  }
+
+  /** The race has one local half: it keeps its own blizzard loop (Play.setBlizzard; plan 17, T16). */
+  mixBlizzard() {
+    return false;
   }
 
   togglePause() {

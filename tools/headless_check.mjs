@@ -148,7 +148,7 @@ export const SECTIONS = [
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
   { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
   { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the hatted dead frame and the hatted home again, a reload that never repeats the 🎅 (the plain 🎅 🤶 🧑‍🎄 only), the holly bean (bean-holly on the stock hitbox, the HUD bean stock), the 🎅 picker (both red dots until it is first opened, kept over a reload; the (?) card; a real tap and the pad, Save, B keeps the saved one; the title, body and home show it; both keys removed at the end), and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
-  { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the Advent button's count, the Daily popup's two lines, the day's piece shown, caught, stored and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run that misses its piece and queues nothing better; the book (2.18): the glowing button opens it, the piece flies into its cell, the glow is off after it closes, the Daily window's 🧩 line opens it and closes back, the 🧩 board tab on a stubbed advent_board); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after); test mode on a Pretend 5 Dec (the piece in the sandbox only)" },
+  { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the Advent button's count, the Daily popup's two lines, the day's piece shown, caught, stored and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run that misses its piece and queues nothing better; the book (2.18): the glowing button opens it, the piece flies into its cell, the glow is off after it closes, the Daily window's 🧩 line opens it and closes back, the 🧩 board tab on a stubbed advent_board); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after) and a two-player race's (T16: one schedule for both halves from level 3, each storm inside one level, both halves meet it under one blizzard loop, a level break calms the air); test mode on a Pretend 5 Dec (the piece in the sandbox only)" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -2927,6 +2927,9 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
         ok(await lobbyToRace(), 'the 👥 toggle (toggleVersus) and the start tap open the lobby; Play opens a race\'s join screen');
         ok(await race(), 'a keyboard-only match: W / Space is P1, ↑ / Enter is P2, both playing after the countdown');
+        // T16 (plan 17): the race's day is the day it was made; off season both halves fly calm (the advent section's 7 Dec race storms).
+        const calm = await evaluate(`import('./src/logic.js').then((l) => JSON.stringify({ day: ${VS}.match.day, today: new Date().toISOString().slice(0, 10), runs: [${P1}.stormRun, ${P2}.stormRun].map((r) => r === null), storms: l.runStorms({ matchDay: ${VS}.match.day }, ${P1}.tune) }))`).then(JSON.parse);
+        ok(calm.day === calm.today && (calm.storms || calm.runs.every(Boolean)), `the race's day is today (${calm.day}); ${calm.storms ? 'December: the halves storm' : 'off season: both halves calm'} (T16)`);
         const vcoins = await evaluate(`(() => { const a = ${P1}; const saved = () => (JSON.parse(localStorage.getItem('flappyPoop.save') ?? '{}').coins ?? 0); const before = saved(); const start = a.effects.coins(); a.takeCoins(3); const out = { start, purse: a.effects.coins(), before, after: saved() }; a.effects.spendCoins(3); a.refreshCoinHud(); return JSON.stringify(out); })()`).then(JSON.parse);
         ok(vcoins.start === 0 && vcoins.purse === 3, 'a match starts with an empty purse');
         await evaluate(`[${P1}, ${P2}].forEach((p) => { p.syncLeaderboard = () => { globalThis.__syncs = (globalThis.__syncs ?? 0) + 1; }; }), true`);
@@ -8712,6 +8715,76 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       ok(run3.level === 0 && run3.flap === 1 && run3.scroll === 1 && run3.flakes === T17.snow.count, `calm again after it: flap ${run3.flap}, scroll ${run3.scroll}, ${run3.flakes} flakes`);
       await crash();
       await homeAgain();
+
+      // --- (2b) 7 Dec, a two-player race's storms (plan 17, T16): one schedule for both halves from the shared course on
+      // the race's level table, none before level 3's start + firstPair, each storm and its banner inside one level; both
+      // halves jumped a few pairs before the first storm meet it (banner, pull, calm after), under one blizzard loop on the
+      // Versus host and none of their own; a storm forced across a level line is calmed by the break.
+      {
+        const P1 = play;
+        const P2 = `__flappy.scene.getScene('PlayB')`;
+        const VS = `__flappy.scene.getScene('Versus')`;
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1800, height: 1000, deviceScaleFactor: 1, mobile: false });
+        await until(`__flappy.scale.width > 1000 && ${P1}.state === 'ready' && !${P1}.launching`, 60);
+        await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
+        const joined = await lobbyToRace();
+        await evaluate(`${P1}.onVersusKey('Space'), ${P1}.onVersusKey('ArrowUp'), true`);
+        const racing = joined && (await until(`${VS}.match?.status === 'playing' && ${P1}.state === 'playing' && ${P2}?.state === 'playing'`, 120));
+        ok(racing, '7 Dec: a two-player tournament race starts');
+        if (racing) {
+          const hold = `[${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; })`;
+          await evaluate(`${hold}, true`);
+          const sched = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => {
+            const S = c.TUNING.advent.storm; const a = ${P1}; const b = ${P2}; const lv = a.tune; const total = l.levelEnd(lv.levels.lastLevel, lv);
+            const walk = (course) => { const st = []; for (let n = 1; n <= total; n += 1) if (l.stormStartsHere(course.storm(n), n, st.at(-1) ?? null, 0, c.TUNING, lv)) st.push(n); return st; };
+            const sa = walk(a.course); const sb = walk(b.course);
+            const inside = sa.every((s) => { const x = l.levelFor(s - 2, lv).level; return x >= S.fromLevel && x === l.levelFor(s + S.pairs - 2, lv).level; });
+            return JSON.stringify({ day: ${VS}.match.day, table: a.stormRun?.levels?.levels?.pipes ?? null, both: Boolean(a.stormRun && b.stormRun), same: JSON.stringify(sa) === JSON.stringify(sb), starts: sa, min: l.levelEnd(S.fromLevel - 1, lv) + S.firstPair, inside, tour: c.TUNING.tournament.levelPipes });
+          })`).then(JSON.parse);
+          ok(sched.day === '2026-12-07' && sched.both && JSON.stringify(sched.table) === JSON.stringify(sched.tour), `7 Dec: the race's day ${sched.day}; both halves storm (stormRun), on the tournament's level table (${JSON.stringify(sched.table)})`);
+          ok(sched.same && sched.starts.length > 0 && sched.starts[0] >= sched.min && sched.inside, `one schedule for both halves: ${sched.starts.length} storms from pair ${sched.starts[0]} (none before ${sched.min}: levels 1 and 2 calm), each with its banner inside one level (${sched.inside})`);
+          // Both halves a few pairs before the first storm, on its level, the field cleared.
+          const first = sched.starts[0];
+          await evaluate(`import('./src/logic.js').then((l) => { for (const p of [${P1}, ${P2}]) { const x = ${first} - 4; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = l.levelFor(x, p.tune).level; p.applyLevel(); p.applyScroll(); p.pipesSpawned = x; p.pipesPassed = x; p.refreshLevelBar(); } return true; })`);
+          const look = () => evaluate(`(() => { const half = (p) => ({ passed: p.pipesPassed, state: p.state, banner: p.stormBanner.visible, level: p.stormRun?.level ?? null, flap: p.stormFlap, scroll: p.stormScroll, own: Boolean(p.blizzard), starts: p.stormRun?.starts ?? [] }); ${hold}; return JSON.stringify({ a: half(${P1}), b: half(${P2}), loops: __flappy.sound.sounds.filter((s) => s.key === 'advent-blizzard').length, mixed: Boolean(${VS}.blizzard), file: __flappy.cache.audio.exists('advent-blizzard') }); })()`).then(JSON.parse);
+          const seen = { a: { banner: null, full: null, after: null }, b: { banner: null, full: null, after: null }, loops: 0, mixed: false, own: false, file: false };
+          const t0 = Date.now();
+          while (Date.now() - t0 < 30000) {
+            await sleep(100);
+            const s = await look();
+            seen.loops = Math.max(seen.loops, s.loops);
+            seen.mixed ||= s.mixed;
+            seen.own ||= s.a.own || s.b.own;
+            seen.file ||= s.file;
+            for (const k of ['a', 'b']) {
+              const h = s[k];
+              if (h.banner && !seen[k].banner) seen[k].banner = h;
+              if (h.level >= 1 && !seen[k].full) seen[k].full = h;
+              if (seen[k].full && !seen[k].after && h.level === 0 && h.passed >= first - 1 + T17.storm.pairs) seen[k].after = h;
+            }
+            if (seen.a.after && seen.b.after) break;
+            if (s.a.state !== 'playing' || s.b.state !== 'playing') break;
+          }
+          for (const [k, name] of [['a', 'P1'], ['b', 'P2']]) {
+            const h = seen[k];
+            ok(Boolean(h.banner) && h.banner.passed === first - 2, `${name}: "Snowstorm ahead!" one pair before pair ${first} (at ${h.banner?.passed} pairs flown)`);
+            ok(Boolean(h.full) && h.full.flap === T17.storm.flapMul && h.full.scroll === T17.storm.scrollMul && h.full.starts.includes(first), `${name}: in the storm, flap ${h.full?.flap}, scroll ${h.full?.scroll}`);
+            ok(Boolean(h.after) && h.after.flap === 1 && h.after.scroll === 1 && !h.after.banner, `${name}: calm again after it (flap ${h.after?.flap}, scroll ${h.after?.scroll})`);
+          }
+          ok(!seen.own && seen.loops <= 1 && (!seen.file || (seen.loops === 1 && seen.mixed)), `one blizzard loop for both halves on the Versus host (at most ${seen.loops} at once${seen.file ? '' : ', no file in this browser'}), none of the halves' own`);
+          // A storm forced across P1's level line (as a respawn or a skip could bring one): the break calms it.
+          await evaluate(`import('./src/logic.js').then((l) => { const p = ${P1}; const end = l.levelEnd(p.level, p.tune); p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = end; p.pipesPassed = end; p.stormRun.starts.push(end - 1); p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 400; return true; })`);
+          const blowing = await until(`${P1}.stormRun.level >= 1 && ${P1}.stormFlap < 1`, 40);
+          const broke = await until(`${P1}.levelBreak && ${P1}.state === 'paused'`, 80);
+          const brk = await evaluate(`JSON.stringify({ level: ${P1}.stormRun.level, air: ${P1}.stormRun.air, hum: ${P1}.stormRun.hum, flap: ${P1}.stormFlap, scroll: ${P1}.stormScroll, banner: ${P1}.stormBanner.visible, mix: ${VS}.blizzardHums[0] })`).then(JSON.parse);
+          ok(blowing && broke && brk.level === 0 && brk.air === 0 && brk.hum === 0 && brk.flap === 1 && brk.scroll === 1 && !brk.banner && brk.mix === 0, `a storm blowing at P1's line (${blowing}) is calmed by its level break (${broke}): ${JSON.stringify(brk)}`);
+        }
+        await leaveVersus();
+        await until(`!__flappy.scene.isActive('Versus') && ${P1}.state === 'ready' && ${P1}.match === null`, 60);
+        await evaluate(`__flappy.registry.set('versus', false), true`);
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+        await until(`__flappy.scale.width === 720 && ${P1}.state === 'ready'`, 60);
+      }
 
       // --- (3) test mode on a Pretend 5 Dec: the sandbox only ---
       await pinClock(SMOKE_PIN_DAY);

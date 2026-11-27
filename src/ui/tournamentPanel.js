@@ -33,7 +33,7 @@
 import { FIELD, LEADERBOARD, TUNING as T } from '../config.js';
 import { browserStorage } from '../store.js';
 import { t } from '../i18n.js';
-import { createRng, fieldWidth, focusNearest, focusStep } from '../logic.js';
+import { createRng, dailyDay, fieldWidth, focusNearest, focusStep } from '../logic.js';
 import { createOnlineLobby } from '../onlineLobby.js';
 import { parseCode } from '../online.js';
 import { ONLINE_HOST_KEY, raceStartPlan, resumePlan } from '../onlineRace.js';
@@ -538,6 +538,7 @@ function startRace(game) {
   const [a, b] = matchPlayers(state.tour, m);
   setState({ ...state, matchId: m.id }, game);
   const match = createMatch(Date.now() & 0xffffffff, {
+    day: dailyDay(game.registry), // the day it is made decides December's storms (plan 17, T16)
     levelPipes: T.tournament.levelPipes,
     names: [state.tour.players[a].name, state.tour.players[b].name],
     tournament: { round: m.round, matchId: m.id },
@@ -552,10 +553,11 @@ function onAbandon() {
   const now = Date.now();
   if (abandonArmedAt && now - abandonArmedAt <= T.saveClearConfirmMs) {
     const vs = versus();
+    const day = dailyDay(ctx.game.registry); // before closeTournamentPanel drops ctx
     players = tournamentState(ctx.game).tour.players.map((q) => ({ ...q }));
     clearState();
     closeTournamentPanel();
-    vs?.restartWith(createMatch(Date.now() & 0xffffffff)); // a plain match is the lobby (Versus 'lobby')
+    vs?.restartWith(createMatch(Date.now() & 0xffffffff, { day })); // a plain match is the lobby (Versus 'lobby')
     return;
   }
   abandonArmedAt = now;

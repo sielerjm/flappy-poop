@@ -2545,13 +2545,35 @@ export function adventSpawnHere(advent, n, slotTaken, ready) {
   return Boolean(advent && !advent.spawned && !advent.found && ready && !slotTaken && n - advent.startN >= advent.pair);
 }
 
-// Snow storms (plan 17, 2.7): December Daily runs only. The pairs are the course's (pipesSpawned), so every run of a
-// day meets the same storms; Play walks them in spawn order (stormStartsHere) and keeps the starts.
+// Snow storms (plan 17, 2.7): December Daily runs and, since T16, every match (runStorms). The pairs are the shared
+// course's (pipesSpawned), so every run of a day, both halves of a match and both devices of a race meet the same
+// storms; Play walks them in spawn order (stormStartsHere) and keeps the starts.
 
-/** Does pair `n` start a storm? Its course draw under advent.storm.chance, firstPair pairs or more into the run (from `startN`), pairs + gapPairs or more after the last start. */
-export function stormStartsHere(draw, n, lastStart, startN, t) {
+/**
+ * Does a run storm? (plan 17, 2.7; T16, Michael 27 Nov) A Daily on a December day; a match (Versus, a tournament race,
+ * an online race) whose day, fixed when it was made (createMatch), is in December, while advent.storm.matches is on.
+ * Singleplayer (until 2027), education runs, test mode's plain runs and off season stay calm.
+ */
+export function runStorms({ dailyDay = null, matchDay = null } = {}, t) {
+  if (dailyDay != null) return adventSeason(dailyDay, t);
+  return matchDay != null && Boolean(t.advent.storm.matches) && adventSeason(matchDay, t);
+}
+
+/**
+ * Does pair `n` start a storm? Its course draw under advent.storm.chance, firstPair pairs or more into the run (from
+ * `startN`), pairs + gapPairs or more after the last start. In a match (`levels`: its level table, Play.tune; a Daily
+ * never leaves its level and passes none) firstPair counts from level fromLevel's start, so levels 1 and 2 stay calm
+ * (1c.S1 (3)), and the storm, its banner included, stays inside one level: not on a level's first pair (the banner
+ * would show before the line) nor in its last linePairs pairs (it would blow across the line, 1c.S1 (5)).
+ */
+export function stormStartsHere(draw, n, lastStart, startN, t, levels = null) {
   const s = t.advent.storm;
-  return typeof draw === 'number' && draw < s.chance && n - startN >= s.firstPair && (lastStart === null || n - lastStart >= s.pairs + s.gapPairs);
+  if (typeof draw !== 'number' || draw >= s.chance) return false;
+  if (lastStart !== null && n - lastStart < s.pairs + s.gapPairs) return false;
+  if (!levels) return n - startN >= s.firstPair;
+  if (n - Math.max(startN, levelEnd(s.fromLevel - 1, levels)) < s.firstPair) return false;
+  const { startPipe, endPipe } = levelFor(n - 1, levels); // pair n is flown at n − 1 pairs passed
+  return n >= startPipe + 2 && n <= endPipe - s.linePairs;
 }
 
 /**

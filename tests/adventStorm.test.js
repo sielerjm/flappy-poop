@@ -9,19 +9,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createCourse, createRng, stormStartsHere, stormPhase, stormCovers, stormWind, fartWind, swirlCentres, stormFlapMul, stormScrollMul, levelSpeed, gapBobY, pipeMoveParams } from '../src/logic.js';
+import { createCourse, createRng, stormStartsHere, stormPhase, stormCovers, stormWind, fartWind, swirlCentres, stormFlapMul, stormScrollMul, levelSpeed, gapBobY, pipeMoveParams, runStorms, levelEnd, levelFor, withLevelPipes } from '../src/logic.js';
 import { makeFlakes, stepFlakes, streakShape } from '../src/ui/snowfall.js';
-import { playScene } from './support/scenes.js';
+import { absorb, playScene } from './support/scenes.js';
 
 const S = T.advent.storm;
 const SNOW = T.advent.snow;
 
-/** The storm starts of a run from startN to `to`, walked in pair order as Play spawns them. */
-function schedule(course, startN, to) {
+/** The storm starts of a run from startN to `to`, walked in pair order as Play spawns them (`levels`: a match's level table). */
+function schedule(course, startN, to, levels = null) {
   const starts = [];
-  for (let n = startN + 1; n <= to; n += 1) if (stormStartsHere(course.storm(n), n, starts.at(-1) ?? null, startN, T)) starts.push(n);
+  for (let n = startN + 1; n <= to; n += 1) if (stormStartsHere(course.storm(n), n, starts.at(-1) ?? null, startN, T, levels)) starts.push(n);
   return starts;
 }
+
+/** The two level tables a match runs on: a plain match's (and the online race's), a tournament race's. */
+const TABLES = [['a match', T], ['a tournament race', withLevelPipes(T, T.tournament.levelPipes)]];
 
 test('course.storm: its own stream on a shared course (same seed and pair, same draw), no draw on a single run\'s course', () => {
   const a = createCourse(20261205, T, { shared: true });
@@ -60,6 +63,70 @@ test('a day\'s schedule: the same for every run of that day, apart for other day
   }
   const perRun = total / 60;
   assert.ok(perRun >= 0.8 && perRun <= 2.5, `storms in a 40-pair run: ${perRun.toFixed(2)} on average`);
+});
+
+test('runStorms, the gate by mode (plan 17, T16): a December Daily; a match whose day is in December while advent.storm.matches is on; never Singleplayer, education, test mode\'s plain runs or off season', () => {
+  assert.equal(runStorms({ dailyDay: '2026-12-05' }, T), true, 'a December Daily');
+  assert.equal(runStorms({ dailyDay: '2026-11-30' }, T), false, 'a Daily off season');
+  assert.equal(runStorms({ matchDay: '2026-12-01' }, T), true, 'a match made on 1 Dec');
+  assert.equal(runStorms({ matchDay: '2026-12-31' }, T), true);
+  assert.equal(runStorms({ matchDay: '2027-01-01' }, T), false, 'a match made on 1 Jan');
+  assert.equal(runStorms({ matchDay: null }, T), false, 'a match with no day');
+  assert.equal(runStorms({}, T), false, 'Singleplayer, an education run, a test run (no Daily, no match)');
+  const off = { ...T, advent: { ...T.advent, storm: { ...S, matches: false } } };
+  assert.equal(runStorms({ matchDay: '2026-12-05' }, off), false, 'the switch off: every match calm (the cut, 1c.S1 (7))');
+  assert.equal(runStorms({ dailyDay: '2026-12-05' }, off), true, 'and the Daily keeps its storms');
+});
+
+test('stormStartsHere in a match (T16; Michael\'s 1c.S1 (3), (5)): from level fromLevel\'s start + firstPair, none on a level\'s first pair or in its last linePairs pairs, so a storm and its banner stay inside one level', () => {
+  assert.equal(S.fromLevel, 3, 'no storms on levels 1 and 2 (the tutorial level and the slower one, where the grace would not clear a column)');
+  assert.ok(S.linePairs >= S.pairs - 1, `linePairs ${S.linePairs}: a storm from the latest pair allowed ends at the line, never past it`);
+  assert.ok(S.fromLevel <= T.daily.minLevel, 'every Daily level storms');
+  for (const [name, levels] of TABLES) {
+    const from = levelEnd(S.fromLevel - 1, levels);
+    for (let n = 1; n < from + S.firstPair; n += 1) assert.equal(stormStartsHere(0, n, null, 0, T, levels), false, `${name}: pair ${n} calm (levels 1 and 2, then firstPair into level ${S.fromLevel})`);
+    assert.equal(stormStartsHere(0, from + S.firstPair, null, 0, T, levels), true, `${name}: the first pair that may storm`);
+    for (let L = S.fromLevel; L <= levels.levels.lastLevel; L += 1) {
+      const start = levelEnd(L - 1, levels); // pairs passed at the line into level L: its first pair is start + 1
+      const end = levelEnd(L, levels); // its last pair
+      if (L > S.fromLevel) {
+        assert.equal(stormStartsHere(0, start + 1, null, 0, T, levels), false, `${name}: level ${L}'s first pair (its banner would show before the line)`);
+        assert.equal(stormStartsHere(0, start + 2, null, 0, T, levels), true, `${name}: level ${L}'s second pair (the banner as the level starts)`);
+      }
+      for (let k = 0; k < S.linePairs; k += 1) assert.equal(stormStartsHere(0, end - k, null, 0, T, levels), false, `${name}: level ${L}'s pair ${end - k}, ${k + 1} before its line`);
+      assert.equal(stormStartsHere(0, end - S.linePairs, null, 0, T, levels), true, `${name}: level ${L}, ${S.linePairs + 1} pairs before its line`);
+      assert.equal(stormPhase(end, [end - S.linePairs], T).phase, null, `${name}: that storm is over at the line`);
+    }
+    assert.equal(stormStartsHere(0.5, from + S.firstPair, null, 0, T, levels), false, 'still only under the chance');
+    assert.equal(stormStartsHere(0, from + 30 + S.pairs + S.gapPairs - 1, from + 30, 0, T, levels), false, 'still spaced');
+  }
+  assert.equal(stormStartsHere(0, 85 - 1, null, 0, T), true, 'a Daily (no level table) as before: it never leaves its level, so no line');
+});
+
+test('a match\'s storms (T16): one schedule for both halves and both devices (the shared course), every storm and its banner inside one level from level 3 on, and the Daily\'s rate there', () => {
+  for (const [name, levels] of TABLES) {
+    const total = levelEnd(levels.levels.lastLevel, levels);
+    const calm = levelEnd(S.fromLevel - 1, levels);
+    let storms = 0;
+    let covered = 0;
+    const seeds = 400;
+    for (let seed = 1; seed <= seeds; seed += 1) {
+      const st = schedule(createCourse(seed, levels, { shared: true }), 0, total, levels);
+      assert.deepEqual(schedule(createCourse(seed, levels, { shared: true }), 0, total, levels), st, 'both halves walk the same storms');
+      for (const s of st) {
+        const bannerLevel = levelFor(s - 2, levels).level; // the banner shows at s − 2 pairs passed
+        const lastLevel = levelFor(s + S.pairs - 2, levels).level; // its last pair is flown at s + pairs − 2 passed
+        assert.ok(bannerLevel >= S.fromLevel && bannerLevel === lastLevel, `${name}, seed ${seed}: the storm at pair ${s} (banner on level ${bannerLevel}, last pair on level ${lastLevel})`);
+      }
+      for (let i = 1; i < st.length; i += 1) assert.ok(st[i] - st[i - 1] >= S.pairs + S.gapPairs, 'spaced');
+      storms += st.length;
+      covered += st.length * S.pairs;
+    }
+    const per = storms / seeds;
+    const share = covered / seeds / (total - calm);
+    assert.ok(per >= 4 && per <= 16, `${name}: ${per.toFixed(1)} storms a race`);
+    assert.ok(share >= 0.1 && share <= 0.3, `${name}: ${(100 * share).toFixed(0)} % of the pairs from level ${S.fromLevel} on in a storm`);
+  }
 });
 
 test('stormPhase: the banner one pair ahead, the storm over its pairs, nothing else; stormCovers names the band slots flown inside it (no piece there)', () => {
@@ -328,11 +395,11 @@ test('Play.tickAir: in a storm the fart\'s look takes over over fartRampMs while
   assert.ok(s.stormRun.level > 0 && s.stormRun.level < 0.1, 'the pull comes back over rampMs, not at once');
 });
 
-test('a fart ending inside a storm: the 700 ms grace still clears a pipe column at every Daily level while the drag eases back in (1c.4)', () => {
+test('a fart ending inside a storm: the 700 ms grace still clears a pipe column at every level a run can storm on, each at its own speed, while the drag eases back in (1c.4; a match from level fromLevel, T16)', () => {
   const need = T.pipeWidth + T.poopRadius; // the grace's own rule (tests/tuning.test.js), there at the base speed
   for (const fps of [60, 30]) {
     const dt = 1000 / fps;
-    for (let L = T.daily.minLevel; L <= T.daily.maxLevel; L += 1) {
+    for (let L = Math.min(S.fromLevel, T.daily.minLevel); L <= T.levels.lastLevel; L += 1) {
       const { s } = airScene({ passed: 20 }); // inside the storm's pairs, its level eased out by the fart (the test above)
       s.effects = { powerActive: () => false, powerElapsed: () => 0 };
       // Play.update after the fart's last frame: tickAir eases the storm back in, the grace counts down, the world
@@ -416,4 +483,61 @@ test('Play: the blizzard loop fades in from the banner, holds through the storm,
   quiet.cache = { audio: { exists: () => false } };
   quiet.sound = { add: () => assert.fail('nothing to add') };
   assert.doesNotThrow(() => quiet.tickAir(500));
+});
+
+// ---- T16 (plan 17, 1c.S2): storms in every match. Each split-screen half and the online race's half is its own Play.
+
+test('Play.stormRunFor, the gate by mode: a December Daily walks from its start; a December match from the match\'s start (a rewound race pre-walks to its level, so it meets the storms it would have met); Singleplayer, off season and the switch off stay calm', () => {
+  const course = createCourse(20261207, T, { shared: true });
+  const half = (match) => playScene({ match, tune: match?.levelPipes ? withLevelPipes(T, match.levelPipes) : T, course });
+  const daily = half(null).stormRunFor({ day: '2026-12-07' }, { pipes: 120 });
+  assert.deepEqual([daily.startN, daily.levels, daily.starts], [120, null, []], 'a Daily: from its level\'s start, no level lines');
+  assert.equal(half(null).stormRunFor({ day: '2026-11-30' }, { pipes: 120 }), null, 'a Daily off season');
+  assert.equal(half(null).stormRunFor(null, { pipes: 0 }), null, 'Singleplayer');
+  const match = { seed: 1, day: '2026-12-07', levelPipes: null };
+  const fresh = half(match).stormRunFor(null, { pipes: 0 });
+  assert.deepEqual([fresh.startN, fresh.levels, fresh.starts], [0, T, []], 'a match: from its start, on its level table');
+  assert.equal(half({ ...match, day: '2026-11-30' }).stormRunFor(null, { pipes: 0 }), null, 'a match made off season');
+  assert.equal(half({ ...match, day: null }).stormRunFor(null, { pipes: 0 }), null, 'a match with no day');
+  // A race rewound to level 5's start: the storms before it are walked at once, and every later spawn agrees with a race that never rewound.
+  const at5 = levelEnd(4, T);
+  const total = levelEnd(T.levels.lastLevel, T);
+  const whole = schedule(course, 0, total, T);
+  const rewound = half(match).stormRunFor(null, { pipes: at5 });
+  assert.deepEqual(rewound.starts, whole.filter((s) => s <= at5), 'pre-walked to the level\'s start');
+  const s = half(match);
+  s.stormRun = rewound;
+  for (let n = at5 + 1; n <= total; n += 1) s.walkStorm(rewound, n);
+  assert.deepEqual(rewound.starts, whole, 'then the spawns walk on as if it had never rewound');
+  // A tournament race walks its own (shorter) level table.
+  const tour = { ...match, levelPipes: T.tournament.levelPipes };
+  assert.deepEqual(half(tour).stormRunFor(null, { pipes: 0 }).levels.levels.pipes, T.tournament.levelPipes);
+  const offT = { ...T, advent: { ...T.advent, storm: { ...S, matches: false } } };
+  assert.equal(runStorms({ matchDay: '2026-12-07' }, offT), false, 'the switch (see runStorms)');
+});
+
+test('Play.startLevelBreak calms the air (T16, 1c.S1 (5)): no pull, no banner, no sound across a break; the next level starts calm', () => {
+  const { s, calls, banner } = airScene({ starts: [20], passed: 19 });
+  for (let i = 0; i < 60; i += 1) s.tickAir(S.rampMs / 30);
+  assert.equal(s.stormRun.level, 1, 'in the storm');
+  banner.setVisible(true);
+  Object.assign(s, {
+    state: 'playing',
+    match: null,
+    refreshLevelBanner: () => {},
+    statCall: () => {},
+    statNow: () => 0,
+    pausePlay() {
+      this.state = 'paused';
+    },
+    breakHud: () => {},
+    fadeBackground: () => {},
+    refreshPoopLook: () => {},
+    poop: absorb(),
+    tweens: absorb(),
+  });
+  s.startLevelBreak();
+  assert.equal(s.levelBreak, true);
+  assert.deepEqual([s.stormRun.level, s.stormRun.air, s.stormRun.hum, s.stormFlap, s.stormScroll, banner.visible], [0, 0, 0, 1, 1, false], 'calm air at the break');
+  assert.deepEqual([calls.storm.at(-1), calls.air.at(-1)], [0, null], 'the snow back to its light fall');
 });

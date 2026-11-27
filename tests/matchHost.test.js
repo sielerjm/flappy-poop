@@ -66,7 +66,7 @@ const el = (id) => body.find(id);
  * level runs); the rest are methods. The pad's two (onPadSelect / onPadBack) come through padTop's
  * 'versus' top, the join screen or the result panel.
  */
-const HOST_METHODS = ['anyLive', 'bothInBreak', 'claimLevelFinish', 'halfScene', 'isPaused', 'isReady', 'onJoinInput', 'onLevelReached', 'onLevelTap', 'onRunEnded', 'onShopChanged', 'openPeek', 'pauseOverBreak', 'setPaused', 'togglePause'];
+const HOST_METHODS = ['anyLive', 'bothInBreak', 'claimLevelFinish', 'halfScene', 'isPaused', 'isReady', 'mixBlizzard', 'onJoinInput', 'onLevelReached', 'onLevelTap', 'onRunEnded', 'onShopChanged', 'openPeek', 'pauseOverBreak', 'setPaused', 'togglePause'];
 const HOST_FIELDS = ['levelStage'];
 const HOST_PAD = ['onPadSelect', 'onPadBack'];
 
@@ -108,8 +108,8 @@ test('matchHostKey: no match has no host; every split-screen match and tournamen
 });
 
 test('a split-screen match object is as it was: createMatch adds no host field (Versus is the default, not a stored key)', () => {
-  assert.deepEqual(Object.keys(createMatch(1)), ['seed', 'status', 'slots', 'levelPipes', 'names', 'tournament']);
-  assert.deepEqual(Object.keys(resetMatch(createMatch(1, { names: ['A', 'B'], tournament: { round: 'final', matchId: 'x' } }), 2)), ['seed', 'status', 'slots', 'levelPipes', 'names', 'tournament']);
+  assert.deepEqual(Object.keys(createMatch(1)), ['seed', 'status', 'slots', 'levelPipes', 'names', 'tournament', 'day']);
+  assert.deepEqual(Object.keys(resetMatch(createMatch(1, { names: ['A', 'B'], tournament: { round: 'final', matchId: 'x' } }), 2)), ['seed', 'status', 'slots', 'levelPipes', 'names', 'tournament', 'day']);
 });
 
 test('Play.versusHost looks the host up by matchHostKey: null in single player (no lookup), the Versus scene for either half of a split-screen match, else the named host', () => {
@@ -199,6 +199,82 @@ test('the tournament window opens without the Versus scene, on the 🌐 views lo
     assert.equal(game.input.keyboard.enabled, true, 'and back on');
     assert.deepEqual(calls, [], 'no Versus to leave');
   }
+});
+
+test('a local match\'s day (plan 17, T16; Michael\'s 1c.S1 (2)): fixed when it is made, from dailyDay (the Pretend date counts only in test mode): the lobby\'s, a tournament race\'s and Abandon\'s lobby', async () => {
+  // Versus's own lobby match (the 👥 start) and its rematch.
+  assert.match(VERSUS_SRC, /createMatch\(Date\.now\(\) & 0xffffffff, \{ day: dailyDay\(this\.registry\) \}\)/, 'the lobby');
+  assert.match(VERSUS_SRC, /resetMatch\(this\.match, /, 'a rematch keeps it (resetMatch)');
+  const { createTournament } = await import('../src/tournament.js');
+  const { createRng } = await import('../src/logic.js');
+  const races = [];
+  const game = fakeGame({ versus: { leave() {}, restartWith: (m) => races.push(m) }, active: true });
+  game.registry.set('testMode', true); // dailyDay reads the Pretend date only in test mode: a fixed day for the check
+  game.registry.set('testPretendDay', '2026-12-05');
+  game.registry.set('tournament', { tour: createTournament([{ name: 'Ann', playerId: null, guest: true }, { name: 'Bo', playerId: null, guest: true }], createRng(1)), matchId: null });
+  openTournamentPanel({ game, locale: 'en', play: { getSaveState: () => ({ name: '' }) } });
+  await el('tour-play').click();
+  assert.equal(races.length, 1, 'Play started the race');
+  assert.equal(races[0].day, '2026-12-05', 'a tournament race');
+  assert.ok(races[0].tournament && races[0].levelPipes, 'with its round and level table');
+  openTournamentPanel({ game, locale: 'en', play: { getSaveState: () => ({ name: '' }) } });
+  await el('tour-abandon').click();
+  await el('tour-abandon').click();
+  assert.equal(races.length, 2, 'Abandon, two taps: the lobby again');
+  assert.equal(races[1].day, '2026-12-05');
+  assert.equal(races[1].tournament, false);
+  closeTournamentPanel();
+});
+
+/** A game sound manager that records the loops it adds (Phaser's: one for the whole game). */
+function loopSounds() {
+  const made = [];
+  return {
+    made,
+    cache: { audio: { exists: (k) => k === 'advent-blizzard' } },
+    sound: { add: (key, cfg) => { const snd = { key, cfg, volume: cfg.volume, playing: false, paused: false, gone: false, play() { this.playing = true; }, stop() { this.playing = false; }, destroy() { this.gone = true; }, setVolume(v) { this.volume = v; }, pause() { this.paused = true; }, resume() { this.paused = false; } }; made.push(snd); return snd; } },
+  };
+}
+
+test('December\'s blizzard in split screen (plan 17, T16; Michael\'s 1c.S1 (6)): one loop for both halves at the louder half\'s level, kept while either storm hums, stopped when both are calm; the shared pause holds it; the online race\'s one half keeps its own', () => {
+  const V = T.advent.sound.blizzardVolume;
+  const snd = loopSounds();
+  const halves = [{ state: 'playing', levelBreak: false, pausePlay() { this.state = 'paused'; }, resumePlay() { this.state = 'playing'; } }, { state: 'playing', levelBreak: false, pausePlay() { this.state = 'paused'; }, resumePlay() { this.state = 'playing'; } }];
+  const vs = Object.assign(Object.create(Versus.prototype), snd, { match: { status: 'playing' }, pausedHalves: new Set(), pauseText: absorb(), pauseHint: absorb(), scene: { get: (k) => (k === 'Play' ? halves[0] : halves[1]) } });
+  assert.equal(vs.mixBlizzard(0, 0.5), true, 'the host takes it: the half adds no loop of its own');
+  assert.equal(snd.made.length, 1);
+  assert.ok(Math.abs(snd.made[0].volume - V * 0.5) < 1e-9 && snd.made[0].cfg.loop && snd.made[0].playing);
+  vs.mixBlizzard(1, 1); // P2's storm starts while P1's fades: the louder one wins, no second loop
+  assert.deepEqual([snd.made.length, snd.made[0].volume], [1, V]);
+  vs.mixBlizzard(1, 0.2);
+  assert.ok(Math.abs(snd.made[0].volume - V * 0.5) < 1e-9, 'P1 is louder now');
+  vs.mixBlizzard(0, 0); // P1's storm is over (or its break, or its end): P2's still hums
+  assert.ok(snd.made[0].playing && Math.abs(snd.made[0].volume - V * 0.2) < 1e-9, 'one storm ends while the other blows: the loop keeps going');
+  vs.setPaused(true);
+  assert.equal(snd.made[0].paused, true, 'the shared pause holds it');
+  vs.setPaused(false);
+  assert.equal(snd.made[0].paused, false);
+  vs.mixBlizzard(1, 0);
+  assert.deepEqual([snd.made[0].playing, snd.made[0].gone, vs.blizzard], [false, true, null], 'both calm: stopped and dropped');
+  vs.mixBlizzard(1, 0.3);
+  assert.equal(snd.made.length, 2, 'the next storm starts it again');
+  vs.events = { once: () => {} };
+  vs.stopBlizzard();
+  assert.deepEqual([snd.made[1].playing, vs.blizzard, vs.blizzardHums], [false, null, [0, 0]], 'the scene\'s end stops it (the game\'s sound manager outlives the scene)');
+  assert.equal(OnlineRace.prototype.mixBlizzard.call({}, 0, 1), false, 'the online race has one half: it keeps its own loop');
+  // Play's side: a split-screen half hands its level to the host; an online race's half and a Daily keep their own loop.
+  const host = { calls: [], mixBlizzard(i, l) { this.calls.push([i, l]); return true; } };
+  const p2 = playScene({ match: createMatch(1), player: 2, scene: { get: () => host }, blizzard: null, ...loopSounds() });
+  p2.setBlizzard(0.7);
+  assert.deepEqual([host.calls, p2.blizzard], [[[1, 0.7]], null], 'P2 (half 1) told the host, no loop of its own');
+  const own = loopSounds();
+  const online = playScene({ match: { ...createMatch(1), hostKey: 'OnlineRace' }, player: 1, scene: { get: () => ({ mixBlizzard: () => false }) }, blizzard: null, ...own });
+  online.setBlizzard(0.7);
+  assert.ok(online.blizzard && own.made.length === 1 && Math.abs(own.made[0].volume - V * 0.7) < 1e-9, 'the online race\'s half: its own loop');
+  const solo = loopSounds();
+  const daily = playScene({ match: null, blizzard: null, ...solo });
+  daily.setBlizzard(1);
+  assert.equal(solo.made.length, 1, 'a Daily run: its own loop');
 });
 
 test('over a running Versus the window is as before: ✕ (or Esc) in the lobby leaves for single player through Versus.leave, once', async () => {

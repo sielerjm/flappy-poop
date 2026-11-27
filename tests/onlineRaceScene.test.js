@@ -105,7 +105,7 @@ function fakeHalf() {
  * A race scene past its start GO, as create() leaves it, with sinks for what it draws (`countdown`:
  * before its GO instead; `peerWidth`: the other side's presence width).
  */
-function raceScene({ seat = 'host', round = 1, countdown = false, peerWidth = 720, resume = undefined, store = undefined } = {}) {
+function raceScene({ seat = 'host', round = 1, countdown = false, peerWidth = 720, resume = undefined, store = undefined, go = GO } = {}) {
   const net = fakeNet({ peerWidth });
   const half = fakeHalf();
   const room = { phase: 'playing', role: seat, code: '482913', hostName: 'Plop', guestName: 'Jolly', seed: 5, startMs: GO, round };
@@ -125,7 +125,7 @@ function raceScene({ seat = 'host', round = 1, countdown = false, peerWidth = 72
     hud: { card: absorb(), dot: absorb(), name: absorb(), score: absorb(), word: absorb(), link: null },
     locale: 'en',
   });
-  s.initRace({ net, lobby, plan: { seed: 5, startAt: GO, seat, names: seat === 'host' ? ['Plop', 'Jolly'] : ['Jolly', 'Plop'], fieldW: 720, round }, resume, store });
+  s.initRace({ net, lobby, plan: { seed: 5, startAt: go, seat, names: seat === 'host' ? ['Plop', 'Jolly'] : ['Jolly', 'Plop'], fieldW: 720, round }, resume, store });
   if (!countdown && !resume) s.match.status = 'playing';
   return { s, net, half, timers, ops, lobby, room };
 }
@@ -142,6 +142,17 @@ function inBreak({ s, half, timers }, level = 2) {
   s.onLevelReached(half);
   timers.shift().fn();
 }
+
+test('the race\'s day (plan 17, T16; Michael\'s 1c.S1 (2)): the UTC day of the server GO, the same on both devices, kept by a rewind; no Pretend date reaches it', () => {
+  const lastNov = Date.UTC(2026, 10, 30, 23, 59, 59, 900);
+  for (const seat of ['host', 'guest']) {
+    assert.equal(raceScene({ seat, go: lastNov }).s.match.day, '2026-11-30', `${seat}: a GO a beat before midnight UTC races calm`);
+    assert.equal(raceScene({ seat, go: lastNov + 100 }).s.match.day, '2026-12-01', `${seat}: from 00:00 UTC on 1 Dec, December`);
+  }
+  const rewound = raceScene({ go: Date.UTC(2026, 11, 7, 9), resume: { level: 3, levels: { 3: { level: 3, score: 40, coins: 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 1 } }, by: 'me', floor: 0 } });
+  assert.equal(rewound.s.match.day, '2026-12-07', 'a rewind restarts on the same plan, so the same day');
+  assert.equal(raceScene({ go: NaN }).s.match.day, null, 'no GO time: no day, calm');
+});
 
 test('claimLevelFinish: the crossed line goes to the referee (the guest claims it over the wire); nobody takes the +25 on the spot', () => {
   const { s, net, half } = raceScene({ seat: 'guest' });

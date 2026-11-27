@@ -266,7 +266,7 @@ seeds and rebuilds (pure; the bye pattern holds, so the server's bracket check s
 (pointer events followed on the window, `setPointerCapture` in a try, the row under the pointer marked
 `.drop`) swaps the dragged seed with the one it lands on, 🎲 is `reshuffle`. After the first race the
 view is the match list with the next match. **Play** restarts Versus (`restartWith`) on
-`createMatch(seed, { levelPipes: tournament.levelPipes, names, tournament: { round, matchId } })`: the
+`createMatch(seed, { day: dailyDay(registry), levelPipes: tournament.levelPipes, names, tournament: { round, matchId } })`: the
 halves run on the shorter table (`Play.tune` = `withLevelPipes(T, match.levelPipes)`, 10 / 25 / 35 / 35 /
 35 / 35 / 50 = 225 pairs, two players too; every level-length helper in Play takes `this.tune`, never bare
 `T`, guarded by `tests/scenes.test.js`), the join title is the round, `versusName` puts the competitors'
@@ -390,7 +390,7 @@ is one attempt as before. `dailyPlayedToday` keeps its meaning (flown today: the
 
 **Christmas** (December, plan 17, Stage 1, v0.32.0): decoration only. No SQL, no new server call, no change to a hitbox,
 a rule or a score. (Stage 2a and 2b, v0.34.0, add the Advent pieces, the trees, the open December Daily and the storms,
-below; storms change a run's feel, on the Daily only.) The season is all of December UTC (`TUNING.advent`: `seasonMonth` 12, `seasonLastDay` 31;
+below; storms change a run's feel, on the Daily and, since T16, in every match.) The season is all of December UTC (`TUNING.advent`: `seasonMonth` 12, `seasonLastDay` 31;
 `adventSeason(day, T)`). **The clock** is `dailyNow(reg)` / `dailyDay(reg)` (`src/logic.js`): the real time, or in test mode the
 Pretend date at the real time of day. Decorations and the practice Daily read it; the Daily Dump's store, queue and posts keep
 `utcDayKey()`, so a test run on a pretend date posts nothing and the real course never moves. Every scene reads the same
@@ -477,8 +477,18 @@ day through the game registry.
   `ACHIEVEMENTS`, quest rows in `achievement_defs` (1 to 31 Dec, claims close 2 Jan), claimed by the game from the found-day store
   (`adventAward`, mirrored by the server's `advent_award`; `claim_achievements` has no award check) and judged on a Daily run's own
   day. The Profile's quests drop the other tree once one is earned (`hiddenBy`). `tests/adventTrees.test.js`.
-- **Storms.** `course.storm(n)` (salt 17) on the shared Daily course, so every run of a day meets the same storms
-  (`TUNING.advent.storm`; `stormStartsHere`, `stormPhase`). The banner "Snowstorm ahead!" shows one pair ahead; while it blows
+- **Storms.** `course.storm(n)` (salt 17) on the shared course, so every run of a day meets the same storms
+  (`TUNING.advent.storm`; `stormStartsHere`, `stormPhase`). **Where** (`runStorms`; T16, Michael 27 Nov): a December Daily,
+  and every match (Versus, a tournament race, the online race) whose `match.day` is in December while `storm.matches` is on;
+  Singleplayer waits for 2027, education and test mode's plain runs stay calm. A match's day is fixed when it is made
+  (`createMatch(seed, { day })`, kept by `resetMatch`): Versus's lobby and the tournament's races take `dailyDay(registry)`,
+  the online race the UTC day of the server GO (`plan.startAt`), the same on both devices and after a reload.
+  `Play.stormRunFor` walks a Daily from its level's start; a match walks its level table (`Play.tune`) from the match's start
+  (a rewound race pre-walks the pairs before its level, `walkStorm`), from level `fromLevel` 3 (`firstPair` counted from its
+  start; levels 1 and 2 stay calm), each storm and its banner inside one level (none on a level's first pair, none in its last
+  `linePairs` 3), and `startLevelBreak` calls `calmAir`. Each split-screen half is its own Play, so the banner, the pull and
+  the drift are per half; both halves meet the storms at the same pairs. The switch, the schedule and pull knobs, the season and
+  the course's storm draws are in `protocolVersion` while the switch is on (off, it is the pre-T16 `82aaad2b`). The banner "Snowstorm ahead!" shows one pair ahead; while it blows
   `stormFlapMul` (`flapMul` 0.92) and `stormScrollMul` (`scrollMul` 0.7, a drag of 30 % on every level: Michael, 27 Nov, plan 17 1c.4)
   pull on the flap and the scroll (`doFlap`, `scrollSpeed`), and the moving pairs' drift clock runs at the same share
   (`stepPipeMove`), so a gap shifts no more during a crossing than in calm air; eased in and out over `rampMs`, lifted
@@ -486,7 +496,9 @@ day through the game registry.
   The snow gets one wind input (`setAir`, `setStorm` in `src/ui/snowfall.js`; `tickAir` in Play): the storm's gusts and swirls, or,
   in every December run, the fart wind that blows it right to left. `tests/adventStorm.test.js`.
 - **Sounds.** `Advent_PieceFound.mp3` (a piece caught) and `Advent_Blizzard.mp3` (a loop faded in from the banner and out as the storm
-  ends; `setBlizzard`, stopped in `calmAir`, paused in `pauseEffects`), both in `loadLazyAudio`, in season only
+  ends; `setBlizzard` on `stepLoop` in `src/sound.js`, stopped in `calmAir`, paused in `pauseEffects`; in split screen one loop
+  for both halves on the Versus host, `mixBlizzard`, at the louder half's hum, held by the shared pause, stopped when both are
+  calm; the online race's host answers false, so its one half keeps its own), both in `loadLazyAudio`, in season only
   (`TUNING.advent.sound`); credits in CREDITS.md.
 - **Server** (`db/schema.sql`, one migration with 2b's trees): `utc_today()` and `advent_season(date)` (internal), the table
   `advent_pieces`, the anon `submit_advent_piece(text, jsonb)`, `advent_progress(text, int)`, `advent_board(text, int, int, int)` and the
@@ -1570,7 +1582,7 @@ src/
                             course; what a half's distance reads with a pair a given
                             lead ahead), matchHostKey (the scene key that hosts a
                             match: match.hostKey, else 'Versus'), VERSUS_EMOJI;
-                            createMatch's options (levelPipes, names, tournament)
+                            createMatch's options (levelPipes, names, tournament, day)
                             ride a rematch. Fully unit-tested
                             (tests/versus.test.js).
   online.js                 Online race (🌐, plan 39) pure parts, NO Phaser/DOM/network:
@@ -1580,7 +1592,9 @@ src/
                             typed and bounded, extras dropped) and createInbox (state
                             only newer, other events once in any order, a reload's new
                             sid retires the old); protocolVersion (fnv1a32 of the
-                            events, the race tuning and a shared-course probe; derived)
+                            events, the race tuning and a shared-course probe, and
+                            December's storm knobs, season and draws while
+                            advent.storm.matches is on; derived)
                             and compareVersions (the older app updates);
                             presencePayload / parsePresence (join-time only);
                             agreedWidth (the smaller field, item 14); formatCode /
@@ -3725,7 +3739,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   adventPieces.test.js      Advent pieces: one a run, free slot only, target from the backlog, pity shrink, the found-day
                             store and queue, the 'kept' / 'refused' / too-soon rules, the merge, Over's lines, the chip.
   adventStorm.test.js       Storms: course.storm, phase, no piece in a storm, the pull per pair, the drag lifted by a fart and
-                            the grace after one, the drift clock (stepPipeMove), the fart wind, the blizzard.
+                            the grace after one, the drift clock (stepPipeMove), the fart wind, the blizzard; T16: the
+                            gate by mode (runStorms), a match's level rules and schedule, stormRunFor, the break's calm.
   adventTrees.test.js       The 🎄 / 🌲 entries on found-day stores (adventAward).
   adventSchema.test.js      The 2a + 2b SQL in PGlite: utc_today, advent_season, pieces, progress, board, award, the
                             December branch of submit_daily_score, daily_board's gift, fold_player, the tree claims.

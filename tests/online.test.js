@@ -93,6 +93,24 @@ test('protocolVersion is derived: stable, 8 hex digits, and moves with the cours
   assert.equal(protocolVersion({ ...T, hudScoreY: T.hudScoreY + 5 }), v);
 });
 
+test('protocolVersion and December\'s storms in a match (plan 17, T16, 1c.S0 blocker): with the switch on, the storm\'s pull, schedule, season and course draws are in it, so it left 82aaad2b (0.32.0\'s calm races); off, none of it is', () => {
+  const v = protocolVersion();
+  assert.equal(T.advent.storm.matches, true, 'storms in every match this December (Michael, 27 Nov)');
+  assert.notEqual(v, '82aaad2b', 'a calm 0.32.0 client never races a stormy one: the lobby asks the older side to update');
+  const storm = (patch, t = T) => ({ ...t, advent: { ...t.advent, storm: { ...t.advent.storm, ...patch } } });
+  for (const [k, value] of [['chance', 0.2], ['firstPair', 7], ['pairs', 5], ['gapPairs', 9], ['fromLevel', 4], ['linePairs', 4], ['rampMs', 700], ['flapMul', 0.9], ['scrollMul', 0.75]]) {
+    assert.notEqual(protocolVersion(storm({ [k]: value })), v, `advent.storm.${k}`);
+  }
+  assert.notEqual(protocolVersion({ ...T, advent: { ...T.advent, seasonLastDay: 24 } }), v, 'the season');
+  assert.notEqual(protocolVersion({ ...T, advent: { ...T.advent, seasonMonth: 11 } }), v, 'the season');
+  assert.equal(protocolVersion(storm({ extra: 300, angleDeg: 30, swirls: 2, bannerPx: 60, fartWind: 600 })), v, 'the look and the banner are not the race');
+  const off = storm({ matches: false });
+  assert.notEqual(protocolVersion(off), v, 'the switch is in it');
+  assert.equal(protocolVersion(storm({ chance: 0.5, pairs: 6 }, off)), protocolVersion(off), 'switched off, no storm knob moves it');
+  assert.equal(protocolVersion({ ...off, advent: { ...off.advent, seasonLastDay: 24 } }), protocolVersion(off), 'nor the season');
+  assert.equal(protocolVersion(), v, 'and none of it poisons the default');
+});
+
 test('compareVersions: same protocol races; otherwise the older app is told to update', () => {
   const p = protocolVersion();
   assert.deepEqual(compareVersions({ protocol: p, app: '0.25.0' }, { protocol: p, app: '0.24.9' }), { ok: true, update: null });

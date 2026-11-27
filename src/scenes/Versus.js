@@ -1,13 +1,13 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T } from '../config.js';
-import { fieldWidth, overButtonsLayout, overHit, canRestart } from '../logic.js';
+import { dailyDay, fieldWidth, overButtonsLayout, overHit, canRestart } from '../logic.js';
 import { versusLayout, joinButtonsLayout, createMatch, resetMatch, claimDevice, allClaimed, deviceLabel } from '../versus.js';
 import { t, levelLabel, pauseBannerText, versusName } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
 import { openTournamentPanel, isTournamentPanelOpen, ROUND_KEYS } from '../ui/tournamentPanel.js';
 import { createButton } from '../ui/button.js';
 import { createFocus } from '../ui/focus.js';
-import { unlock, sfx } from '../sound.js';
+import { unlock, sfx, stepLoop } from '../sound.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center', stroke: '#5a2a44', strokeThickness: 12 };
 const PINK = '#f8a0c8';
@@ -31,9 +31,11 @@ export class Versus extends Phaser.Scene {
     const layout = versusLayout(globalThis.innerWidth, globalThis.innerHeight, FIELD);
     this.layout = layout;
     if (this.scale.width !== layout.totalW || this.scale.height !== GAME_HEIGHT) this.scale.setGameSize(layout.totalW, GAME_HEIGHT);
-    this.match = data?.match ?? createMatch(Date.now() & 0xffffffff);
+    this.match = data?.match ?? createMatch(Date.now() & 0xffffffff, { day: dailyDay(this.registry) }); // the day decides December's storms (plan 17, T16)
     this.locale = this.scene.get('Play')?.locale ?? 'en';
     this.pausedHalves = new Set(); // which halves the shared pause paused (a half in its level break is never one of them)
+    this.blizzard = null; // December's one blizzard loop for both halves (mixBlizzard; plan 17, T16)
+    this.blizzardHums = [0, 0]; // each half's storm hum, 0 to 1
     this.resultShown = false;
     this.levelStage = null; // 'count' while the shared 3-2-1-GO to the next level runs (both players ready)
     this.readyHalves = new Set(); // halves (0 = P1, 1 = P2) that tapped ready in their level break
@@ -88,6 +90,7 @@ export class Versus extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.focus?.destroy();
       this.focus = null;
+      this.stopBlizzard(); // the sound manager is the game's: the loop would outlive the scene
     });
 
     if (!this.match.tournament) {
@@ -379,8 +382,30 @@ export class Versus extends Phaser.Scene {
       this.pausedHalves.clear();
     }
     const shown = this.pausedHalves.size > 0;
+    if (shown) this.blizzard?.pause(); // the shared pause holds December's storm sound (plan 17, T16)
+    else this.blizzard?.resume();
     this.pauseText.setVisible(shown);
     this.pauseHint.setVisible(shown);
+  }
+
+  /**
+   * December's blizzard for both halves (plan 17, T16; Michael's 1c.S1 (6)): one loop at the louder half's level. A
+   * half's hum fades in from its banner and out after its storm, so a storm that follows the other's never dips it;
+   * it starts once the level rises above 0 and stops when both halves are at 0 (calm air: a storm over, a level break,
+   * the run's end). A respawning half keeps its hum (its world halts, the storm is still there); the shared pause holds
+   * the loop (setPaused). True: the halves add no loop of their own (Play.setBlizzard).
+   */
+  mixBlizzard(half, level) {
+    this.blizzardHums ??= [0, 0];
+    this.blizzardHums[half === 1 ? 1 : 0] = level > 0 ? level : 0;
+    this.blizzard = stepLoop(this, this.blizzard ?? null, 'advent-blizzard', T.advent.sound.blizzardVolume * Math.max(...this.blizzardHums));
+    return true;
+  }
+
+  /** The match's blizzard off at once (the scene's end). */
+  stopBlizzard() {
+    this.blizzardHums = [0, 0];
+    this.blizzard = stepLoop(this, this.blizzard ?? null, 'advent-blizzard', 0);
   }
 
   isPaused() {
