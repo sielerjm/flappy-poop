@@ -147,7 +147,7 @@ export const SECTIONS = [
   { name: 'online-invites', needs: [], about: "invites, the ✉️ (plan 39, 4.2, Preview I), on a stand-in transport under Play (no network) on a 320 phone: invite_list once linked and the topic it names; ✉️ 1 on 🤝 Friends; the inviting 🟢 friend first with the ✉️ and its time, the buttons inside the row under a 16-character name (Michael's ask); a topic invite adds one; the ✉️ tapped: the ready screen as the guest; Invite on a 🟢 friend: the room screen waiting, their no with Resend, Resend in the same room" },
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
   { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
-  { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the hatted dead frame and the hatted home again, a reload that never repeats the 🎅, and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
+  { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the hatted dead frame and the hatted home again, a reload that never repeats the 🎅 (the plain 🎅 🤶 🧑‍🎄 only), the holly bean (bean-holly on the stock hitbox, the HUD bean stock), the 🎅 picker (both red dots until it is first opened, kept over a reload; the (?) card; a real tap and the pad, Save, B keeps the saved one; the title, body and home show it; both keys removed at the end), and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
   { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the Advent button's count, the Daily popup's two lines, the day's piece shown, caught, stored and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run that misses its piece and queues nothing better; the book (2.18): the glowing button opens it, the piece flies into its cell, the glow is off after it closes, the Daily window's 🧩 line opens it and closes back, the 🧩 board tab on a stubbed advent_board); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after); test mode on a Pretend 5 Dec (the piece in the sandbox only)" },
 ];
 
@@ -8310,10 +8310,12 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       const want = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => JSON.stringify({ season: l.adventSeason('${dec}', c.TUNING), line: l.countdownLine('${dec}', 'en', c.TUNING), santas: c.TUNING.advent.santas }))`).then(JSON.parse);
       const h1 = await home();
       const in1 = await loaded();
+      // The changing 🎅's pool (plan 17, 1b.2e, M3): the plain 🎅 🤶 🧑‍🎄 this device draws; the picker keeps every variant.
+      const pool = await evaluate(`import('./src/logic.js').then((l) => JSON.stringify(l.plainSantas(__flappy.registry.get('santas') ?? [])))`).then(JSON.parse);
       ok(want.season && h1.day === dec, `the page's day is the pin, ${dec}, in the season (${h1.day})`);
       ok(in1.length === files.length, `every December file is in after the one lazy flight (${in1.length} / ${files.length}${in1.length < files.length ? `; missing ${files.filter((k) => !in1.includes(k)).join(', ')}` : ''})`);
       ok(h1.stock === 'poop-speech' && h1.shown === 'poop-speech-santa', `the ready poop wears the hatted bubble frame, its state the stock key (${h1.stock} → ${h1.shown})`);
-      ok(want.santas.includes(h1.glyph) && h1.glyph !== '\u{1F31E}' && h1.santa === h1.glyph, `the 🌞 is this visit's 🎅 (${h1.glyph}), kept as the last pick`);
+      ok(pool.length >= 2 && pool.includes(h1.glyph) && h1.glyph !== '\u{1F31E}' && h1.santa === h1.glyph, `the 🌞 is this visit's 🎅 (${h1.glyph}), from the plain pool (${pool.join(' ')}), kept as the last pick`);
       ok(h1.line === want.line?.text && h1.image, `Happy Bowelidays! over the title and the countdown line under it: "${h1.line}"`);
       ok(h1.flakes === TT.advent.snow.count, `the home snowfall: ${h1.flakes} flakes (want ${TT.advent.snow.count})`);
 
@@ -8330,6 +8332,11 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       ok(run1.bottoms > 0 && run1.snowOk === run1.bottoms, `snow on every bottom pipe's cap, placed at TUNING.advent.snowCap (${run1.snowOk} / ${run1.bottoms})`);
       ok(run1.itemsOk === run1.items, `every twinned pickup in the field wears its December twin (${run1.itemsOk} / ${run1.items}: ${run1.kinds.join(', ') || 'none in the field'})`);
       ok(run1.flakes === TT.advent.snow.count && !run1.line && !run1.image, `in a run the snow keeps falling (${run1.flakes} flakes; Michael, 26 Nov) and the countdown line and Happy Bowelidays! hide`);
+      // The holly bean (plan 17, 1b.2b): level 1's scripted pairs bring one; the world bean wears the holly twin on the
+      // stock bean's hitbox circle, and the HUD's bean stays the stock one.
+      await until(`${play}.beans.getChildren().some((b) => b.active)`, 120);
+      const bean = await evaluate(`(() => { const p = ${play}; const b = p.beans.getChildren().find((q) => q.active); return JSON.stringify(b ? { key: b.texture.key, kind: b.getData('kind'), circle: b.body.isCircle, w: b.body.width, radius: b.getData('radius'), hud: p.beanIcon.texture.key } : null); })()`).then(JSON.parse);
+      ok(bean?.key === 'bean-holly' && bean.kind === 'bean' && bean.circle && Math.abs(bean.w - 2 * TT.beans.beanRadius) < 1 && bean.radius === TT.beans.beanRadius && bean.hud === 'bean', `the world bean wears bean-holly on the stock bean's circle (radius ${TT.beans.beanRadius}), the HUD bean stays stock (${JSON.stringify(bean)})`);
       // A fart: the stock key stays poop-fart while the two hatted fart frames alternate on the stink frames' clock.
       await evaluate(`(() => { const p = ${play}; p.effects.addBean(); p.effects.addBean(); p.setCharged(true); p.activatePower(); return true; })()`);
       const farts = [];
@@ -8349,12 +8356,118 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       await sleep(300);
       const h2 = await home();
       ok(h2.stock === 'poop-speech' && h2.shown === 'poop-speech-santa' && h2.flakes === TT.advent.snow.count && h2.line === want.line?.text, `back home after the run: the hatted bubble frame, the snowfall and the line again (${h2.shown}, ${h2.flakes} flakes)`);
-      ok(want.santas.includes(h2.glyph) && h2.glyph !== h1.glyph, `the home screen built again picks another 🎅 (${h1.glyph} → ${h2.glyph})`);
+      ok(pool.includes(h2.glyph) && h2.glyph !== h1.glyph, `the home screen built again picks another 🎅 from the plain pool (${h1.glyph} → ${h2.glyph})`);
 
       // A reload with ?perf on 5 Dec: a new 🎅 again, and the December run's frame meter.
       await load('&perf');
       const h3 = await home();
-      ok(want.santas.includes(h3.glyph) && h3.glyph !== h2.glyph, `a reload never repeats the last 🎅 (${h2.glyph} → ${h3.glyph})`);
+      ok(pool.includes(h3.glyph) && h3.glyph !== h2.glyph, `a reload never repeats the last 🎅, still from the plain pool (${h2.glyph} → ${h3.glyph})`);
+
+      // Choose your 🎅 (plan 17, 1b.2e; Michael's sheet-10 calls, 27 Nov), still on the 5 Dec pin: the red dot on the
+      // home 🎅 and the 🌞 popup's title 🎅 until the picker is first opened (one seen flag, kept over a reload); the
+      // (?) card; the picker by a real tap (its ring on this visit's 🎅, a tap moves it, Save keeps it) and by the pad
+      // (ringed on ✕, A on a cell and on Save; B keeps what was saved); the title, the body and home show the saved 🎅,
+      // and a reload keeps it. Both keys go at the end, so the rest of the section sees the changing 🎅 again.
+      const SANTA_KEYS = ['flappyPoop.santaChoice', 'flappyPoop.santaDot'];
+      const dropSantaKeys = () => evaluate(`(${JSON.stringify(SANTA_KEYS)}.forEach((k) => localStorage.removeItem(k)), true)`);
+      const DY = `__flappy.scene.getScene('Daily')`;
+      const SP = `__flappy.scene.getScene('SantaPicker')`;
+      const G17 = TT.gamepad;
+      const pickNow = () =>
+        evaluate(`(() => { const p = ${play}; const d = ${DY}; const dOn = __flappy.scene.isActive('Daily'); const sOn = __flappy.scene.isActive('SantaPicker'); const s = sOn ? ${SP} : null; return JSON.stringify({
+          daily: dOn, picker: sOn, homeDot: Boolean(p.santaDot?.visible), titleDot: dOn ? Boolean(d.santaDot?.visible) : null, help: dOn ? Boolean(d.helpOpen) : null,
+          title: dOn ? d.titleText.text : null, body: dOn ? d.bodyText.text : null, sun: p.dailySun?.text ?? null, visit: p.registry.get('santa') ?? null, choice: p.santaChoice(),
+          seenKey: localStorage.getItem('flappyPoop.santaDot'), choiceKey: localStorage.getItem('flappyPoop.santaChoice'),
+          selected: s?.selected ?? null, focus: s ? (s.focus.items[s.focus.index]?.id ?? null) : dOn ? (d.focus.items[d.focus.index]?.id ?? null) : null, ring: s ? s.focus.shown : null,
+        }); })()`).then(JSON.parse);
+      const zoneAt = (expr) => evaluate(`(() => { const z = ${expr}; return JSON.stringify(z ? { x: z.x, y: z.y } : null); })()`).then(JSON.parse);
+      try {
+        await dropSantaKeys();
+        await load('&perf');
+        const offered = await evaluate(`JSON.stringify(__flappy.registry.get('santas') ?? [])`).then(JSON.parse);
+        const s0 = await pickNow();
+        ok(offered.length > 1 && s0.homeDot && !s0.daily && s0.choice === null, `the home 🎅 wears the red dot before the picker is ever opened (${offered.length} variants offered, the 🎅 ${s0.sun})`);
+        // The home 🎅 by a real tap: the 🌞 popup, its title 🎅 with the dot.
+        const sun = await zoneAt(`${play}.dailySun`);
+        await tapAt(sun.x, sun.y);
+        await until(`__flappy.scene.isActive('Daily') && Boolean(${DY}.santaZone)`, 40);
+        const s1 = await pickNow();
+        ok(s1.daily && s1.titleDot && s1.title.startsWith(s1.visit) && s1.body.includes(s1.visit), `a real tap on the home 🎅 opens the 🌞 popup, its title 🎅 (${s1.visit}) with the red dot too`);
+        // The (?) card: a real tap opens it over the popup; a tap on the title 🎅 under it only takes the card down.
+        const help = await zoneAt(`${DY}.helpZone`);
+        const santaZone = await zoneAt(`${DY}.santaZone`);
+        await tapAt(help.x, help.y);
+        const helpText = await evaluate(`(() => { const d = ${DY}; return d.help?.list?.find((o) => o.type === 'Text' && o.text.length > 40)?.text ?? null; })()`);
+        const wantHelp = await evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'dailyHelp'))`);
+        const s2 = await pickNow();
+        await tapAt(santaZone.x, santaZone.y);
+        const s3 = await pickNow();
+        ok(s2.help && helpText === wantHelp && !s3.help && !s3.picker && s3.daily && s3.titleDot, `the (?) card opens by a real tap with the help text; a tap on the 🎅 under it closes the card only (no picker, the dot stays)`);
+        // The picker by a real tap on the title 🎅: both dots go for good, this visit's 🎅 is ringed, a tap moves the ring, Save keeps it.
+        await tapAt(santaZone.x, santaZone.y);
+        await until(`__flappy.scene.isActive('SantaPicker') && Boolean(${SP}.cells?.length)`, 40);
+        const s4 = await pickNow();
+        ok(s4.picker && !s4.homeDot && !s4.titleDot && s4.seenKey === 'true' && s4.selected === s4.visit && s4.choice === null, `a real tap on the title 🎅 opens the picker: both red dots gone (seen ${s4.seenKey}), this visit's 🎅 ringed (${s4.selected}), nothing saved yet`);
+        const cells = await evaluate(`JSON.stringify(${SP}.cells.map((c) => ({ glyph: c.glyph, x: c.x, y: c.y })))`).then(JSON.parse);
+        const tapPick = cells.find((c) => c.glyph === '\u{1F936}\u{1F3FE}') ?? cells.find((c) => c.glyph !== s4.visit);
+        await tapAt(tapPick.x, tapPick.y);
+        const s5 = await pickNow();
+        const saveZone = await zoneAt(`${SP}.saveZone`);
+        await tapAt(saveZone.x, saveZone.y);
+        await until(`!__flappy.scene.isActive('SantaPicker')`, 40);
+        const s6 = await pickNow();
+        ok(s5.selected === tapPick.glyph && s5.choice === null, `a tap on a cell only moves the ring (${s5.selected}), nothing saved before Save`);
+        ok(!s6.picker && s6.daily && s6.choice === tapPick.glyph && s6.choiceKey === JSON.stringify(tapPick.glyph) && s6.visit === tapPick.glyph, `Save keeps ${tapPick.glyph} on this device (${s6.choiceKey}) and returns to the 🌞 popup`);
+        ok(s6.title.startsWith(tapPick.glyph) && s6.body.includes(tapPick.glyph) && s6.sun === tapPick.glyph && !s6.titleDot, `the saved 🎅 shows at once on the popup's title and body and on the home 🎅 (${s6.sun}), no dot`);
+        // The pad: walk the popup's ring to the title 🎅, A opens the picker ringed on ✕ with the saved 🎅 ringed; down, A on a cell, then Save.
+        await evaluate(`${play}.registry.set('padMode', true), ${DY}.focus.show(), true`);
+        for (let i = 0; i < 12 && (await pickNow()).focus !== 'santa'; i += 1) await evaluate(`${play}.padNav('left'), true`);
+        await evaluate(`${play}.padDown(${G17.select}), true`);
+        await until(`__flappy.scene.isActive('SantaPicker') && Boolean(${SP}.cells?.length)`, 40);
+        const p1 = await pickNow();
+        await evaluate(`${play}.padNav('down'), true`);
+        const p2 = await pickNow();
+        const padPick = cells[Number(String(p2.focus).replace('santa', ''))]?.glyph ?? null;
+        await evaluate(`${play}.padDown(${G17.select}), true`);
+        const p3 = await pickNow();
+        for (let i = 0; i < 12 && (await pickNow()).focus !== 'save'; i += 1) await evaluate(`${play}.padNav('down'), true`);
+        await evaluate(`${play}.padDown(${G17.select}), true`);
+        await until(`!__flappy.scene.isActive('SantaPicker')`, 40);
+        const p4 = await pickNow();
+        ok(p1.picker && p1.ring && p1.focus === 'close' && p1.selected === tapPick.glyph, `the pad's A on the title 🎅 opens the picker ringed on ✕, the saved ${tapPick.glyph} ringed`);
+        ok(Boolean(padPick) && padPick !== tapPick.glyph && p3.selected === padPick && !p4.picker && p4.choice === padPick && p4.title.startsWith(padPick) && p4.sun === padPick, `the pad walks down to ${p2.focus}, A rings ${padPick}, A on Save keeps it (title and home show ${p4.sun})`);
+        // B without Save keeps what was saved, though the ring moved.
+        await evaluate(`${play}.padDown(${G17.select}), true`);
+        await until(`__flappy.scene.isActive('SantaPicker') && Boolean(${SP}.cells?.length)`, 40);
+        await evaluate(`${play}.padNav('down'), true`);
+        await evaluate(`${play}.padNav('left'), true`);
+        await evaluate(`${play}.padDown(${G17.select}), true`);
+        const b1 = await pickNow();
+        await evaluate(`${play}.padDown(${G17.back}), true`);
+        await until(`!__flappy.scene.isActive('SantaPicker')`, 40);
+        const b2 = await pickNow();
+        ok(b1.picker && b1.selected !== padPick && !b2.picker && b2.daily && b2.choice === padPick && b2.title.startsWith(padPick), `B closes the picker without saving: the ring moved to ${b1.selected}, ${b2.choice} is still the 🎅`);
+        await evaluate(`${play}.padDown(${G17.back}), true`);
+        await until(`!__flappy.scene.isActive('Daily')`, 40);
+        await evaluate(`${play}.registry.set('padMode', false), true`);
+        const s7 = await pickNow();
+        ok(!s7.daily && s7.sun === padPick && !s7.homeDot, `back home the 🎅 is the saved ${s7.sun}, no dot`);
+        // A reload: the saved 🎅 every visit (no rotation), and neither dot comes back.
+        await load('&perf');
+        const r1 = await pickNow();
+        await chrome('daily');
+        await until(`__flappy.scene.isActive('Daily')`, 40);
+        const r2 = await pickNow();
+        ok(r1.sun === padPick && r1.visit === padPick && !r1.homeDot && r2.title.startsWith(padPick) && r2.body.includes(padPick) && !r2.titleDot, `after a reload the saved ${padPick} shows on home and the popup's title and body, and neither red dot comes back`);
+        await closeTop('Daily');
+        await until(`!__flappy.scene.isActive('Daily')`, 40);
+      } finally {
+        await dropSantaKeys().catch(() => false);
+      }
+      // Both keys gone: a fresh page shows the changing 🎅 from the plain pool and the home dot again.
+      await load('&perf');
+      const r3 = await pickNow();
+      ok(r3.choice === null && r3.seenKey === null && pool.includes(r3.sun) && r3.homeDot, `with both keys removed a reload brings back the changing 🎅 (${r3.sun}) and the home dot`);
       const perfDec = await perfRun(6000);
       ok(Boolean(perfDec?.frames > 60), `?perf on ${dec}: ${perfLine(perfDec)}`);
       const vDec = await versusPerf(6000);
