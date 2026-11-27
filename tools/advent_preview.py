@@ -8,7 +8,7 @@ sheets go to the Dropbox checkout's .claude/plans/17-previews/gateA/ (gitignored
 
 Run:    ~/.local/bin/uv run --with pillow python3 tools/advent_preview.py [--sheets 1,2,3,7]
         --sheets  comma list of: 1, 2, 3, 7 (step 1.4), pipes (step 1.5), 4 and 5a (step 2.6a), 5 (step 2.14), 9 (step 1b.1),
-                  10 (step 1b.2d), or all (default; "all" is the Stage 1 set, 1/2/3/7/pipes: sheets 4, 5a, 5, 9 and 10 are built only when named)
+                  10 (step 1b.2d), 11 (step 1c.3), or all (default; "all" is the Stage 1 set, 1/2/3/7/pipes: sheets 4, 5a, 5, 9, 10 and 11 are built only when named)
         --art DIR       fitted December art (default <main checkout>/meta/advent-previews/art-fit/)
         --guides DIR    pipe-cap guides (default .../meta/advent-previews/art-guides/)
         --backdrop PNG  sheet 7's ready-screen backdrop (default <out>/backdrop-home-720x1280.png)
@@ -43,6 +43,12 @@ Checks (any failure exits non-zero):
   - sheet 10 (the picker, the Daily marks and the help card, 12 sheets; named only): every sheet is 720 x 1280; every grid cell and the
     glyph zone are at least 88 x 88; no two of the (?), glyph and X zones overlap; the grid lies inside the picker panel; the help card fits
     y 84 to 1196; twelve PNGs. --selftest feeds an 80 px cell, an 80 px glyph zone and a (?) moved 10 px right into the glyph zone;
+  - sheet 11 (Stage 1c, step 1c.3: 24 PNGs and 5 GIFs, named only): the streak model (a 64 x 16 capsule texture drawn at L = s + |v| tau), the
+    headwind options H1 and H2 (right to left, radial pull on the swirls), the fart inside the storm, the T7 "to go" line, the book's (?) and its
+    help card, the version line covered (T15) and the fairy lights (T14). Checks: the heads place; each headwind's measured mean angle below the
+    horizontal is in range with 90 % of the extra flakes moving right to left; the longest streaks are in range; each covered version line holds
+    no other ink; the (?) zone clears the count and the X zone by 8 px; the help card fits y 40 to 1240; each "to go" line fits 600 px at 28 px or
+    more; the lights' tiles cover x 0 to 720 with no gap; every input file exists. --selftest feeds each a broken input;
   - step 1.5: the printed cream distances (pipe 43 / 35 / 31 / 29 at 55 / 60 / 70 / 80 %; villi
     50 / 21 / 21 / 41 at 40 / 55 / 70 / 80 %) are within 1 of the plan's, and formula V changes no
     pixel that is not the villi fill on villi.png, ceiling.png and ground.png.
@@ -1105,10 +1111,13 @@ class Storm:
     """One option's simulation: every flake's drawn position and velocity at each 1/60 s step, plus the wind."""
 
 
-def simulate(spec, make_rng=random.Random, extra=None, steps=STORM_STEPS):
+def simulate(spec, make_rng=random.Random, extra=None, steps=STORM_STEPS, light_wind=None):
     """Light flakes (36, Random(1700), the same in every option) and the option's extra flakes (Random(1700 + idx)),
     stepped at 1/60 s: y += (vy + swirl_y) dt, x += (wind x m + swirl_x) dt, drawn x = x + the snowfall.js drift sine;
-    a flake past the bottom re-enters at the top, past a side it wraps. Vortex heads drift at 0.5 x wind and wrap."""
+    a flake past the bottom re-enters at the top, past a side it wraps. Vortex heads drift at 0.5 x wind and wrap.
+    Sheet 11 options (both default to sheet 4's model, so its output is unchanged): spec["pull"] adds, beside the tangential
+    swirl, a radial pull of that share of the swirl's magnitude toward the head; `light_wind(t, storm_wind)` replaces the
+    wind the light flakes feel (the storm's extra flakes and the vortex heads keep the storm's)."""
     n_light = int(SNOW["count"])
     light = _make_flakes(make_rng(LIGHT_SEED), n_light, _PX, (SNOW["minSpeed"], SNOW["maxSpeed"]))
     n_extra = spec["extra"] if extra is None else extra
@@ -1127,6 +1136,7 @@ def simulate(spec, make_rng=random.Random, extra=None, steps=STORM_STEPS):
     for k in range(steps + 1):
         t = k * STORM_DT
         w = storm_wind(spec, t)
+        wl = w if light_wind is None else light_wind(t, w)
         st.wind.append(w)
         st.cen.append([tuple(c) for c in cen])
         xd_k, y_k, v_k = [], [], []
@@ -1143,7 +1153,10 @@ def simulate(spec, make_rng=random.Random, extra=None, steps=STORM_STEPS):
                     tx, ty = (dy, -dx) if j % 2 == 0 else (-dy, dx)  # even j counter-clockwise on screen, odd j clockwise
                     sx += mag * tx / r
                     sy += mag * ty / r
-            vx, vyy = w * f["m"] + sx, f["vy"] + sy
+                    if spec.get("pull"):
+                        sx -= spec["pull"] * mag * dx / r  # toward the head: flakes curl in instead of circling
+                        sy -= spec["pull"] * mag * dy / r
+            vx, vyy = (wl if i < n_light else w) * f["m"] + sx, f["vy"] + sy
             v_k.append((vx + math.cos(ph) * drift_rate, vyy))  # the drawn velocity: the drift sine's slope on top
             if k < steps:
                 x[i] = (x[i] + vx * STORM_DT) % W_PX
@@ -2244,11 +2257,11 @@ def picker(res, bg, zh=False, ringed=None, save_live=True, pad_ring=False, rows=
     return s, [b for b, _, _ in cells], grid
 
 
-def help_card(res, bg, zh):
+def help_card(res, bg, zh, body=None):
     s = bg.copy()
     dim_box(s, (0, 0, W_PX, H_PX), 0.55)
     face = Face(zh, 28)
-    lines = wrap_text(HELP_ZH if zh else HELP_EN, face, 480)
+    lines = wrap_text(body or (HELP_ZH if zh else HELP_EN), face, 480)
     lh = face.asc + face.desc
     th = len(lines) * lh + (len(lines) - 1) * 8
     h = 64 + th + 40
@@ -2342,6 +2355,564 @@ def sheet10_selftest(missed):
     report("a grid cell of 80 px", check_min_box("a grid cell", (GRID_X0, GRID_Y0, GRID_X0 + 80, GRID_Y0 + 80)))
     report("a glyph zone of 80 px", check_min_box("the glyph zone", (gz[0], gz[1], gz[0] + 80, gz[1] + 80)))
     report("the (?) moved 10 px right into the glyph zone", check_zones(zone_at((Q_CENTRE[0] + 10, Q_CENTRE[1])), gz, xz))
+
+
+# ---- sheet 11 (step 1c.3): Gate A for Stage 1c: streaks (T3, T4), the headwind (T5), the "to go" line (T7), the book's (?) and
+# its card (T8, T15), the Daily window without its version line (T15) and the fairy lights (T14). Named only (--sheets 11).
+STREAK_MIN_V = 150.0  # px/s: a flake slower than this is drawn round
+TAU_A, F_A = 0.035, 560.0  # 11a: the fart's streak time (s) and wind (px/s)
+TAU_B, F_B = 0.06, 760.0  # 11b: the super fart
+CAP_RIM = (143, 166, 189)
+S11_FART_A = dict(STORM_OPTIONS["fart"], key="fart11a", name="Fart 11a", F=F_A, poop="poop-fart-santa1")
+S11_FART_B = dict(STORM_OPTIONS["fart"], key="fart11b", name="Fart 11b", F=F_B, poop="poop-fart-santa2")
+HEADWIND = {  # idx 5 and 6 seed the flakes (1700 + idx) and the heads (1800 + idx); G is set below from the mean fall and the angle
+    "H1": dict(key="H1", name="H1", idx=5, extra=144, vy_mult=2.0, px=(5.0, 14.0), deg=25.0, gust=0.35, K=3, R=130.0, S=220.0, pull=0.3),
+    "H2": dict(key="H2", name="H2", idx=6, extra=200, vy_mult=2.0, px=(5.0, 14.0), deg=20.0, gust=0.5, K=4, R=120.0, S=300.0, pull=0.45),
+}
+for _hw in HEADWIND.values():
+    _hw["G"] = -(_MEAN_VY * _hw["vy_mult"]) / math.tan(math.radians(_hw["deg"]))  # right to left: negative
+HEAD_RANGE = {"H1": (20.0, 30.0), "H2": (15.0, 25.0)}  # the mean flake angle below the horizontal that each option must measure
+STREAK_RANGE = {"11a": (15.0, 30.0), "11b": (35.0, 62.0)}  # the brief says 35 to 60; the real 11b still measures 61.0 px, so the top is 62 until the supervisor decides  # the longest streak (|v| x tau, px) at t = 1.2 s
+S11_FOUND, S11_TOTAL = 11, 24
+TOGO_HELD = "pops in on the click (scale 0.6 to 1, 250 ms), holds 900 ms, floats up 40 px, fades over 500 ms; this is the held frame"
+VERSION_WIN = (24, 100, 236, 152)  # the book's version line search window (it is left-aligned at x 36, y 128, 24 px)
+DAILY_VERSION_WIN = (200, 985, 520, 1050)  # the Daily window's version line (centred, cx 360, cy + 380 = 1020; Daily.js:79-80)
+BOOK_Q, BOOK_X = (56, 128), (664, 128)
+HELP11_EN = ("A puzzle piece hides in every December Daily Dump run, from pipe 5 on. Each pipe you pass makes it a little more likely, "
+             "and so does each run that day that ended without it.\n\nA new piece comes out each day from 1 to 24 December. "
+             "Missed a day? Its piece can still turn up in a later run.\n\nFind all 24 by 24 December for the \U0001F384, "
+             "or by 31 December for the \U0001F332.")
+HELP11_ZH = ("十二月的每一局每日挑战里都藏着一块拼图，从第 5 根管道起才会出现。每多过一根管道，出现的机会就大一点；"
+             "当天每有一局没找到，下一局的机会也会大一点。\n\n12 月 1 日到 24 日，每天放出一块新拼图。错过了某一天？那块拼图之后的局里还能找到。\n\n"
+             "12 月 24 日前集齐 24 块得 \U0001F384，12 月 31 日前集齐得 \U0001F332。")
+LIGHTS = [("L1", 0.5, 104), ("L2", 0.75, 96), ("L3", 1.0, 88)]  # (label, scale, wire top y)
+LIGHTS_ART_W, LIGHTS_ART_H, LIGHTS_WIRE_TOP = 768, 152, 6
+HOME_BUTTONS = [(100, 124), (360, 124), (620, 124)]
+RUN_HUD_REGIONS = [(280, 20, 440, 215), (20, 80, 175, 190)]
+_STREAKS = {}
+
+
+# ---- the streak: a second generated texture, a 64 x 16 capsule, alpha 1.0 at its head (right end) down to 0.0 at its tail
+def _capsule64():
+    k = 4
+    tex = Image.new("RGBA", (64 * k, 16 * k), (0, 0, 0, 0))
+    for r, rgb, a in ((8, CAP_RIM, 0.35), (6.5, CAP_RIM, 0.6), (5, (255, 255, 255), 1.0)):  # the flake texture's three circles, stretched along x
+        layer = Image.new("RGBA", tex.size, (0, 0, 0, 0))
+        ImageDraw.Draw(layer).rounded_rectangle(((8 - r) * k, (8 - r) * k, (56 + r) * k - 1, (8 + r) * k - 1), radius=r * k, fill=rgb + (int(round(a * 255)),))
+        tex.alpha_composite(layer)
+    tex = tex.resize((64, 16), Image.Resampling.LANCZOS)
+    ramp = Image.new("L", (64, 16))
+    d = ImageDraw.Draw(ramp)
+    for x in range(64):
+        d.line((x, 0, x, 15), fill=int(round(255 * x / 63)))
+    r_, g_, b_, a_ = tex.split()
+    return Image.merge("RGBA", (r_, g_, b_, ImageChops.multiply(a_, ramp)))
+
+
+def streak_sprite(length, s, ang, alpha, hmul=1.0):
+    """(sprite, head x, head y): the capsule scaled to `length` x s*hmul px, its head (right end centre) turned to `ang` degrees
+    (screen angle of the velocity, y down), at `alpha`; (head x, y) is where the head centre sits in the returned image."""
+    w, h = max(2, int(round(length))), max(2, int(round(s * hmul)))
+    key = (w, h, int(round(ang)), round(alpha, 3))
+    if key not in _STREAKS:
+        if "cap" not in _SPRITES:
+            _SPRITES["cap"] = _capsule64()
+        spr = _SPRITES["cap"].resize((w, h), Image.Resampling.LANCZOS)
+        r_, g_, b_, a_ = spr.split()
+        spr = Image.merge("RGBA", (r_, g_, b_, a_.point(lambda v: int(round(v * alpha)))))
+        rot = spr.convert("RGBa").rotate(-key[2], resample=Image.Resampling.BICUBIC, expand=True).convert("RGBA")
+        th = math.radians(key[2])
+        _STREAKS[key] = (rot, rot.width / 2 + (w / 2) * math.cos(th), rot.height / 2 + (w / 2) * math.sin(th))
+    return _STREAKS[key]
+
+
+def vel_at(st, t):
+    """Every flake's drawn velocity at time t: linear between the two sim steps around it."""
+    u = max(0.0, t / STORM_DT)
+    k0 = min(int(math.floor(u + 1e-9)), st.steps)
+    k1 = min(k0 + 1, st.steps)
+    fr = max(0.0, min(1.0, u - k0))
+    return [(a[0] + (b[0] - a[0]) * fr, a[1] + (b[1] - a[1]) * fr) for a, b in zip(st.vel[k0], st.vel[k1])]
+
+
+def streak_layer(st, t, tau, soft=False, fade=0.0):
+    """(flakes layer, longest streak in px) at time t. A flake at |v| >= 150 px/s is the capsule at length L = s + |v| tau, height s, its head
+    on the flake's position, at the flake's alpha (0.9); slower ones are the plain round flake. `soft`: every streak drawn first at 1.6 x the
+    height and alpha 0.25 (a blur), then crisp. `fade`: the storm's extra flakes (index >= the light ones) drawn at alpha 0.9 x (1 - fade).
+    The streak length reported is |v| tau (what the streak adds to the flake's size)."""
+    layer = Image.new("RGBA", (W_PX, H_PX), (0, 0, 0, 0))
+    pos, vel = pos_at(st, t), vel_at(st, t)
+    longest, todo = 0.0, []
+    for i, ((fx, fy), (vx, vy), f) in enumerate(zip(pos, vel, st.flakes)):
+        s = max(2, int(round(f["px"])))
+        a = SNOW["alpha"] * ((1.0 - fade) if i >= st.n_light else 1.0)
+        if a <= 0.0:
+            continue
+        sp = math.hypot(vx, vy)
+        if tau > 0 and sp >= STREAK_MIN_V:
+            longest = max(longest, sp * tau)
+            todo.append((fx, fy, s, s + sp * tau, math.degrees(math.atan2(vy, vx)), a))
+        else:
+            put(layer, flake_sprite(s, a), int(round(fx - s / 2)), int(round(fy - s / 2)))
+    for crisp in ((False, True) if soft else (True,)):
+        for fx, fy, s, length, ang, a in todo:
+            spr, hx, hy = streak_sprite(length, s, ang, a if crisp else 0.25, 1.0 if crisp else 1.6)
+            put(layer, spr, int(round(fx - hx)), int(round(fy - hy)))
+    return layer, longest
+
+
+def headwind_stats(st):
+    """(mean angle below the horizontal in degrees, share of the extra flakes with vx < 0 at t = 1.2 s, mean vx, mean vy): the storm's
+    extra flakes' drawn velocities over the whole run. The angle is atan2(vy, -vx), so a mean that blows left to right gives over 90."""
+    ex = range(st.n_light, st.count)
+    n = (st.steps + 1) * len(ex)
+    mvx = sum(st.vel[k][i][0] for k in range(st.steps + 1) for i in ex) / n
+    mvy = sum(st.vel[k][i][1] for k in range(st.steps + 1) for i in ex) / n
+    k = int(round(STORM_T / STORM_DT))
+    left = sum(1 for i in ex if st.vel[k][i][0] < 0) / len(ex)
+    return math.degrees(math.atan2(mvy, -mvx)), left, mvx, mvy
+
+
+# ---- sheet 11's checks (each returns failure strings; sheet11_selftest feeds each a broken input)
+def check_heads(spec, make_rng=random.Random):
+    """The vortex heads place (K of them 2R apart in x 100 to 620, y 300 to 1000)."""
+    try:
+        vortex_centres(spec, make_rng)
+    except SystemExit as e:
+        return [str(e)]
+    return []
+
+
+def check_headwind(st, key, lo, hi):
+    """The measured mean flake angle within [lo, hi] below the horizontal, and at least 90 % of the extra flakes moving right to left at t = 1.2 s."""
+    ang, left, mvx, _ = headwind_stats(st)
+    fails = []
+    if not (lo <= ang <= hi):
+        fails.append(f"{key}: the mean flake angle is {ang:.1f} deg below the horizontal, not {lo:g} to {hi:g}")
+    if mvx >= 0:
+        fails.append(f"{key}: the extra flakes' mean vx is {mvx:+.1f} px/s, not right to left")
+    if left < 0.9:
+        fails.append(f"{key}: only {left:.0%} of the extra flakes move right to left at t = 1.2 s (need 90 %)")
+    return fails
+
+
+def check_streak(name, longest, lo, hi):
+    return [] if lo <= longest <= hi else [f"{name}: the longest streak is {longest:.1f} px, not {lo:g} to {hi:g}"]
+
+
+def check_inputs(paths):
+    return [f"missing input {p}" for p in paths if not Path(p).exists()]
+
+
+def check_help_zones(qz, cb, xz, need=8):
+    """The (?) zone clears the count's ink box and the count's box clears the X zone by at least `need` px (gaps returned too)."""
+    g1, g2 = zone_gap(qz, cb), zone_gap(cb, xz)
+    fails = [f"the (?) zone is {g1} px from the count's box, under {need}"] if g1 < need else []
+    fails += [f"the count's box is {g2} px from the X zone, under {need}"] if g2 < need else []
+    return fails
+
+
+def check_card_fit(name, top, bottom):
+    return [] if top >= 40 and bottom <= 1240 else [f"{name}: the card spans y {top} to {bottom}, outside 40 to 1240"]
+
+
+def check_togo_fit(name, width, size):
+    fails = [f"{name}: the line is {width:.0f} px wide, over 600"] if width > 600 else []
+    fails += [f"{name}: the line shrank to {size} px, under 28"] if size < 28 else []
+    return fails
+
+
+def check_tiles(xs, tw):
+    """The lights' tiles start at x 0, follow each other with no gap and no overlap, and reach x 720."""
+    fails = [f"the first tile starts at x {xs[0]}, not 0"] if xs[0] != 0 else []
+    fails += [f"a gap or overlap of {b - a - tw} px between the tiles at x {a} and {b}" for a, b in zip(xs, xs[1:]) if b - a != tw]
+    fails += [f"the tiles end at x {xs[-1] + tw}, short of 720"] if xs[-1] + tw < W_PX else []
+    return fails
+
+
+def ink_box(im, win, thr=40):
+    """The box (x0, y0, x1, y1; half-open) of the pixels in `win` that differ from the panel fill by more than thr in any channel, or None."""
+    c = im.convert("RGB").crop(win)
+    r, g, b = ImageChops.difference(c, Image.new("RGB", c.size, PANEL_FILL)).split()
+    bb = ImageChops.lighter(ImageChops.lighter(r, g), b).point(lambda v: 255 if v > thr else 0).getbbox()
+    return None if bb is None else (bb[0] + win[0], bb[1] + win[1], bb[2] + win[0], bb[3] + win[1])
+
+
+def cover_version(im, win, kind, ax, ay, tol=4):
+    """Cover a version line with the panel fill over its ink box grown 6 px (in place). `win` is the search window; the line is `kind`
+    ('left' aligned at x `ax` or 'centre' on x `ax`) at y centre `ay`. Fails when the ink does not sit where the line is built, when the
+    grown box leaves the window, or when any ink is left in the window after the cover. Returns (ink box, covered box, failures)."""
+    bb = ink_box(im, win)
+    if bb is None:
+        return None, None, [f"no ink in the window {win}"]
+    fails = []
+    x = bb[0] if kind == "left" else (bb[0] + bb[2]) / 2
+    if abs(x - ax) > tol or abs((bb[1] + bb[3]) / 2 - ay) > 8:
+        fails.append(f"the ink box {bb} is not the version line at {kind} x {ax}, y {ay} (other ink in the window?)")
+    g = (bb[0] - 6, bb[1] - 6, bb[2] + 6, bb[3] + 6)
+    if g[0] <= win[0] or g[1] <= win[1] or g[2] >= win[2] or g[3] >= win[3]:
+        fails.append(f"the covered box {g} reaches the search window {win}")
+    ImageDraw.Draw(im).rectangle((g[0], g[1], g[2] - 1, g[3] - 1), fill=PANEL_FILL + (255,))
+    left = ink_box(im, win)
+    if left is not None:
+        fails.append(f"ink left in the window {win} after the cover, at {left}")
+    return bb, g, fails
+
+
+def s11_caption(sheet, paras, failures, name):
+    """caption() (a light panel y 1196 to 1280, up to 3 lines) that fails when the text would need a 4th line."""
+    n = sum(len(wrap_text(p, Face(False, 20), 664)) for p in paras)
+    if n > 3:
+        failures.append(f"{name}: the caption wraps to {n} lines, over 3")
+    caption(sheet, paras)
+
+
+def togo_line(sheet, s, zh=False):
+    """The T7 "to go" line on `sheet`: bold gold (255, 214, 0) with a 4 px dark halo (26, 11, 20) at the largest size from 48 down (steps of 2)
+    that fits 600 px, centred at (360, 640), over a soft dark pill (the text box grown 24 x 14 px each side, radius 28, 0.75).
+    Returns (size, text width, pill box)."""
+    toks = tokens(s)
+    size = 48
+    while True:
+        face = Face(zh, size, True)
+        w = line_w(face, toks)
+        if w <= 600 or size <= 12:
+            break
+        size -= 2
+    h = face.asc + face.desc
+    cy = 640
+    pill = (int(round(360 - w / 2 - 24)), int(round(cy - h / 2 - 14)), int(round(360 + w / 2 + 24)), int(round(cy + h / 2 + 14)))
+    rrect(sheet, pill, 28, fill=PANEL_FILL, alpha=0.75)
+    base, x0 = cy + (face.asc - face.desc) / 2, 360 - w / 2
+    d, x = ImageDraw.Draw(sheet), 360 - w / 2
+    for kind, t in toks:
+        if kind == "t":
+            d.text((x, base), t, font=face.f, fill=PANEL_FILL + (255,), anchor="ls", stroke_width=4 + (1 if face.fake else 0), stroke_fill=PANEL_FILL + (255,))
+        x += tok_w(face, kind, t)
+    draw_toks(sheet, toks, face, B_GOLD, x0, base)
+    return size, w, pill
+
+
+def book_help_mark(im):
+    """The (?) as the Daily draws it (Daily.js:96-99), mirrored to the book's top left: a circle of radius 24, 3 px white, no fill, a bold 30 px white ?."""
+    ring(im, BOOK_Q[0], BOOK_Q[1], 24, (255, 255, 255), 3, halo=False)
+    ImageDraw.Draw(im).text(BOOK_Q, "?", font=font(30, True), fill=(255, 255, 255), anchor="mm")
+
+
+def lights_art():
+    p = main_checkout() / "meta/advent-previews/art-fit/fairy-lights.png"
+    im = load(p)
+    if im.size != (LIGHTS_ART_W, LIGHTS_ART_H):
+        raise SystemExit(f"FAIL: {p} is {im.size}, not {LIGHTS_ART_W} x {LIGHTS_ART_H}")
+    return im
+
+
+def wire_span(art, x):
+    """The wire's y span (top, bottom; half-open) on art column x: the pixels with alpha >= 128."""
+    a = art.getchannel("A")
+    ys = [y for y in range(art.height) if a.getpixel((x, y)) >= 128]
+    return ys[0], ys[-1] + 1
+
+
+def lights_geometry(scale, wire_top):
+    """(tile w, tile h, tile y, tile x list, seams): repeated left to right from x 0 as a tileSprite would, its y 0 at wire_top - 6 x scale."""
+    tw, th = int(round(LIGHTS_ART_W * scale)), int(round(LIGHTS_ART_H * scale))
+    xs = list(range(0, W_PX, tw))
+    return tw, th, int(round(wire_top - LIGHTS_WIRE_TOP * scale)), xs, xs[1:]
+
+
+def lay_lights(im, art, scale, wire_top):
+    tw, th, y0, xs, _ = lights_geometry(scale, wire_top)
+    tile = art.resize((tw, th), Image.Resampling.LANCZOS)
+    for x in xs:
+        put(im, tile, x, y0)
+
+
+def lights_home(orig, art, scale, wire_top):
+    """The lights over the home shot, then each top button's 96 px disc, the Advent count and the 🎅's red dot back on top of them."""
+    im = orig.copy()
+    lay_lights(im, art, scale, wire_top)
+    disc = _mask((96, 96), lambda d, k: d.ellipse((0, 0, 96 * k - 1, 96 * k - 1), fill=255))
+    for cx, cy in HOME_BUTTONS:
+        im.paste(orig.crop((cx - 48, cy - 48, cx + 48, cy + 48)), (cx - 48, cy - 48), disc)
+    box = (104, 144, 184, 186)  # the count at (+40, +40) of the Advent button: its gold ink and the dark stroke around it
+    r, g, b, _ = orig.crop(box).split()
+    gold = ImageChops.multiply(ImageChops.multiply(r.point(lambda v: 255 if v > 200 else 0), g.point(lambda v: 255 if v > 150 else 0)),
+                               b.point(lambda v: 255 if v < 110 else 0))
+    im.paste(orig.crop(box), box[:2], gold.filter(ImageFilter.MaxFilter(9)))
+    red_dot(im, HOME_BUTTONS[1][0] + 31, HOME_BUTTONS[1][1] - 31)
+    return im
+
+
+def lights_run(orig, art, scale, wire_top):
+    im = orig.copy()
+    lay_lights(im, art, scale, wire_top)
+    for box in RUN_HUD_REGIONS:
+        im.paste(orig.crop(box), box[:2])
+    return im
+
+
+def overview(items, title):
+    """A 3 x 2 grid of thumbnails at 1/3 scale (240 x 427) with a 13 px label under each, on a 720 x 1280 sheet."""
+    s = new_sheet((245, 240, 235))
+    text(s, (360, 14), title, 14, (40, 20, 40), True, "ma")
+    for i, (label, im) in enumerate(items):
+        x, y = 240 * (i % 3), 40 + 460 * (i // 3)
+        s.paste(im.convert("RGB").resize((240, 427), Image.Resampling.LANCZOS), (x, y))
+        text(s, (x + 120, y + 431), label, 13, (40, 20, 40), False, "ma")
+    return s
+
+
+def sheet11(inp, out, manifest, failures):
+    mc = main_checkout()
+    pv = mc / ".claude/plans/17-previews"
+    e_shots = ["E3c-anim-t2.6-en.png", "E2c-book-1224-all24-en.png", "E2d-book-1214-seen-zh.png", "E2b-book-1214-seen-en.png", "E1b-home-1214-unseen14-en.png"]
+    d_shots = ["D2a-popup-1205-p1-5-en.png", "D3a-run-1205-piece-en.png"]
+    miss = check_inputs([pv / "E/shots" / n for n in e_shots] + [pv / "D/shots" / n for n in d_shots]
+                        + [mc / "meta/advent-previews/art-fit/fairy-lights.png", inp.art / "poop-fart-santa1.png", inp.art / "poop-fart-santa2.png"])
+    if miss:
+        raise SystemExit("FAIL: sheet 11: " + "; ".join(miss))
+    shots = {}
+    wrote = []
+
+    def save(im, name, srcs):
+        failures.extend(check_still_size(im, name[:-4]))
+        sheet_save(im, out, name, srcs, manifest)
+        shots[name[:-4]] = im
+        wrote.append(name)
+
+    print("sheet 11: Stage 1c tweaks")
+    # ---- 11a, 11b, 11d: streaks
+    base_srcs = ["src/config.js snow line", "src/ui/snowfall.js rules", "run frame as sheet 3 (villi, ceiling, ground, pipe, pipe-snow, hatted poop)"]
+
+    def streak_run(st, poop, tau_fn, soft, fade_fn, head_fn, name, srcs):
+        base = storm_base(inp, 1, poop)
+        lay, longest = streak_layer(st, STORM_T, tau_fn(STORM_T), soft, fade_fn(STORM_T))
+        times = [f * GIF_EVERY * STORM_DT for f in range(GIF_FRAMES)]
+        per = [streak_layer(st, t, tau_fn(t), soft, fade_fn(t)) for t in times]
+        run_max = max(m for _, m in per)
+        head = top_panel(head_fn(longest, run_max))
+        img = base.copy()
+        img.alpha_composite(lay)
+        img.alpha_composite(head)
+        save(img, name + ".png", srcs)
+        frames = []
+        for lay_f, _ in per:
+            im = base.copy()
+            im.alpha_composite(lay_f)
+            im.alpha_composite(head)
+            frames.append(im.convert("RGB").resize(GIF_SIZE, Image.Resampling.LANCZOS))
+        gif_save(frames, out, name + ".gif", srcs + ["level 1, no trails, 15 fps, 36 frames"], manifest, failures)
+        wrote.append(name + ".gif")
+        return longest, run_max
+
+    ramps = f"on at {FART_ON:g} s, off at {FART_OFF:g} s, {FART_RAMP:g} s ramps"
+    for tag, spec, tau, soft, ttl, was in (("11a", S11_FART_A, TAU_A, False, "Sheet 11a, the fart, streaked (T3)", 420), ("11b", S11_FART_B, TAU_B, True, "Sheet 11b, the super fart (T4)", 420)):
+        name = "sheet11a-fart-L1" if tag == "11a" else "sheet11b-superfart-L1"
+        st = simulate(spec)
+        longest, run_max = streak_run(st, spec["poop"], lambda t, tau=tau: tau, soft, lambda t: 0.0, lambda lg, rm, spec=spec, tau=tau, soft=soft, ttl=ttl, was=was: [
+            f"{ttl}, level 1 ({LEVEL_NAMES[0]}), t = {STORM_T:g} s",
+            f"F {spec['F']:g} px/s" + (f" (was {was})" if tag == "11a" else "") + f", tau {tau:g} s ({ramps}); flakes under {STREAK_MIN_V:g} px/s stay round",
+            f"longest streak drawn: {lg:.1f} px at t = 1.2 s (|v| x tau; {rm:.1f} px over the run)" + ("; each streak twice: 1.6 x height, alpha 0.25, behind it" if soft else ""),
+            "animation: t = 0 to 2.4 s, 15 fps, no trails, poop on " + spec["poop"]], name, base_srcs + [spec["poop"]])
+        lo, hi = STREAK_RANGE[tag]
+        failures += check_streak(tag, longest, lo, hi)
+        print(f"  {tag}: F {spec['F']:g}, tau {tau:g}: longest streak {longest:.1f} px at t = 1.2 s (limit {lo:g} to {hi:g}); {run_max:.1f} px over the run")
+    # ---- 11c: the headwind
+    sims = {}
+    for key, spec in HEADWIND.items():
+        failures += [f"{key}: {m}" for m in check_heads(spec)]
+        st = sims[key] = simulate(spec)
+        ang, left, mvx, mvy = headwind_stats(st)
+        lo, hi = HEAD_RANGE[key]
+        failures += check_headwind(st, key, lo, hi)
+        flake, _ = flake_layers(st, STORM_T, False)
+        cov = coverage(flake, inp)
+        cen = vortex_centres(spec)
+        print(f"  11c {key}: G {abs(spec['G']):.1f} px/s right to left ({spec['deg']:g} deg), mean angle {ang:.1f} deg below the horizontal (limit {lo:g} to {hi:g}), "
+              f"mean v ({mvx:+.1f}, {mvy:+.1f}) px/s, {left:.0%} of the extra flakes move right to left at 1.2 s; heads {[(round(x), round(y)) for x, y in cen]}; "
+              f"coverage gaps {cov[0]:.1f} %, poop {cov[1]:.1f} %")
+        n = int(SNOW["count"]) + spec["extra"]
+        head_lines = lambda lvl: [
+            f"Sheet 11c, the headwind {key} (T5), level {lvl} ({LEVEL_NAMES[(lvl - 1) % 6]}), t = {STORM_T:g} s",
+            f"{n} flakes ({int(SNOW['count'])} + {spec['extra']}); fall {SNOW['minSpeed'] * 2:g} to {SNOW['maxSpeed'] * 2:g} px/s; px {spec['px'][0]:g} to {spec['px'][1]:g}; "
+            f"wind right to left {abs(spec['G']):.0f} px/s +-{spec['gust']:.0%}; K {spec['K']}, R {spec['R']:g}, S {spec['S']:g}, pull {spec['pull']:g}",
+            f"measured mean flake angle: {ang:.1f} deg below the horizontal (the extra flakes, whole run); {left:.0%} move right to left at 1.2 s; no streaks",
+            f"coverage (flakes only, alpha >= 128): pipe gaps {cov[0]:.1f} %, poop hitbox {cov[1]:.1f} %"]
+        srcs = base_srcs + [f"headwind {key}"]
+        for lvl in (1, 7):
+            img = storm_base(inp, lvl).copy()
+            img.alpha_composite(flake)
+            img.alpha_composite(top_panel(head_lines(lvl)))
+            save(img, f"sheet11c-storm-{key}-L{lvl}.png", srcs)
+        base, head = storm_base(inp, 1), top_panel(head_lines(1))
+        frames = []
+        for f in range(GIF_FRAMES):
+            fl, _ = flake_layers(st, f * GIF_EVERY * STORM_DT, False)
+            im = base.copy()
+            im.alpha_composite(fl)
+            im.alpha_composite(head)
+            frames.append(im.convert("RGB").resize(GIF_SIZE, Image.Resampling.LANCZOS))
+        gif_save(frames, out, f"sheet11c-storm-{key}-L1.gif", srcs + ["level 1, no trails, 15 fps, 36 frames"], manifest, failures)
+        wrote.append(f"sheet11c-storm-{key}-L1.gif")
+    # ---- 11d: a fart inside the H1 storm
+    h1 = HEADWIND["H1"]
+    st_d = simulate(h1, light_wind=lambda t, w: (1 - fart_ramp(t)) * w + fart_ramp(t) * (-F_A))
+    longest, run_max = streak_run(st_d, "poop-fart-santa1", lambda t: TAU_A * fart_ramp(t), False, fart_ramp, lambda lg, rm: [
+        f"Sheet 11d, a fart inside the storm (T3 in T5), level 1 ({LEVEL_NAMES[0]}), t = {STORM_T:g} s",
+        f"H1 storm; fart {ramps}: extra flakes fade to alpha 0, light flakes' wind eases to F {F_A:g} px/s (tau {TAU_A:g} s x ramp)",
+        f"longest streak drawn: {lg:.1f} px at t = 1.2 s; {rm:.1f} px over the run; the storm comes back over the last {FART_RAMP:g} s",
+        "animation: t = 0 to 2.4 s, 15 fps, no trails"], "sheet11d-fart-in-storm-L1", base_srcs + ["headwind H1 + fart 11a"])
+    print(f"  11d: H1 storm with the fart: longest streak {longest:.1f} px at t = 1.2 s; {run_max:.1f} px over the run")
+    # ---- 11e to 11h: the "to go" line
+    left = S11_TOTAL - S11_FOUND
+    held = f"In the game it {TOGO_HELD}."
+    for name, shot, s, zh, cap in (
+            ("sheet11e-togo-a-en.png", "E3c-anim-t2.6-en.png", f"{left} of {S11_TOTAL} to go!", False, f'"To go", option a: "{left} of {S11_TOTAL} to go!" (his words).'),
+            ("sheet11f-togo-b-en.png", "E3c-anim-t2.6-en.png", f"{S11_FOUND} found · {left} to go!", False, f'"To go", option b: "{S11_FOUND} found · {left} to go!" (both numbers).'),
+            ("sheet11g-togo-all24-en.png", "E2c-book-1224-all24-en.png", f"All {S11_TOTAL} found! \U0001F384", False, f'"To go", all {S11_TOTAL} found: "All {S11_TOTAL} found! \U0001F384".'),
+            ("sheet11h-togo-zh.png", "E2d-book-1214-seen-zh.png", f"还剩 {left} 块！", True, f'"To go" (zh-Hans, draft; the line itself is on the sheet).')):
+        im = s10_shot("E", shot)
+        size, w, pill = togo_line(im, s, zh)
+        failures += check_togo_fit(name, w, size)
+        print(f"  {name[:-4]}: {size} px, text {w:.0f} px wide, pill {pill}")
+        s11_caption(im, [cap, held], failures, name)
+        save(im, name, [f"E/shots/{shot}"])
+    # ---- 11i to 11k: the book's (?) and its card
+    e2b = s10_shot("E", "E2b-book-1214-seen-en.png")
+    book = e2b.copy()
+    vb, vg, fs = cover_version(book, VERSION_WIN, "left", 36, 128)
+    failures += [f"11i: {m}" for m in fs]
+    cb = ink_box(book, (236, 96, 620, 160))
+    book_help_mark(book)
+    qz, xz = zone_at(BOOK_Q), zone_at(BOOK_X)
+    failures += [f"11i: {m}" for m in check_help_zones(qz, cb, xz)]
+    g1, g2 = zone_gap(qz, cb), zone_gap(cb, xz)
+    zone_outline(book, qz, ZONE_YELLOW)
+    zone_outline(book, xz, ZONE_WHITE)
+    zone_outline(book, cb, ZONE_CYAN)
+    print(f"  11i: version line ink {vb}, covered {vg}; (?) zone {qz}, count box {cb}, X zone {xz}; gap (?) to count {g1} px, count to X {g2} px")
+    s11_caption(book, ["The (?) at (56, 128) mirrors the X; version line gone (T15). Zones 88 x 88: (?) yellow, X white; count's box cyan.",
+                       f"Gaps: (?) zone to count {g1} px, count to X zone {g2} px."], failures, "11i")
+    save(book, "sheet11i-book-help-btn-en.png", ["E/shots/E2b-book-1214-seen-en.png"])
+    res = book_res()
+    for name, shot, zh, body in (("sheet11j-book-help-en.png", "E2b-book-1214-seen-en.png", False, HELP11_EN), ("sheet11k-book-help-zh.png", "E2d-book-1214-seen-zh.png", True, HELP11_ZH)):
+        bg = s10_shot("E", shot)
+        vb2, vg2, fs2 = cover_version(bg, VERSION_WIN, "left", 36, 128)
+        failures += [f"{name}: {m}" for m in fs2]
+        book_help_mark(bg)
+        card, top, bottom = help_card(res, bg, zh, body)
+        failures += check_card_fit(name, top, bottom)
+        print(f"  {name[:-4]}: card y {top} to {bottom} (x 80 to 640), height {bottom - top}; version line ink {vb2}")
+        s11_caption(card, [f"The book's help card ({'zh-Hans' if zh else 'en'}) as the Daily builds it (Daily.js:232-250), over the dimmed book: draft text for your accept."], failures, name)
+        save(card, name, [f"E/shots/{shot}", "src/scenes/Daily.js (openHelp)"])
+    # ---- 11l: the Daily window without its version line
+    daily = s10_shot("D", "D2a-popup-1205-p1-5-en.png")
+    vb3, vg3, fs3 = cover_version(daily, DAILY_VERSION_WIN, "centre", 360, 1020)
+    failures += [f"11l: {m}" for m in fs3]
+    print(f"  11l: Daily version line ink {vb3}, covered {vg3}")
+    s11_caption(daily, ["Daily without its version line (T15). Kept in: About, How to play, Settings.",
+                        "Dropped from: Daily, Leaderboard, Stats / profile, Language, Feedback, the Advent book, the \U0001F385 picker."], failures, "11l")
+    save(daily, "sheet11l-daily-no-version-en.png", ["D/shots/D2a-popup-1205-p1-5-en.png"])
+    # ---- 11m to 11r: the fairy lights
+    art = lights_art()
+    (lt, lb), (rt, rb) = wire_span(art, 0), wire_span(art, LIGHTS_ART_W - 1)
+    home_orig, run_orig = s10_shot("E", "E1b-home-1214-unseen14-en.png"), s10_shot("D", "D3a-run-1205-piece-en.png")
+    print(f"  fairy-lights.png {art.size[0]} x {art.size[1]}: the wire meets the left edge at y {lt} to {lb - 1} and the right at y {rt} to {rb - 1}")
+    for i, (lab, scale, wt) in enumerate(LIGHTS):
+        tw, th, y0, xs, seams = lights_geometry(scale, wt)
+        failures += [f"lights {lab}: {m}" for m in check_tiles(xs, tw)]
+        step = ((rt + rb) / 2 - (lt + lb) / 2) * scale
+        print(f"  lights {lab}: scale {scale:g}, wire top y {wt}, tile {tw} x {th} at y {y0}, {len(xs)} tiles across 720 px ({W_PX / tw:.2f} widths), "
+              f"seams at x {seams if seams else 'none'}, wire step at the seam {step:+.2f} px")
+        seam_txt = f"seam at x {', '.join(str(x) for x in seams)} (tick)" if seams else "no seam in the field"
+        cap = [f"Fairy lights {lab}: scale {scale:g}, wire top y {wt}, tile {tw} x {th} px, {len(xs)} tile{'s' if len(xs) != 1 else ''} across 720 px.",
+               f"{seam_txt[0].upper() + seam_txt[1:]}. Wire step {step:+.2f} px (1c.9 evens it)."]
+        for kind, orig, fn, letter, src in (("home", home_orig, lights_home, "mno"[i], "E/shots/E1b-home-1214-unseen14-en.png"),
+                                            ("run", run_orig, lights_run, "pqr"[i], "D/shots/D3a-run-1205-piece-en.png")):
+            im = fn(orig, art, scale, wt)
+            nm = f"sheet11{letter}-lights-{lab}-{kind}.png"
+            s11_caption(im, cap, failures, nm)
+            d = ImageDraw.Draw(im)
+            for x in seams:
+                d.line((x, 1197, x, 1203), fill=(200, 30, 80), width=2)
+            save(im, nm, [src, "meta/advent-previews/art-fit/fairy-lights.png"])
+    # ---- the overviews
+    ov = [("sheet11-overview-1.png", "Sheet 11, overview 1 of 3: streaks and the headwind (thumbnails at 1/3)",
+           [("11a fart L1", "sheet11a-fart-L1"), ("11b super fart L1", "sheet11b-superfart-L1"), ("11c H1 L1", "sheet11c-storm-H1-L1"),
+            ("11c H2 L1", "sheet11c-storm-H2-L1"), ("11c H1 L7", "sheet11c-storm-H1-L7"), ("11d fart in storm", "sheet11d-fart-in-storm-L1")]),
+          ("sheet11-overview-2.png", "Sheet 11, overview 2 of 3: the to go line, the book's (?) and card (thumbnails at 1/3)",
+           [("11e to go a", "sheet11e-togo-a-en"), ("11f to go b", "sheet11f-togo-b-en"), ("11g all 24", "sheet11g-togo-all24-en"),
+            ("11i book (?)", "sheet11i-book-help-btn-en"), ("11j help card", "sheet11j-book-help-en"), ("11l Daily, no version", "sheet11l-daily-no-version-en")]),
+          ("sheet11-overview-3.png", "Sheet 11, overview 3 of 3: the fairy lights (thumbnails at 1/3)",
+           [(f"11{'mnopqr'[3 * r + i]} lights {LIGHTS[i][0]} {'home' if r == 0 else 'run'}", f"sheet11{'mnopqr'[3 * r + i]}-lights-{LIGHTS[i][0]}-{'home' if r == 0 else 'run'}") for r in (0, 1) for i in range(3)])]
+    for name, title, items in ov:
+        sheet = overview([(lab, shots[key]) for lab, key in items], title)
+        save(sheet, name, ["the sheet 11 stills above"])
+    pngs = [n for n in wrote if n.endswith(".png")]
+    gifs = [n for n in wrote if n.endswith(".gif")]
+    if len(pngs) != 24 or len(gifs) != 5:
+        failures.append(f"sheet 11 wrote {len(pngs)} PNGs and {len(gifs)} GIFs, expected 24 and 5")
+    print(f"  wrote {len(pngs)} PNGs and {len(gifs)} GIFs; fonts used: " + "; ".join(sorted(FONTS_USED)))
+
+
+def sheet11_selftest(inp, missed):
+    """Step 1c.3's negative controls: each broken input must be rejected by the check that guards it."""
+    def report(what, fails):
+        print(f"selftest: {what}: {'REJECTED' if fails else 'ACCEPTED (check is blind!)'}" + (f" ({fails[0]})" if fails else ""))
+        if not fails:
+            missed.append(what)
+
+    h1, h2 = HEADWIND["H1"], HEADWIND["H2"]
+    for key, spec in HEADWIND.items():
+        real = check_heads(spec) + check_headwind(simulate(spec), key, *HEAD_RANGE[key])
+        if real:  # a real finding of the model (the build run fails on it too), not a blind check
+            print(f"selftest: NOTE the real {key} headwind fails its own check: {real[0]}")
+    report("11c heads: K = 30 (they cannot be 2R apart)", check_heads(dict(h1, K=30)))
+    report("H1 at twice the wind (too flat: about 14 deg)", check_headwind(simulate(dict(h1, G=2 * h1["G"])), "H1", *HEAD_RANGE["H1"]))
+    report("H2 at half the wind (too steep: about 35 deg)", check_headwind(simulate(dict(h2, G=h2["G"] / 2)), "H2", *HEAD_RANGE["H2"]))
+    report("H1 blowing left to right", check_headwind(simulate(dict(h1, G=-h1["G"])), "H1", *HEAD_RANGE["H1"]))
+    for tag, spec, tau in (("11a", S11_FART_A, TAU_A), ("11b", S11_FART_B, TAU_B)):
+        st = simulate(spec)
+        real = check_streak(tag, streak_layer(st, STORM_T, tau, tag == "11b")[1], *STREAK_RANGE[tag])
+        if real:
+            print(f"selftest: NOTE the real {tag} streaks fail their own check: {real[0]}")
+        report(f"{tag} with tau doubled", check_streak(tag, streak_layer(st, STORM_T, 2 * tau, tag == "11b")[1], *STREAK_RANGE[tag]))
+        report(f"{tag} with no streak (tau 0)", check_streak(tag, streak_layer(st, STORM_T, 0.0, tag == "11b")[1], *STREAK_RANGE[tag]))
+    pv = main_checkout() / ".claude/plans/17-previews"
+    e2b = s10_shot("E", "E2b-book-1214-seen-en.png")
+    fs = cover_version(e2b.copy(), VERSION_WIN, "left", 36, 128)[2] + cover_version(s10_shot("D", "D2a-popup-1205-p1-5-en.png"), DAILY_VERSION_WIN, "centre", 360, 1020)[2]
+    if fs:
+        print(f"selftest: the real version lines already fail: {fs[0]}")
+        missed.append("real version lines fail")
+    stray = e2b.copy()
+    ImageDraw.Draw(stray).rectangle((26, 102, 29, 105), fill=(255, 255, 255, 255))  # other ink in the window, left of the line
+    report("a stray white mark in the book's version window", cover_version(stray, VERSION_WIN, "left", 36, 128)[2])
+    stray = s10_shot("D", "D2a-popup-1205-p1-5-en.png")
+    ImageDraw.Draw(stray).rectangle((470, 1040, 475, 1044), fill=(255, 255, 255, 255))  # other ink in the Daily window, right of the line
+    report("a stray white mark in the Daily's version window", cover_version(stray, DAILY_VERSION_WIN, "centre", 360, 1020)[2])
+    cb = ink_box(e2b, (236, 96, 620, 160))
+    qz, xz = zone_at(BOOK_Q), zone_at(BOOK_X)
+    if check_help_zones(qz, cb, xz):
+        print(f"selftest: the real (?) zones already fail: {check_help_zones(qz, cb, xz)[0]}")
+        missed.append("real (?) zones fail")
+    report("the (?) moved 150 px right into the count", check_help_zones(zone_at((BOOK_Q[0] + 150, BOOK_Q[1])), cb, xz))
+    report("the X zone moved 200 px left into the count", check_help_zones(qz, cb, zone_at((BOOK_X[0] - 200, BOOK_X[1]))))
+    res = book_res()
+    for zh, body in ((False, HELP11_EN), (True, HELP11_ZH)):
+        _, top, bottom = help_card(res, e2b, zh, body)
+        if check_card_fit("card", top, bottom):
+            print(f"selftest: the real {'zh' if zh else 'en'} card already fails: {check_card_fit('card', top, bottom)[0]}")
+            missed.append("real card fails")
+    _, top, bottom = help_card(res, e2b, False, (HELP11_EN + "\n\n") * 3)
+    report("a help card with three times the text", check_card_fit("card", top, bottom))
+    report("a to go line 650 px wide at 48 px", check_togo_fit("line", 650.0, 48))
+    report("a to go line that shrank to 24 px", check_togo_fit("line", 560.0, 24))
+    tw = lights_geometry(0.5, 104)[0]
+    report("lights tiles with a 4 px gap", check_tiles([0, tw + 4], tw))
+    report("lights tiles that stop at x 600", check_tiles([0, 300], 300))
+    report("lights tiles that start at x 4", check_tiles([4, 4 + tw], tw))
+    report("a missing input file", check_inputs([pv / "E/shots/no-such-shot.png"]))
 
 
 # ---------------------------------------------------------------- the manifest and the driver
@@ -2438,6 +3009,7 @@ def selftest(inp):
     storm_selftest(inp, missed)
     book_selftest(missed)
     sheet10_selftest(missed)
+    sheet11_selftest(inp, missed)
     if missed:
         print("selftest: FAILED to catch:", ", ".join(missed))
         return 2
@@ -2448,7 +3020,7 @@ def selftest(inp):
 def main():
     main_co = main_checkout()
     ap = argparse.ArgumentParser(description="Gate A mock-up sheets for the December art (plan 17, 1.4, 1.5, 2.6a, 2.14 and 1b.1)")
-    ap.add_argument("--sheets", default="all", help="comma list of 1, 2, 3, 7, pipes, 4, 5a, 5, 9, 10 or all (all = 1, 2, 3, 7, pipes)")
+    ap.add_argument("--sheets", default="all", help="comma list of 1, 2, 3, 7, pipes, 4, 5a, 5, 9, 10, 11 or all (all = 1, 2, 3, 7, pipes)")
     ap.add_argument("--art", default=str(main_co / "meta/advent-previews/art-fit"))
     ap.add_argument("--guides", default=str(main_co / "meta/advent-previews/art-guides"))
     ap.add_argument("--out", default=str(main_co / ".claude/plans/17-previews/gateA"))
@@ -2460,7 +3032,7 @@ def main():
     if args.selftest:
         sys.exit(selftest(inp))
     wanted = {"1", "2", "3", "7", "pipes"} if args.sheets == "all" else set(args.sheets.split(","))
-    unknown = wanted - {"1", "2", "3", "7", "pipes", "4", "5a", "5", "9", "10"}
+    unknown = wanted - {"1", "2", "3", "7", "pipes", "4", "5a", "5", "9", "10", "11"}
     if unknown:
         raise SystemExit(f"unknown sheet(s): {', '.join(sorted(unknown))}")
     manifest, failures = [], []
@@ -2484,6 +3056,8 @@ def main():
         sheet5(inp, args.out, manifest, failures)
     if "10" in wanted:
         sheet10(inp, args.out, manifest, failures)
+    if "11" in wanted:
+        sheet11(inp, args.out, manifest, failures)
     for m in manifest:
         if m["size"] != m.get("expect", (W_PX, H_PX)):
             failures.append(f"{m['sheet']} is {m['size']}, not {m.get('expect', (W_PX, H_PX))}")
