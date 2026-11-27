@@ -543,6 +543,7 @@ export const TUNING = {
     countdownPx: 30, // px font of the countdown line under the title (1–25 Dec; readyLayout's countdown box)
     // Home snowfall (src/ui/snowfall.js): white dots drifting down the ready screen; none under reduced motion (D6).
     snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9, windMin: 0.7, windMax: 1.3 }, // windMin / windMax: each flake's share of a wind (2.7), drawn once
+    santaDot: { radius: 9, color: 0xff3b30, ring: 2, ringColor: 0xffffff, homeDx: 31, homeDy: -31, titleInset: 3 }, // the red dot on the 🎅 (1b.2e; sheet 10): home's on the rim at 45°, the title's on the glyph's top-right corner
     snowCap: { ox: -6.5, oy: -14.5 }, // px from a bottom pipe's cap top-left to the snow layer's top-left (process_art's --anchor report)
     // Advent pieces (Stage 2, 2.6): piece k comes out on k Dec, up to `count` (submit_advent_piece's 24); a December Daily run
     // offers one, rolled from the pieces out that the device has not found (today's weighs todayWeight, each other 1), in the
@@ -588,9 +589,10 @@ export const TUNING = {
     // December's sounds (2.7a; Michael's Pixabay clips, CREDITS.md): the twinkle when a piece is caught, and the blizzard
     // looped under a storm, faded in from the banner (blizzardFadeMs) and out as the storm ends. Levels for his listen check.
     sound: { foundVolume: 0.6, blizzardVolume: 0.35, blizzardFadeMs: 1200, addVolume: 0.7, lockVolume: 0.8 }, // addVolume / lockVolume: the book's chimes and click (2.15a)
-    // The 🎅 that stands in for the 🌞 all December, a new one each time the home screen shows (pickSanta):
-    // Santa, Mrs. Claus and Mx Claus in the five skin tones and plain. The first is the fallback; variants a
-    // device cannot draw as one glyph are dropped at the first pick (supportedSantas). Drop the plain three here.
+    // The 🎅 that stands in for the 🌞 all December: Santa, Mrs. Claus and Mx Claus, plain and in the five skin
+    // tones. A visit picks from the plain three (plainSantas, pickSanta) unless the player saved one in the picker,
+    // which offers every variant this device draws as one glyph (supportedSantas). Keep the plain three: they are
+    // the changing 🎅's pool, and the first is the fallback.
     santas: [
       '\u{1F385}', '\u{1F385}\u{1F3FB}', '\u{1F385}\u{1F3FC}', '\u{1F385}\u{1F3FD}', '\u{1F385}\u{1F3FE}', '\u{1F385}\u{1F3FF}',
       '\u{1F936}', '\u{1F936}\u{1F3FB}', '\u{1F936}\u{1F3FC}', '\u{1F936}\u{1F3FD}', '\u{1F936}\u{1F3FE}', '\u{1F936}\u{1F3FF}',
@@ -673,6 +675,8 @@ export const LEADERBOARD = {
   racePostsKey: 'flappyPoop.racePosts', // localStorage key for split-screen race scores (🏆, plan 39 2.5) the board has not confirmed yet (submit_score)
   racePostQueueMax: 20, // race scores kept for a later post; the oldest goes first when full
   santaKey: 'flappyPoop.santa', // localStorage key for the last 🎅 the home screen showed (plan 17), so a reload never repeats it
+  santaChoiceKey: 'flappyPoop.santaChoice', // the 🎅 a player saved in the picker (plan 17, 1b.2e): this device's, kept by Clear user
+  santaDotKey: 'flappyPoop.santaDot', // true once the picker has been opened: the red dot on the 🎅 is gone for good (1b.2e)
   dailyKey: 'flappyPoop.daily', // localStorage key for this device's Daily Dump (🌞) attempt: claimed at the start, rewritten as the score grows
   dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
   dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full

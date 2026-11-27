@@ -34,6 +34,7 @@ import {
   countdownLine,
   pickSanta,
   supportedSantas,
+  plainSantas,
   dailySeed,
   dailyLevel,
   dailyRunStart,
@@ -625,6 +626,10 @@ export class Play extends Phaser.Scene {
       this.dailySunTween = this.tweens.add({ targets: this.dailySun, scale: T.dailyPulseScale, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs, ease: 'Sine.easeInOut' });
       // The Daily Dump streak, a small number at the circle's bottom right (plan 34: refreshStreakMarks).
       this.dailyStreakText = this.streakMark(b.x + T.streakMarkPx.dx, b.y + T.streakMarkPx.dy);
+      // The red dot (plan 17, 1b.2e) on the rim at 45°, top right, clear of the streak number at the bottom right.
+      const dot = T.advent.santaDot;
+      this.santaDot = this.add.circle(b.x + dot.homeDx, b.y + dot.homeDy, dot.radius, dot.color).setStrokeStyle(dot.ring, dot.ringColor).setDepth(22).setVisible(false);
+      this.refreshSantaDot(); // the ready UI may already be up (a December page load)
     }
     this.refreshDailyPrompt();
     this.refreshStreakMarks();
@@ -3336,13 +3341,16 @@ export class Play extends Phaser.Scene {
    * from a run), never the one shown last, which is kept in localStorage (LEADERBOARD.santaKey; the registry when
    * storage is blocked, so a reload there can repeat it). Variants this device cannot draw are dropped once
    * (supportedSantas, registry 'santas'). Off season nothing is picked. Math.random, never the course RNG.
+   * 1b.2e (D17, Michael 26 Nov): a 🎅 saved in the picker shows every visit while this device draws it; otherwise the
+   * pick is from the plain 🎅 🤶 🧑‍🎄 only (plainSantas), the picker keeping every variant.
    */
   pickVisitSanta() {
     if (!adventSeason(dailyDay(this.registry), T)) return;
-    let santas = this.registry.get('santas');
-    if (!santas) {
-      santas = supportedSantas(T.advent.santas, emojiMeasure());
-      this.registry.set('santas', santas);
+    const santas = this.offeredSantas();
+    const chosen = this.santaChoice();
+    if (chosen && santas.includes(chosen)) {
+      this.registry.set('santa', chosen);
+      return;
     }
     const store = browserStorage();
     let last = this.registry.get('santa') ?? null;
@@ -3351,13 +3359,75 @@ export class Play extends Phaser.Scene {
     } catch {
       // storage blocked: the registry's pick stands in
     }
-    const santa = pickSanta(Math.random, last, santas);
+    const santa = pickSanta(Math.random, last, plainSantas(santas));
     this.registry.set('santa', santa);
     try {
       store?.setItem(LEADERBOARD.santaKey, santa);
     } catch {
       // storage blocked: kept for this page only
     }
+  }
+
+  /** Every 🎅 this device draws as one glyph (supportedSantas, measured once a page): the picker's list. */
+  offeredSantas() {
+    let santas = this.registry.get('santas');
+    if (!santas) {
+      santas = supportedSantas(T.advent.santas, emojiMeasure());
+      this.registry.set('santas', santas);
+    }
+    return santas;
+  }
+
+  /** The picker's two one-value stores (1b.2e), this device's: the saved 🎅 and the red dot's seen flag. Clear user keeps both. */
+  santaStores() {
+    this.santaStoresRef ??= {
+      choice: createJsonStore(browserStorage(), LEADERBOARD.santaChoiceKey, (v) => (typeof v === 'string' && v ? v : null)),
+      seen: createJsonStore(browserStorage(), LEADERBOARD.santaDotKey, (v) => v === true),
+    };
+    return this.santaStoresRef;
+  }
+
+  /** The 🎅 saved in the picker, or null (the changing 🎅). */
+  santaChoice() {
+    return this.santaStores().choice.read();
+  }
+
+  /** Save `glyph` (one this device offers) as the player's 🎅 and show it at once on the home button and the 🌞 popup. */
+  saveSantaChoice(glyph) {
+    if (!this.offeredSantas().includes(glyph)) return;
+    this.santaStores().choice.write(glyph);
+    this.registry.set('santa', glyph);
+    this.applySanta();
+  }
+
+  /** The title 🎅 opens the picker: in season, when this device draws two or more variants (else there is nothing to choose). */
+  santaTappable() {
+    return adventSeason(dailyDay(this.registry), T) && this.offeredSantas().length > 1;
+  }
+
+  /** The red dot (Michael, 26 Nov): on the home 🎅 and the popup's title 🎅 until the picker has been opened once. */
+  santaDotShown() {
+    return this.santaTappable() && !this.santaStores().seen.read();
+  }
+
+  /** The picker opened: the red dots go, for good on this device. */
+  markSantaSeen() {
+    this.santaStores().seen.write(true);
+    this.refreshSantaDot();
+    this.scene?.get?.('Daily')?.refreshSantaDot?.();
+  }
+
+  /** One redraw for a new 🎅 (M1): the home button, then every line the 🌞 popup drew with it. No restart: verify() would run again. */
+  applySanta() {
+    const glyph = this.dailyGlyph();
+    if (this.dailySun?.active) this.dailySun.setText(glyph);
+    if (this.scene?.isActive?.('Daily')) this.scene.get('Daily')?.setGlyph?.(glyph);
+    this.refreshSantaDot();
+  }
+
+  /** The home 🎅's red dot: with the ready UI, never in a match. */
+  refreshSantaDot() {
+    this.santaDot?.setVisible?.(Boolean(this.readyUiShown) && !this.match && this.santaDotShown());
   }
 
   /** The Daily Dump's glyph now: the 🌞, or this visit's 🎅 in December (the decorations' clock, dailyDay). */
@@ -3561,6 +3631,11 @@ export class Play extends Phaser.Scene {
       case 'openAdvent': // the Advent book (plan 17, 2.15)
         if (!this.scene.isActive('Advent')) this.scene.launch('Advent');
         this.scene.bringToTop('Advent');
+        break;
+      case 'openSantaPicker': // the 🎅 picker over the 🌞 popup (plan 17, 1b.2e); opening it takes the red dots away
+        this.markSantaSeen();
+        if (!this.scene.isActive('SantaPicker')) this.scene.launch('SantaPicker');
+        this.scene.bringToTop('SantaPicker');
         break;
       case 'openStats': {
         if (this.overlayPause(result)) this.pauseRun();
@@ -4559,6 +4634,7 @@ export class Play extends Phaser.Scene {
     }
     this.countdownImage?.setVisible(Boolean(img) && this.readyUiShown);
     this.refreshAdventButton(this.match ? null : day); // also after December, while last season's book holds a piece
+    this.refreshSantaDot();
     if (season && !this.snowfall) this.snowfall = createSnowfall(this, { x: 0, y: 0, width: this.fieldW, height: GAME_HEIGHT }, T.advent.snow);
     if (!season && this.snowfall) {
       this.snowfall.destroy();

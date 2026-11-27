@@ -2103,11 +2103,11 @@ export function chromeShown({ state, launching = false, quizOpen = false, shopOp
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'respawn'|'dead'} state ('respawn': a match half between a crash and its restart; pauses like 'playing', ignores taps)
- * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'|'stats'|'advent'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'|'stats'|'advent'|'santapick'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
  * @param {boolean} stackedUnder true when Feedback, What's new or a profile sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'advent'|'shop'|'quiz'|'tap'|'esc'|'close'} input ('advent': the Advent book, ready screen or over the 🌞 popup; 'shop': the 💰 button in a level break; 'quiz': the 📚 pill in an education run's level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'advent'|'santapick'|'shop'|'quiz'|'tap'|'esc'|'close'} input ('advent': the Advent book, ready screen or over the 🌞 popup; 'santapick': the 🎅 picker, over the 🌞 popup only; 'shop': the 💰 button in a level break; 'quiz': the 📚 pill in an education run's level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @param {boolean} shop true while this half's level-break shop panel is open
  * @param {boolean} breaking true while this half is in its own level break (the only place the shop opens)
@@ -2145,6 +2145,9 @@ export function chromeIntent({
       if (overlay === 'advent') {
         return { do: 'closeTop', armResumeLockout: !stackedUnder }; // back to the 🌞 popup when it opened from its 🧩 line
       }
+      if (overlay === 'santapick') {
+        return { do: 'closeTop', armResumeLockout: !stackedUnder }; // back to the 🌞 popup it opened from
+      }
       return { do: 'closeTop', armResumeLockout: !(overlay === 'about' && stackedSettings) };
     }
     if (input === 'feedback') return { do: 'openFeedback', pause: false };
@@ -2154,6 +2157,8 @@ export function chromeIntent({
     if (input === 'stats' && (overlay === 'leaderboard' || overlay === 'daily')) return { do: 'openStats', pause: false };
     // The Advent book (plan 17, 2.15) opens over the 🌞 popup from its 🧩 line.
     if (input === 'advent' && overlay === 'daily') return { do: 'openAdvent', pause: false };
+    // The 🎅 picker (plan 17, 1b.2e) opens over the 🌞 popup from its title 🎅, and only there.
+    if (input === 'santapick' && overlay === 'daily') return { do: 'openSantaPicker', pause: false };
     // A version line: What's new opens over any overlay (its own version links restart it instead).
     if (input === 'changelog' && overlay !== 'changelog') return { do: 'openChangelog', pause: false };
     return { do: 'ignore' };
@@ -2710,6 +2715,16 @@ export function supportedSantas(santas, measure) {
   if (!(base > 0)) return santas.slice();
   const ok = santas.filter((s) => measure(s) <= base * 1.25);
   return ok.length ? ok : [santas[0]];
+}
+
+/**
+ * The changing 🎅's pool (plan 17, 1b.2e; Michael 26 Nov): the variants with no skin-tone modifier (U+1F3FB to U+1F3FF),
+ * the plain 🎅 🤶 🧑‍🎄 where the device draws them, in order; the first variant when none is plain. The picker offers
+ * the whole list (registry 'santas'); this is only what a visit picks from when nothing is saved.
+ */
+export function plainSantas(santas) {
+  const plain = santas.filter((s) => !/[\u{1F3FB}-\u{1F3FF}]/u.test(s));
+  return plain.length ? plain : santas.slice(0, 1);
 }
 
 /** Milliseconds from `date` to the next 00:00 UTC (the next Daily Dump). */

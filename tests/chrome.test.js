@@ -253,3 +253,14 @@ test('a respawn (a match half, or an education revive): a tap does nothing; the 
   assert.deepEqual(intent({ state: 'paused', input: 'tap' }), { do: 'resume' });
   assert.deepEqual(intent({ state: 'respawn', overlay: 'settings', input: 'tap' }), { do: 'ignore' }, 'under an overlay');
 });
+
+test('the 🎅 picker (plan 17, 1b.2e) opens over the 🌞 popup only, from its title 🎅; closing goes back to the popup without the lockout', () => {
+  assert.deepEqual(intent({ state: 'ready', overlay: 'daily', input: 'santapick' }), { do: 'openSantaPicker', pause: false }, 'the title 🎅');
+  for (const state of STATES) assert.deepEqual(intent({ state, input: 'santapick' }), { do: 'ignore' }, `${state}, no overlay`);
+  for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'stats', 'advent', 'santapick']) {
+    assert.deepEqual(intent({ state: 'ready', overlay, input: 'santapick' }), { do: 'ignore' }, overlay);
+  }
+  assert.deepEqual(intent({ state: 'ready', overlay: 'santapick', stackedUnder: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
+  assert.deepEqual(intent({ state: 'ready', overlay: 'santapick', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
+  assert.deepEqual(intent({ state: 'ready', overlay: 'santapick', stackedUnder: true, input: 'changelog' }), { do: 'openChangelog', pause: false }, 'its version line');
+});

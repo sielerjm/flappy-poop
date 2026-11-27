@@ -19,6 +19,7 @@ export const OVERLAY_SCENES = {
   stats: 'Stats',
   quiz: 'Quiz',
   advent: 'Advent',
+  santapick: 'SantaPicker',
 };
 
 /** Active overlays, bottom to top: [{ id, key }]. */

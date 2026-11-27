@@ -86,10 +86,13 @@ export const OVERLAYS = {
   stats: 'Stats',
   quiz: 'Quiz',
   advent: 'Advent',
+  santapick: 'SantaPicker',
 };
 
 /** Overlays that open only inside a run (the 📚 quiz: a level break or a crash), so the ready-screen loops skip them; their own sections cover them. */
 const NEEDS_RUN = new Set(['Quiz']);
+/** Overlays that open only over the 🌞 popup in December (the 🎅 picker, plan 17, 1b.2e): the ready-screen loops skip them; the christmas section opens it by a real tap. */
+const NEEDS_DAILY = new Set(['SantaPicker']);
 
 /**
  * The smoke's sections in run order; run() calls section(name) for each, in this
@@ -815,7 +818,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
     await section('overlays', async () => {
       // Every overlay opens from the ready screen, keeps the loop alive, and closes.
       for (const [input, key] of Object.entries(OVERLAYS)) {
-        if (NEEDS_RUN.has(key)) continue;
+        if (NEEDS_RUN.has(key) || NEEDS_DAILY.has(key)) continue;
         const before = exceptions.length;
         const f0 = await frame();
         await chrome(input);
@@ -2189,7 +2192,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         const ring = (key) => evaluate(`JSON.stringify({ shown: __flappy.scene.getScene('${key}').focus.shown, id: __flappy.scene.getScene('${key}').focus.items[__flappy.scene.getScene('${key}').focus.index]?.id ?? null, offset: __flappy.scene.getScene('${key}').scroll?.offset ?? null })`).then(JSON.parse);
         await evaluate(`${play}.registry.set('padMode', true), true`);
         for (const [input, key] of Object.entries(OVERLAYS)) {
-          if (NEEDS_RUN.has(key)) continue;
+          if (NEEDS_RUN.has(key) || NEEDS_DAILY.has(key)) continue;
           await chrome(input);
           await sleep(key === 'Leaderboard' ? 4000 : 600);
           const r0 = await ring(key);

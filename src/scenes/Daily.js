@@ -38,14 +38,18 @@ export class Daily extends Phaser.Scene {
     });
     this.add.rectangle(cx, cy, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96);
 
+    this.helpOpen = false; // the (?) card (plan 17, 1b.2e): while it is up, only its ✕, a tap or Esc / B do anything
+    this.help = null;
     this.glyph = dailyGlyphNow(this.registry, T); // the 🌞, or this visit's 🎅 in December (plan 17)
-    this.add.text(cx, cy - 370, fillDaily(t(locale, 'dailyTitle'), this.glyph), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
+    this.titleText = this.add.text(cx, cy - 370, fillDaily(t(locale, 'dailyTitle'), this.glyph), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
     this.day = dailyDay(this.registry); // the day Play starts (practice in test mode on a Pretend date; plan 17, 2.2)
+    this.season = adventSeason(this.day, T);
     this.todayText = this.add
       .text(cx, cy - 290, t(locale, 'dailyToday').replace('{level}', levelLabel(locale, dailyLevel(this.day, T))), { ...STYLE, fontSize: '34px', color: '#ffd700' })
       .setOrigin(0.5);
     // December (plan 17, 2.3): play as often as you like, the day's best counts (on the decorations' clock, so a Pretend date shows it).
-    this.add.text(cx, cy - 130, fillDaily(t(locale, adventSeason(this.day, T) ? 'dailyBodyDec' : 'dailyBody'), this.glyph), { ...MUTED, fontSize: '28px', wordWrap: wrap, lineSpacing: 6 }).setOrigin(0.5);
+    this.bodyKey = this.season ? 'dailyBodyDec' : 'dailyBody';
+    this.bodyText = this.add.text(cx, cy - 130, fillDaily(t(locale, this.bodyKey), this.glyph), { ...MUTED, fontSize: '28px', wordWrap: wrap, lineSpacing: 6 }).setOrigin(0.5);
     // The day in four pictures (no words, so nothing to translate): sun up, poop, sleep, repeat. In December
     // (plan 17, 2.6) the Advent pieces found and the tree in reach take their place ("🧩 5/24 · 🎄 on track").
     // S14 (Michael, 26 Nov): "🧩 5 of 24 found · 19 left" and "Today's piece: found · 🎄 on track" (the tree's status lives here, not on home).
@@ -56,7 +60,7 @@ export class Daily extends Phaser.Scene {
       this.adventLine = this.add.text(cx, cy + 24, count, { ...STYLE, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5).setInteractive({ useHandCursor: true }); // clear of the December body's seven English lines (it ends near cy − 11)
       this.adventLine.on('pointerdown', () => this.openBook());
       if (today) this.add.text(cx, cy + 62, today, { ...MUTED, fontSize: '24px' }).setOrigin(0.5);
-    } else this.add.text(cx, cy + 30, `${this.glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`, { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
+    } else this.picturesText = this.add.text(cx, cy + 30, `${this.glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`, { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
     // Under the button's row: why a name is needed, or that practice is not saved.
     this.note = this.add.text(cx, cy + 105, '', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5);
     // Or, when there is no note, the Daily Dump streak (plan 34, round 2: Michael), in the 🌞 subscript's orange.
@@ -76,12 +80,33 @@ export class Daily extends Phaser.Scene {
       .text(cx, cy + 380, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: '#f8a0c8', fontStyle: 'normal' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
-    version.on('pointerdown', () => openChangelog(this)); // What's new, over this panel
+    version.on('pointerdown', () => {
+      if (!this.helpOpen) openChangelog(this); // What's new, over this panel
+    });
 
     const close = this.add.text(cx + 256, cy - 396, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    this.focus = createFocus(this, T, { items: [pressable('close', close), ...(this.adventLine ? [pressable('advent', this.adventLine)] : []), pressable('daily', this.buttonZone), pressable('changelog', version)] });
+    // December (plan 17, 1b.2e; sheet 10, Michael 27 Nov): the (?) mirrors the ✕ at the top left; the title's 🎅 opens
+    // the picker (with a red dot until it has been opened once) when this device draws more than one 🎅.
+    const items = [pressable('close', close)];
+    if (this.season) {
+      const hx = cx - 256;
+      const hy = cy - 396;
+      this.add.circle(hx, hy, 24).setStrokeStyle(3, 0xffffff);
+      this.add.text(hx, hy, '?', { ...STYLE, fontSize: '30px' }).setOrigin(0.5);
+      this.helpZone = this.add.zone(hx, hy, T.trayHitMin, T.trayHitMin).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openHelp());
+      items.push(pressable('help', this.helpZone));
+    }
+    if (play?.santaTappable?.()) {
+      this.santaZone = this.add.zone(cx, cy - 370, T.trayHitMin, T.trayHitMin).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.tapSanta());
+      const dot = T.advent.santaDot;
+      this.santaDot = this.add.circle(cx, cy - 370, dot.radius, dot.color).setStrokeStyle(dot.ring, dot.ringColor).setDepth(3);
+      items.push(pressable('santa', this.santaZone));
+      this.placeSanta();
+    }
+    items.push(...(this.adventLine ? [pressable('advent', this.adventLine)] : []), pressable('daily', this.buttonZone), pressable('changelog', version));
+    this.focus = createFocus(this, T, { items });
     this.checking = false; // asking the 🌞 board whether this player already played today (verify)
     this.draw();
     this.verify();
@@ -153,11 +178,81 @@ export class Daily extends Phaser.Scene {
 
   /** The 🧩 line: the Advent book over this popup (plan 17, 2.15). */
   openBook() {
+    if (this.helpOpen) return;
     if (isTopOverlay(this)) this.scene.get('Play')?.handleChrome('advent');
   }
 
+  /**
+   * The title's 🎅 zone and red dot follow the glyph inside the one title text (the glyph leads it in every locale:
+   * dailyTitle starts with {daily}, pinned by a test): its width measured on a hidden copy of the title's style.
+   */
+  placeSanta() {
+    if (!this.santaZone) return;
+    const measure = this.add.text(0, 0, this.glyph, this.titleText.style).setVisible(false);
+    const gw = measure.width;
+    const gh = measure.height;
+    measure.destroy();
+    const left = this.titleText.x - this.titleText.width / 2;
+    const y = this.titleText.y;
+    const inset = T.advent.santaDot.titleInset;
+    this.santaZone.setPosition(left + gw / 2, y);
+    this.santaDot.setPosition(left + gw - inset, y - gh / 2 + inset + 4);
+    this.refreshSantaDot();
+  }
+
+  /** The title 🎅's red dot: until the picker has been opened once on this device (Play.santaDotShown). */
+  refreshSantaDot() {
+    this.santaDot?.setVisible(Boolean(this.scene.get('Play')?.santaDotShown?.()));
+  }
+
+  /** The title 🎅: the picker over this popup. */
+  tapSanta() {
+    if (this.helpOpen || !isTopOverlay(this)) return;
+    this.scene.get('Play')?.handleChrome('santapick');
+  }
+
+  /**
+   * A new 🎅 saved in the picker (Play.applySanta, M1): every line drawn with the glyph takes it, the title, the body,
+   * the four pictures and the note (draw); no restart, which would ask the board again (verify).
+   */
+  setGlyph(glyph) {
+    if (!this.sys?.isActive?.()) return;
+    this.glyph = glyph;
+    this.titleText.setText(fillDaily(t(this.locale, 'dailyTitle'), glyph));
+    this.bodyText.setText(fillDaily(t(this.locale, this.bodyKey), glyph));
+    this.picturesText?.setText(`${glyph} \u{1F4A9} \u{1F6CC} \u{1F501}`);
+    this.placeSanta();
+    this.draw();
+  }
+
+  /** The (?) card (December): the 🎅 choice and the Advent rules, over this popup; not an overlay of its own. */
+  openHelp() {
+    if (this.helpOpen || !isTopOverlay(this)) return;
+    const W = this.scale.width;
+    const cx = W / 2;
+    const cy = GAME_HEIGHT / 2;
+    const width = 560;
+    const body = this.add.text(cx - 240, 0, t(this.locale, 'dailyHelp'), { ...MUTED, fontSize: '28px', align: 'left', color: '#e2c8d6', wordWrap: { width: 480, useAdvancedWrap: true }, lineSpacing: 8 });
+    const height = 64 + body.height + 40;
+    const top = cy - height / 2;
+    body.setY(top + 64);
+    const dim = this.add.rectangle(cx, cy, W, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
+    dim.on('pointerdown', () => this.closeHelp());
+    const card = this.add.rectangle(cx, cy, width, height, 0x24101c, 1).setStrokeStyle(4, 0xf8a0c8).setInteractive(); // a tap on the card itself does nothing
+    const x = this.add.text(cx + width / 2 - 36, top + 36, '✕', { ...STYLE, fontSize: '40px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    x.on('pointerdown', () => this.closeHelp());
+    this.help = this.add.container(0, 0, [dim, card, body, x]).setDepth(40);
+    this.helpOpen = true;
+  }
+
+  closeHelp() {
+    this.help?.destroy();
+    this.help = null;
+    this.helpOpen = false;
+  }
+
   press() {
-    if (!isTopOverlay(this)) return;
+    if (this.helpOpen || !isTopOverlay(this)) return;
     const play = this.scene.get('Play');
     const mode = this.mode();
     if (mode === 'checking') return; // the board has not answered yet
@@ -172,6 +267,10 @@ export class Daily extends Phaser.Scene {
 
   close() {
     if (!isTopOverlay(this)) return; // What's new is over it
+    if (this.helpOpen) {
+      this.closeHelp(); // Esc, B or ✕ take the (?) card down first; the popup stays
+      return;
+    }
     const play = this.scene.get('Play');
     const result = chromeIntent({ state: play?.state ?? 'ready', overlay: 'daily', input: 'close' });
     if (result.do !== 'closeTop') return;

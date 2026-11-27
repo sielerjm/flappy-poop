@@ -565,6 +565,9 @@ Tournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on 
 比赛规则和锦标赛一样：得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多。保存的比赛会记到 🏅 和 🏆 榜上。点“再来一局”可以再比一次。
 锦标赛：关掉 🌐（宽屏才有），2 到 8 名玩家在这台设备上两两比赛，淘汰制，争夺领奖台 🥇 🥈 🥉。 |
 | dailyTitle | {daily} DAILY DUMP | {daily} 每日一拉 |
+| santaPickTitle | Choose your 🎅 (plan 17, 1b.2e: the 🎅 picker's title, December only; a fixed 🎅, not {daily}) | 选择你的🎅 |
+| santaPickSave | Save (the picker's button: keeps the ringed 🎅 on this device) | 保存 |
+| dailyHelp | All December, the 🎅 in the Daily Dump changes each time you visit. Tap it to choose your favourite, in any skin tone. It is saved on this device only. / Each day's Daily hides one Advent piece. Find all 24 by 24 December for the 🎄, or by 31 December for the 🌲. Catch-ups count for both. (the 🌞 popup's (?) card, December only; a blank line between the two paragraphs) | 整个十二月，每日一拉里的🎅每次来访都会变。点它，选你最喜欢的一个，任何肤色都行。只保存在这台设备上。/ 每天的每日一拉都藏着一块圣诞拼图。12月24日前找齐24块得🎄，12月31日前找齐得🌲。补领的都算。 |
 | dailyToday | Today's course: {level} | 今日赛道：{level} |
 | dailyBody | One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the {daily} leaderboard; a new course starts every day at midnight UTC. | 每天只有一次机会。
 今天所有人飞同一条赛道，

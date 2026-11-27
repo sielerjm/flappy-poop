@@ -21,6 +21,7 @@ import { Daily } from './scenes/Daily.js';
 import { Stats } from './scenes/Stats.js';
 import { Quiz } from './scenes/Quiz.js';
 import { Advent } from './scenes/Advent.js';
+import { SantaPicker } from './scenes/SantaPicker.js';
 import { stopWorkerIfAsked } from './swClient.js';
 
 // The service worker (plan 35, Stage 3): ?nosw, or a local host without ?sw, removes it and its caches
@@ -83,7 +84,7 @@ const game = new Phaser.Game({
   },
   // Play twice: 'Play' is single player and the left half of a versus match, 'PlayB' the right half
   // (only Versus launches it). Versus owns the match and sits above both halves, below the overlays.
-  scene: [Boot, Play, new Play('PlayB'), Over, Versus, OnlineRace, Settings, About, HowTo, Changelog, Language, Feedback, Leaderboard, Daily, Stats, Quiz, Advent],
+  scene: [Boot, Play, new Play('PlayB'), Over, Versus, OnlineRace, Settings, About, HowTo, Changelog, Language, Feedback, Leaderboard, Daily, Stats, Quiz, Advent, SantaPicker],
 });
 
 // A window resize (or a phone rotating) asks Play for a new field width. Play
