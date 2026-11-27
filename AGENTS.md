@@ -380,7 +380,7 @@ blank (no board lookup) and shows `dailyNotCounted` in the countdown's place.
 The server (`submit_daily_score`) takes today or yesterday (UTC), checks the day's level with its
 own FNV-1a (`daily_level` = the client's `dailyLevel`), keeps the first post per player and day
 ('duplicate' after), and follows the score board's name claim.
-**December exception** (plan 17, Stage 2a, v0.34.0): when `adventSeason` holds for the run's own day, the Daily stays open
+**December exception** (plan 17, Stage 2a, v0.36.0): when `adventSeason` holds for the run's own day, the Daily stays open
 all day, every final is posted and the board keeps each player's best of the day (`submit_daily_score`'s December branch
 raises the row; `dailyQueue.addBetter` replaces a queued entry only with a higher score; `dailyStore.best(day, playerId)`
 is the best on this device, an optional `best` on the one `flappyPoop.daily` record that old builds ignore). Off season it
@@ -389,7 +389,7 @@ is one attempt as before. `dailyPlayedToday` keeps its meaning (flown today: the
 (`dailyDay`: course, level, the popup's day); a test run still posts and stores nothing.
 
 **Christmas** (December, plan 17, Stage 1, v0.32.0): decoration only. No SQL, no new server call, no change to a hitbox,
-a rule or a score. (Stage 2a and 2b, v0.34.0, add the Advent pieces, the trees, the open December Daily and the storms,
+a rule or a score. (Stage 2a and 2b, v0.36.0, add the Advent pieces, the trees, the open December Daily and the storms,
 below; storms change a run's feel, on the Daily and, since T16, in every match.) The season is all of December UTC (`TUNING.advent`: `seasonMonth` 12, `seasonLastDay` 31;
 `adventSeason(day, T)`). **The clock** is `dailyNow(reg)` / `dailyDay(reg)` (`src/logic.js`): the real time, or in test mode the
 Pretend date at the real time of day. Decorations and the practice Daily read it; the Daily Dump's store, queue and posts keep
@@ -441,7 +441,7 @@ day through the game registry.
   `advent_board` with the trees beside the names. Stage 1c's checks (1c.11): the stored Quality score (a catch of the day's own piece keeps it, a catch-up piece none),
   the odds (no piece before pipe 5), the day's clock, the December twins at Over, the share card and How to play, and the fairy lights in both halves of a race.
   Checked by `tests/advent.test.js`, `tests/adventScene.test.js`, `tests/assets.test.js` and `tests/tools.test.js`.
-- **Advent pieces** (Stage 2b, v0.34.0; `TUNING.advent.piece`: `count` 24, `minPair` 5, `startChance` 0.05, `stepChance` 0.01,
+- **Advent pieces** (Stage 2b, v0.36.0; `TUNING.advent.piece`: `count` 24, `minPair` 5, `startChance` 0.05, `stepChance` 0.01,
   `missChance` 0.01, `todayWeight` 3). Piece k comes out on k Dec. A December Daily run (`runIsDaily` and `adventSeason`) offers one: `rollAdvent` in
   `start()` picks the target from the backlog (`adventBacklog`, `rollAdventTarget`; today's piece weighs `todayWeight`) and the spawn pair
   with a per-attempt RNG, never `course.*`. Odds model (1c.5, Michael, 27 Nov): from pipe 5 on (`minPair`, the slot after pipe 5) a free band slot offers
@@ -454,11 +454,11 @@ day through the game registry.
   batch a player a sync, drained after `drainDaily` and before `drainCareer`, each piece waiting for its run's post (`waitsForDailyRun`);
   `submit_advent_piece` answers `{ stored, kept, refused }` (`kept` stays in the queue while its day is today or yesterday, `refused`
   leaves it and stays in the book, `too soon` keeps the batch). `advent_progress` is merged once a page load (a union, the earlier day
-  per piece). The look: the home Advent button (S14, 0.35.0; see **The Advent book** below; it replaced the home chip), the Daily window's two lines
+  per piece). The look: the home Advent button (S14, 0.36.0; see **The Advent book** below; it replaced the home chip), the Daily window's two lines
   ("🧩 N of 24 found · M left", today's piece found or not), Over's found line, a 🎁 after the name on 🌞 rows
   (`normalizeDailyRow`'s `gift`). Old builds ignore both new keys and the new `best` field.
   Tests: `tests/adventPieces.test.js`, `tests/adventDaily.test.js`.
-- **The Advent book** (Stage 2c, v0.35.0; `src/scenes/Advent.js`, overlay id `advent`). A 4 x 6 picture that assembles as pieces are found
+- **The Advent book** (Stage 2c, v0.36.0; `src/scenes/Advent.js`, overlay id `advent`). A 4 x 6 picture that assembles as pieces are found
   (`TUNING.advent.puzzle`: `cols`, `rows`, `cellPx` 332, `order`, one shuffle shared by every player: piece k fills cell `order[k - 1]`).
   Locked cells are flat silhouettes (`TUNING.advent.book`: panel size, `lockFill`, a gold star on a piece found on its own day); its
   only text is "N of 24 found" (`adventBookCount`) and, after a piece lands, "N of 24 to go!" (`adventToGo`, `bookAnim.toGo`; T7). A (?) at the top left (`adventBookLayout.help`, mirroring the ✕) opens the book's card (`adventBookHelp`, `src/ui/helpCard.js`, shared with the Daily window's). The book shows no version line. The pure parts are in `src/logic.js`: `adventBookLayout` (the panel, the ✕, the 24
@@ -484,7 +484,7 @@ day through the game registry.
   Decoration only, no body; under reduced motion the strip stays and the bulbs neither glow nor twinkle; every mode with a ceiling has them (runs, the Daily, both
   match halves, the online race, education, home). While they show, `setHudShadow` gives the HUD texts a faint white shadow and its icons a soft white copy.
   `tests/fairyLights.test.js` (with `tests/support/png.js`: the strip's seam), plus the smoke's lights checks.
-- **The trees** (v0.34.0). `advent_tree_2026` (🎄, all 24 by 24 Dec) and `advent_pine_2026` (🌲, by 31 Dec) are `seasonal`
+- **The trees** (v0.36.0). `advent_tree_2026` (🎄, all 24 by 24 Dec) and `advent_pine_2026` (🌲, by 31 Dec) are `seasonal`
   `ACHIEVEMENTS`, quest rows in `achievement_defs` (1 to 31 Dec, claims close 2 Jan), claimed by the game from the found-day store
   (`adventAward`, mirrored by the server's `advent_award`; `claim_achievements` has no award check) and judged on a Daily run's own
   day. The Profile's quests drop the other tree once one is earned (`hiddenBy`). `tests/adventTrees.test.js`.
@@ -605,7 +605,7 @@ and Esc: Play's `onlineRepeat(event)`, plan 39 5.2b, AUD-149 / AUD-144), tests/r
 **Service worker** (plan 35, Stage 3, 0.29.0): `sw.js` at the root, scope the game's folder
 (`registration.scope`). It gives an offline launch, and a launch more than 10 minutes after the last
 (GitHub Pages' `max-age=600`) no longer revalidates every module and asset one by one; only index.html
-goes to the network. About 6.2 MB per build in Cache Storage (149 files; December's 0.4 MB picture, the 57 KB fairy lights and sounds are in it, and `tests/swStamp.test.js` caps a build at 6.5 MB, raised from 6 MB in 0.35.0; whether to keep that cap or drop the picture from the precache is Michael's call, still open). Its page side is `src/swClient.js`.
+goes to the network. About 6.2 MB per build in Cache Storage (149 files; December's 0.4 MB picture, the 57 KB fairy lights and sounds are in it, and `tests/swStamp.test.js` caps a build at 6.5 MB, raised from 6 MB in 0.36.0; Michael kept that cap at the push, 27 Nov). Its page side is `src/swClient.js`.
 - **Stamp.** `npm run push` writes `BUILD` and `FILES` into `sw.js` (`tools/sw_stamp.mjs`): `FILES` pairs
   every URL exactly as the page asks for it with the SHA-256 of its bytes: index.html, every module
   (`?h=<content hash>`, through the import map `index.html` also gets), art and sounds (`?v=<VERSION>`),
