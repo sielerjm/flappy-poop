@@ -147,8 +147,8 @@ export const SECTIONS = [
   { name: 'online-invites', needs: [], about: "invites, the ✉️ (plan 39, 4.2, Preview I), on a stand-in transport under Play (no network) on a 320 phone: invite_list once linked and the topic it names; ✉️ 1 on 🤝 Friends; the inviting 🟢 friend first with the ✉️ and its time, the buttons inside the row under a 16-character name (Michael's ask); a topic invite adds one; the ✉️ tapped: the ready screen as the guest; Invite on a 🟢 friend: the room screen waiting, their no with Resend, Resend in the same room" },
   { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
   { name: 'skip-splash', needs: [], about: "Skip to home when loaded (plan 35, 4.2): the Settings row (off by default) flips and stores the setting; the page reloaded with it on goes from the splash to Play's ready screen with no Continue press; reloaded with it off, Continue lit still waits for a press" },
-  { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the hatted dead frame and the hatted home again, a reload that never repeats the 🎅 (the plain 🎅 🤶 🧑‍🎄 only), the holly bean (bean-holly on the stock hitbox, the HUD bean stock), the 🎅 picker (both red dots until it is first opened, kept over a reload; the (?) card; a real tap and the pad, Save, B keeps the saved one; the title, body and home show it; both keys removed at the end), and a ?perf read of a December run and of a two-player race (snow in both halves); on the 15 Nov pin (the default) none of it: no December file, the stock frames, the 🌞, no line, no snow, and the same two ?perf reads" },
-  { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the Advent button's count, the Daily popup's two lines, the day's piece shown, caught, stored and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run that misses its piece and queues nothing better; the book (2.18): the glowing button opens it, the piece flies into its cell, the glow is off after it closes, the Daily window's 🧩 line opens it and closes back, the 🧩 board tab on a stubbed advent_board); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after) and a two-player race's (T16: one schedule for both halves from level 3, each storm inside one level, both halves meet it under one blizzard loop, a level break calms the air); test mode on a Pretend 5 Dec (the piece in the sandbox only)" },
+  { name: 'christmas', needs: [], about: "🎅 December (plan 17, 1.16), each half on a fresh page: on a 5 Dec pin the home screen's 🎅, Happy Bowelidays! over the title, the countdown line under it and the snowfall, every December file in the one lazy flight, the ready poop's hatted bubble frame with the stock key as the state, a run's hatted frames (the fart's two twins alternating) under the same snowfall, the snow on each bottom pipe's cap, the twinned pickups, the hatted dead frame, Over's cells, a cell's card and the share card wearing the twins (1c.8), the hatted home again, How to play's twins, a reload that never repeats the 🎅 (the plain 🎅 🤶 🧑‍🎄 only), the holly bean (bean-holly on the stock hitbox, the HUD bean stock), the 🎅 picker (both red dots until it is first opened, kept over a reload; the (?) card; a real tap and the pad, Save, B keeps the saved one; the title, body and home show it; both keys removed at the end), and a ?perf read of a December run and of a two-player race (snow and fairy lights in both halves); on the 15 Nov pin (the default) none of it: no December file, no lights, the stock frames, the 🌞, no line, no snow, How to play's stock icons, and the same two ?perf reads" },
+  { name: 'advent', needs: [], about: "🧩 December's Advent pieces and storms (plan 17, 2.10), each part on a fresh page: on a 5 Dec pin a real Daily (the Advent button's count, the Daily popup's two lines, the day's piece shown, caught, stored with its Quality score (1c.Q) and queued with the 🌞 post, Over's \"Found today's gift!\" and new best, then a lower second run whose pair is the page's own draw from the rising odds (1c.5), that misses its piece unseen (the Quality clock runs on) and queues nothing better; the book (2.18): the glowing button opens it, the piece flies into its cell, the glow is off after it closes, the Daily window's 🧩 line opens it and closes back, the 🧩 board tab on a stubbed advent_board); on a 7 Dec pin a Daily's storm (the banner one pair ahead, the pull on the flap and the scroll, the storm's flakes, calm after) and a two-player race's (T16: one schedule for both halves from level 3, each storm inside one level, both halves meet it under one blizzard loop, a level break calms the air); test mode on a Pretend 5 Dec (the piece and its score in the sandbox only, none in the real record)" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -1112,7 +1112,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
 
       // The version line (plan 17, 1c.7, T15): About, How to play and Settings keep it, and a real click on it opens What's
       // new over the panel (HowTo and About scroll to it first), one real Esc closing only What's new; Language,
-      // Feedback and the Leaderboard have none. Board muzzled so the Leaderboard settles at once.
+      // Feedback, the Leaderboard and the 🌞 popup have none (the book's is checked in advent). Board muzzled so the
+      // Leaderboard settles at once.
       {
         await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
         const vt = await evaluate(`import('./src/logic.js').then((m) => m.versionText('en'))`);
@@ -1122,7 +1123,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         };
         const seen = [];
         const none = [];
-        for (const [input, key] of [['lang', 'Language'], ['feedback', 'Feedback'], ['leaderboard', 'Leaderboard']]) {
+        for (const [input, key] of [['lang', 'Language'], ['feedback', 'Feedback'], ['leaderboard', 'Leaderboard'], ['daily', 'Daily']]) {
           await chrome(input);
           await sleep(600);
           const has = await evaluate(`__flappy.scene.getScene('${key}').children.list.some((c) => c.type === 'Text' && c.text === ${JSON.stringify(vt)})`);
@@ -8302,10 +8303,12 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         if (!joined || !racing) {
           const why = await evaluate(`JSON.stringify({ versus: __flappy.scene.isActive('Versus'), status: ${VS}?.match?.status ?? null, a: ${P1}.state, b: ${P2}?.state ?? null })`);
           ok(false, `versusPerf: a two-player race started (${why})`);
-          return { s: null, snow: null, racing: false };
+          return { s: null, snow: null, lit: null, racing: false };
         }
         await evaluate(`[${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
         const snow = await evaluate(`[${P1}, ${P2}].map((p) => p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length).join(',')`);
+        // December's fairy lights in each half (1c.9, T14: every mode with a ceiling): its own strip, its field's width.
+        const lit = await evaluate(`[${P1}, ${P2}].map((p) => (p.fairyLights?.active && p.fairyLights.width === p.fieldW && !p.fairyLights.body ? 'lit' : 'none')).join(',')`);
         await evaluate(`globalThis.__flappyPerf?.reset(), true`);
         await sleep(ms);
         const s = await evaluate(`JSON.stringify(globalThis.__flappyPerf?.summary() ?? null)`).then(JSON.parse);
@@ -8314,7 +8317,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         await evaluate(`__flappy.registry.set('versus', false), true`);
         await metrics(720, 1280);
         await until(`__flappy.scale.width === 720 && ${P1}.state === 'ready'`, 60);
-        return { s, snow, racing: Boolean(joined && racing) };
+        return { s, snow, lit, racing: Boolean(joined && racing) };
       };
 
       // --- 5 Dec ---
@@ -8372,12 +8375,41 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       const dead = await evaluate(`${play}.poopStockKey + '|' + ${play}.poop.texture.key`);
       ok(dead === 'poop-dead|poop-dead-santa', `the crash shows the hatted dead frame, the state still poop-dead (${dead})`);
       await waitOver(300);
+      // December art at Over (1c.8, T12): each twinned cell icon wears its twin at the stock's 48 px times the twin's
+      // size factor (seasonIcon), a cell's card too; the share card draws the twins (Over's makeShareCard, called here
+      // since a test run offers no Share), its scales the same factors. The textures it reads are recorded.
+      await sleep(600);
+      const STOCK = ['fiber', 'probiotic', 'bean', 'bacteria'];
+      const overArt = await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); const p = ${play}; const twins = ${JSON.stringify(ART.twins)};
+        const imgs = o.children.list.filter((c) => c.type === 'Image');
+        const cells = ${JSON.stringify(STOCK)}.filter((k) => o.cells.some((c) => c.id === k)).map((k) => { const ic = p.seasonIcon(k); const im = imgs.find((i) => i.texture.key === k || i.texture.key === twins[k]); return { k, key: im?.texture.key ?? null, ok: Boolean(im) && ic.key === twins[k] && im.texture.key === twins[k] && Math.abs(im.displayWidth - 48 * ic.mul) < 0.5 }; });
+        o.openCell('bean'); const card = { key: o.card.icon.visible ? o.card.icon.texture.key : null }; const beanMul = p.seasonIcon('bean').mul; o.closeCard();
+        const chose = {}; const si = o.seasonIcon; o.seasonIcon = function (k) { const r = si.call(this, k); chose[k] = r; return r; };
+        try { o.makeShareCard(o.cardData); } finally { delete o.seasonIcon; }
+        return JSON.stringify({ cells, card, beanMul, chose }); })()`).then(JSON.parse);
+      ok(overArt.cells.length === STOCK.length && overArt.cells.every((c) => c.ok), `Over's cells wear December's twins at their size factors (${overArt.cells.map((c) => `${c.k}→${c.key}${c.ok ? '' : ' ✗'}`).join(', ')}) (1c.8)`);
+      ok(overArt.card.key === ART.twins.bean && overArt.beanMul > 1, `a cell's card shows the twin too (the bean's card: ${overArt.card.key}, size factor ${overArt.beanMul?.toFixed?.(2)}) (1c.8)`);
+      const shareKeys = ['poop', ...STOCK];
+      ok(shareKeys.every((k) => overArt.chose[k]?.key === ART.twins[k] && (k === 'poop' || overArt.chose[k].mul > 0)), `the share card draws the twins (${shareKeys.map((k) => `${k}→${overArt.chose[k]?.key} ×${overArt.chose[k]?.mul?.toFixed?.(2)}`).join(', ')}) (1c.8)`);
       await evaluate(`__flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
       for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
       await sleep(300);
       const h2 = await home();
       ok(h2.stock === 'poop-speech' && h2.shown === 'poop-speech-santa' && h2.flakes === TT.advent.snow.count && h2.line === want.line?.text, `back home after the run: the hatted bubble frame, the snowfall and the line again (${h2.shown}, ${h2.flakes} flakes)`);
       ok(pool.includes(h2.glyph) && h2.glyph !== h1.glyph, `the home screen built again picks another 🎅 from the plain pool (${h1.glyph} → ${h2.glyph})`);
+      // How to play (1c.8, T12): each twinned row's icon is its December twin at the stock's 80 px times its size factor.
+      const howArt = async () => {
+        await chrome('howto');
+        await until(`__flappy.scene.isActive('HowTo')`, 40);
+        await sleep(400);
+        const rows = await evaluate(`(() => { const h = __flappy.scene.getScene('HowTo'); const p = ${play}; const twins = ${JSON.stringify(ART.twins)}; const imgs = h.children.list.filter((c) => c.type === 'Image');
+          return JSON.stringify(${JSON.stringify(STOCK)}.map((k) => { const ic = p.seasonIcon(k); const im = imgs.find((i) => i.texture.key === k || i.texture.key === twins[k]); return { k, key: im?.texture.key ?? null, w: im ? +im.displayWidth.toFixed(1) : null, want: +(80 * ic.mul).toFixed(1) }; })); })()`).then(JSON.parse);
+        await closeTop('HowTo');
+        await until(`!__flappy.scene.isActive('HowTo')`, 40);
+        return rows;
+      };
+      const how1 = await howArt();
+      ok(how1.every((r) => r.key === ART.twins[r.k] && Math.abs(r.w - r.want) < 0.5), `How to play shows December's twins (${how1.map((r) => `${r.k}→${r.key} ${r.w} px`).join(', ')}) (1c.8)`);
 
       // A reload with ?perf on 5 Dec: a new 🎅 again, and the December run's frame meter.
       await load('&perf');
@@ -8493,6 +8525,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       ok(Boolean(perfDec?.frames > 60), `?perf on ${dec}: ${perfLine(perfDec)}`);
       const vDec = await versusPerf(6000);
       ok(vDec.racing && vDec.snow === `${TT.advent.snow.count},${TT.advent.snow.count}` && Boolean(vDec.s?.frames > 60), `?perf on ${dec}, a two-player race (snow ${vDec.snow}): ${perfLine(vDec.s)}`);
+      ok(vDec.racing && vDec.lit === 'lit,lit', `a two-player race on ${dec}: fairy lights along both halves' ceilings, each its own field's width, no body (${vDec.lit}) (1c.9)`);
 
       // --- 15 Nov (the default pin): a fresh page, none of it ---
       const nov = await pinClock(SMOKE_PIN_DAY);
@@ -8503,12 +8536,15 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         ok(h4.day === SMOKE_PIN_DAY && in4.length === 0, `on ${SMOKE_PIN_DAY}, a fresh page loads no December file (${in4.join(', ') || 'none'})`);
         const lit4 = await lights();
         ok(lit4 === null, `off season no fairy lights (${JSON.stringify(lit4)})`);
+        const how4 = await howArt();
+        ok(how4.every((r) => r.key === r.k && Math.abs(r.w - 80) < 0.5), `off season How to play shows the stock icons (${how4.map((r) => r.key).join(', ')})`);
         ok(h4.stock === 'poop-speech' && h4.shown === 'poop-speech' && h4.glyph === '\u{1F31E}' && h4.line === null && !h4.image && h4.flakes === 0, `off season the home screen is stock: the bubble frame, the 🌞, no line, no snow (${JSON.stringify(h4)})`);
       } else console.log(`note: --date=${date}: the off-season half is skipped (the page is on ${nov})`);
       const perfNov = await perfRun(6000);
       ok(Boolean(perfNov?.frames > 60), `?perf on ${nov}: ${perfLine(perfNov)}`);
       const vNov = await versusPerf(6000);
       ok(vNov.racing && (date || vNov.snow === '0,0') && Boolean(vNov.s?.frames > 60), `?perf on ${nov}, a two-player race (snow ${vNov.snow}): ${perfLine(vNov.s)}`);
+      if (!date) ok(vNov.racing && vNov.lit === 'none,none', `off season a two-player race has no fairy lights (${vNov.lit})`);
       if (vDec.s && vNov.s) console.log(`note: ?perf two-player race, December vs off season: cpu ${vDec.s.cpuMs.toFixed(2)} vs ${vNov.s.cpuMs.toFixed(2)} ms a frame, ${vDec.s.long} vs ${vNov.s.long} long frames, ${vDec.s.fps.toFixed(1)} vs ${vNov.s.fps.toFixed(1)} fps`);
       if (perfDec && perfNov) console.log(`note: ?perf December vs off season: cpu ${perfDec.cpuMs.toFixed(2)} vs ${perfNov.cpuMs.toFixed(2)} ms a frame, ${perfDec.long} vs ${perfNov.long} long frames, ${perfDec.fps.toFixed(1)} vs ${perfNov.fps.toFixed(1)} fps`);
       // Home again on a plain page, for the closing checks.
@@ -8603,6 +8639,12 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       ok(run1.advent?.piece === 5 && run1.advent.pair === T17.piece.minPair && run1.advent.found && run1.passed >= run1.advent.pair - 1, `the day's own piece (5) from pair ${run1.advent?.pair}: shown in a band slot and caught ${run1.passed} pairs in`);
       const s1 = await stored();
       ok(JSON.stringify(s1.advent?.found) === JSON.stringify({ 5: '2026-12-05' }) && s1.queue.length === 1 && s1.queue[0].piece === 5 && s1.queue[0].day === '2026-12-05', `the piece in the found-day store and one advent queue entry (${JSON.stringify(s1.queue)})`);
+      // The piece's Quality (1c.Q, recording only): the day's own piece caught on its day keeps its score in the real
+      // record, an integer 0 to 10000 (lower = rarer). The day's first run, its roll's u = 0: keep 1, s 1, so the
+      // plainest score, 10000, at run 1 with the pairs before the one it showed at; the clock starts again.
+      const q1 = s1.advent?.quality?.[5] ?? null;
+      const q1Want = await evaluate(`import('./src/logic.js').then((l) => l.adventQualityScore(1 * ${run1.advent?.keep ?? 'NaN'}))`);
+      ok(Boolean(q1) && Number.isInteger(q1.q) && q1.q >= 0 && q1.q <= 10000 && q1.q === q1Want && q1.run === 1 && q1.pipes === run1.advent.pair - 1 && Object.keys(s1.advent.quality).length === 1 && !s1.advent.miss?.held, `the caught day's own piece has its Quality score in the real record: ${JSON.stringify(q1)} (want q ${q1Want}, run 1, ${run1.advent?.pair - 1} pipes), the clock fresh again (1c.Q)`);
       await crash();
       const o1 = await overTexts();
       const s1b = await stored();
@@ -8615,6 +8657,14 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       const o2 = await overTexts();
       const s2 = await stored();
       ok(chip1 === '1/24 glow' && run2.passed >= 1 && !run2.advent?.found && Boolean(o2?.includes('No gift this run, play again  \u{1F9E9} 1/24')) && !o2.includes('New best today!') && s2.daily.length === 1 && s2.daily[0].score === s1b.daily[0].score && s2.queue.length === 1, `a second, lower run: "No gift this run, play again", no new best; the queued best stays ${s2.daily[0]?.score}, nothing more queued`);
+      // The piece odds (1c.5, T9 / T10): the run's pair is the page's own one draw from the rising odds (none before
+      // minPair, then startChance + stepChance a pair + missChance a miss) for the day's misses (0: the first run caught
+      // its piece). Its piece never showed, so the day's miss counts and the Quality clock runs on: s is the chance the
+      // piece stays hidden through the pairs the run spawned (adventHidden), nothing held (1c.Q).
+      const odds = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => { const m = ${JSON.stringify(s2.advent?.miss ?? null)}; return JSON.stringify({ pair: l.adventSpawnRoll(0, () => 0.999999, c.TUNING).pair, first: l.adventPairChance(c.TUNING.advent.piece.minPair, 0, c.TUNING), before: l.adventPairChance(c.TUNING.advent.piece.minPair - 1, 0, c.TUNING), hidden: m ? l.adventHidden(m.pipes, 0, c.TUNING) : null }); })`).then(JSON.parse);
+      ok(run2.advent?.misses === 0 && run2.advent.pair === odds.pair && run2.advent.pair > T17.piece.minPair && Math.abs(run2.advent.keep - (1 - 0.999999)) < 1e-9 && odds.before === 0 && odds.first === T17.piece.startChance, `the second run's piece from pair ${run2.advent?.pair}: the page's own draw for u 0.999999 at 0 misses (${odds.pair}); no chance before pair ${T17.piece.minPair}, ${odds.first} at it (1c.5)`);
+      const m2 = s2.advent?.miss ?? null;
+      ok(Boolean(m2) && m2.day === '2026-12-05' && m2.n === 1 && m2.held === null && m2.runs === 1 && m2.pipes >= run2.passed && Math.abs(m2.s - odds.hidden) < 1e-12 && (m2.pipes >= T17.piece.minPair || m2.s === 1) && Object.keys(s2.advent.quality ?? {}).join() === '5', `its piece unseen: one miss for the day, the clock's run counted (s ${m2?.s?.toFixed?.(4)} over ${m2?.pipes} pairs: 1 before pair ${T17.piece.minPair}; nothing held), the stored scores still piece 5's alone (1c.Q)`);
 
       // --- (1b) the Advent book (plan 17, 2.18): the glowing button opens it, the caught piece flies into its slot
       // (cell order[4]) and the glow is off once it closes; the Daily window's 🧩 line opens it and closing goes back
@@ -8714,6 +8764,11 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       ok(Boolean(full?.air) && full.air.wind < 0 && full.air.swirls === T17.storm.swirls && full.air.tau === 0, `in the storm: a headwind, right to left (${full?.air?.wind?.toFixed?.(0)} px/s), ${full?.air?.swirls} spirals (want ${T17.storm.swirls}), no streaks (tau ${full?.air?.tau}) (1c.6, Gate A H2)`);
       ok(run3.level === 0 && run3.flap === 1 && run3.scroll === 1 && run3.flakes === T17.snow.count, `calm again after it: flap ${run3.flap}, scroll ${run3.scroll}, ${run3.flakes} flakes`);
       await crash();
+      // The Quality clock runs on (1c.Q): this run flew past pipe 5 and its piece (u 0.999999) never showed, so the
+      // day's s is the chance it stays hidden through every pair the run spawned, below 1, and nothing is held.
+      const m3 = (await stored()).advent?.miss ?? null;
+      const hid3 = m3 ? await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => l.adventHidden(${m3.pipes}, 0, c.TUNING))`) : null;
+      ok(Boolean(m3) && m3.day === '2026-12-07' && m3.n === 1 && m3.runs === 1 && m3.held === null && m3.pipes > T17.piece.minPair && m3.s < 1 && Math.abs(m3.s - hid3) < 1e-12, `a run past pipe 5 whose piece never showed runs the day's Quality clock on: s ${m3?.s?.toFixed?.(4)} over ${m3?.pipes} pairs (adventHidden ${hid3?.toFixed?.(4)}), nothing held (1c.Q)`);
       await homeAgain();
 
       // --- (2b) 7 Dec, a two-player race's storms (plan 17, T16): one schedule for both halves from the shared course on
@@ -8798,7 +8853,9 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       await until(`__flappy.textures.exists('advent')`, 60);
       const run4 = await flyDaily({ rng: [0.99, 0], until: 'found' });
       const sandbox = await evaluate(`JSON.stringify(__flappy.registry.get('adventSandbox')?.get(2026)?.found() ?? null)`).then(JSON.parse);
+      const sandQ = await evaluate(`JSON.stringify(__flappy.registry.get('adventSandbox')?.get(2026)?.quality?.() ?? null)`).then(JSON.parse);
       const after = await stored();
+      ok(Number.isInteger(sandQ?.[5]?.q) && Object.keys(after.advent?.quality ?? {}).length === 0, `the practice catch keeps its Quality score in the sandbox (${JSON.stringify(sandQ)}); the real record holds no score (${JSON.stringify(after.advent?.quality ?? null)}) (1c.Q)`);
       ok(run4.advent?.found && JSON.stringify(sandbox) === JSON.stringify({ 5: '2026-12-05' }) && JSON.stringify(after) === JSON.stringify(before), `a practice Daily on a Pretend 5 Dec: the piece in the sandbox (${JSON.stringify(sandbox)}), nothing queued, the real record as it was (run ${JSON.stringify({ state: run4.state, passed: run4.passed, advent: run4.advent, seen: Boolean(run4.seen) })})`);
       await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.setTestMode(false); __flappy.scene.stop('Over'); p.scene.restart(); return true; })()`);
       await until(`${play}.state === 'ready' && !${play}.launching`, 60);
