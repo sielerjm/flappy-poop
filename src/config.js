@@ -624,7 +624,7 @@ export const TUNING = {
     },
     // December's sounds (2.7a; Michael's Pixabay clips, CREDITS.md): the twinkle when a piece is caught, and the blizzard
     // looped under a storm, faded in from the banner (blizzardFadeMs) and out as the storm ends. Levels for his listen check.
-    sound: { foundVolume: 0.6, blizzardVolume: 0.7, blizzardFadeMs: 1200, addVolume: 0.7, lockVolume: 0.8 }, // addVolume / lockVolume: the book's chimes and click (2.15a)
+    sound: { foundVolume: 0.54, blizzardVolume: 0.7, blizzardFadeMs: 1200, addVolume: 0.7, lockVolume: 0.8 }, // foundVolume: 10 % under 0.6 (Michael, 27 Nov); addVolume / lockVolume: the book's chimes and click (2.15a)
     // The 🎅 that stands in for the 🌞 all December: Santa, Mrs. Claus and Mx Claus, plain and in the five skin
     // tones. A visit picks from the plain three (plainSantas, pickSanta) unless the player saved one in the picker,
     // which offers every variant this device draws as one glyph (supportedSantas). Keep the plain three: they are

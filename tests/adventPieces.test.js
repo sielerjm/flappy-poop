@@ -298,6 +298,7 @@ test('Play: the piece is caught once, into the store and the queue; practice kee
   s.takeAdvent();
   s.takeAdvent();
   assert.deepEqual(s.played, [['advent-found', T.advent.sound.foundVolume]], 'the twinkle, once (2.7a)');
+  assert.equal(T.advent.sound.foundVolume, 0.54, 'the twinkle 10 % under its first 0.6 (Michael, 27 Nov, after his T16 play: "a little loud")');
   assert.deepEqual(s.adventStores.get(2026).found(), { 1: '2026-12-05' });
   assert.deepEqual(s.adventQueue.load(), [{ playerId: PID, season: 2026, piece: 1, day: '2026-12-05' }], 'queued once');
   assert.deepEqual(s.adventOutcome(), { offered: true, found: 1, late: true, status: { n: 1, tree: null } }, 'piece 1 on 5 Dec: a catch-up gift');
