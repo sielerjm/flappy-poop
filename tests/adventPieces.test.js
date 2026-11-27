@@ -1,12 +1,12 @@
 // Plan 17, Stage 2b, 2.6: the Advent pieces on the client. One piece a Daily run in December, rolled from
 // the pieces out so far that this device lacks (per-attempt RNG, never the shared course), shown in a band
-// slot nothing else took from a pair in the spawn window (which shrinks with the day's misses); the
+// slot nothing else took from the pair one draw picks (rising odds from pipe 5, raised by the day's misses); the
 // found-day store (the device's own record, one per season) and the queue that sends the pieces in one
 // batch a sync (submit_advent_piece answers { stored, kept, refused }: S12, 2.4 as built).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T, LEADERBOARD } from '../src/config.js';
-import { adventReleased, adventBacklog, rollAdventTarget, adventSpawnPair, adventSpawnHere, adventStatus, createRng, shiftDayKey } from '../src/logic.js';
+import { adventReleased, adventBacklog, rollAdventTarget, adventSpawnPair, adventPairChance, adventSpawnHere, adventStatus, createRng, shiftDayKey } from '../src/logic.js';
 import { createAdventStore, createAdventQueue, submitAdventPiece, fetchAdventProgress, fetchDailyBoard, waitsForDailyRun } from '../src/leaderboard.js';
 import { fakeStorage, playScene, registry } from './support/scenes.js';
 import { ADVENT_ART } from '../src/advent.js';
@@ -53,16 +53,45 @@ test('rollAdventTarget: always from the backlog, today\'s piece weighted, null w
   assert.equal(rollAdventTarget([7], '2026-12-27', () => 0.99, T), 7);
 });
 
-test('adventSpawnPair: in the window, the top shrinking by pityStep a miss down to the floor', () => {
-  assert.equal(adventSpawnPair(0, () => 0, T), P.minPair);
-  assert.equal(adventSpawnPair(0, () => 0.999999, T), P.maxPair);
-  assert.equal(adventSpawnPair(1, () => 0.999999, T), P.maxPair - P.pityStep);
-  assert.equal(adventSpawnPair(99, () => 0.999999, T), P.floorPair, 'never under the floor');
-  assert.equal(adventSpawnPair(99, () => 0, T), Math.min(P.minPair, P.floorPair));
-  assert.ok(P.minPair <= P.floorPair && P.floorPair <= P.maxPair, 'the knobs keep the window ordered');
-  for (let m = 0; m < 12; m += 1) {
-    const hi = adventSpawnPair(m, () => 0.999999, T);
-    assert.ok(hi <= adventSpawnPair(Math.max(0, m - 1), () => 0.999999, T), 'a miss never widens the window');
+test('adventPairChance: none before pipe 5, then 5 % rising 1 % a pipe, plus 1 % for each of the day\'s misses, capped at 1 (Michael, 27 Nov)', () => {
+  assert.equal(P.minPair, 5, 'not before the first 5 pipes (T9)');
+  assert.equal(adventPairChance(P.minPair - 1, 0, T), 0);
+  assert.equal(adventPairChance(1, 3, T), 0);
+  assert.ok(Math.abs(adventPairChance(5, 0, T) - 0.05) < 1e-12);
+  assert.ok(Math.abs(adventPairChance(6, 0, T) - 0.06) < 1e-12);
+  assert.ok(Math.abs(adventPairChance(10, 0, T) - 0.10) < 1e-12);
+  assert.ok(Math.abs(adventPairChance(5, 1, T) - 0.06) < 1e-12, 'run 2 starts at 6 %');
+  assert.ok(Math.abs(adventPairChance(5, 2, T) - 0.07) < 1e-12, 'run 3 starts at 7 %');
+  assert.equal(adventPairChance(500, 0, T), 1, 'capped');
+  assert.equal(adventPairChance(5, -4, T), adventPairChance(5, 0, T), 'a negative miss count reads as none');
+});
+
+test('adventSpawnPair: one draw from the rising-chance model; his odds of being offered the piece by a pipe', () => {
+  assert.equal(adventSpawnPair(0, () => 0, T), P.minPair, 'the lowest draw is pipe 5');
+  const top = adventSpawnPair(0, () => 0.999999999, T);
+  assert.ok(Number.isInteger(top) && top > P.minPair && top <= P.minPair + 100, `a long run always reaches its pair (${top})`);
+  // P(pair <= k): the share of an even grid of draws landing at k or before.
+  const N = 20000;
+  const cdf = (k, m) => {
+    let n = 0;
+    for (let i = 0; i < N; i += 1) if (adventSpawnPair(m, () => (i + 0.5) / N, T) <= k) n += 1;
+    return n / N;
+  };
+  const near = (a, b, what) => assert.ok(Math.abs(a - b) < 0.005, `${what}: ${a.toFixed(3)} vs ${b}`);
+  near(cdf(5, 0), 0.05, 'run 1 by pipe 5');
+  near(cdf(10, 0), 0.374, 'run 1 by pipe 10');
+  near(cdf(15, 0), 0.688, 'run 1 by pipe 15');
+  near(cdf(20, 0), 0.885, 'run 1 by pipe 20');
+  near(cdf(30, 0), 0.994, 'run 1 by pipe 30');
+  near(cdf(5, 2), 0.07, 'run 3 by pipe 5');
+  near(cdf(10, 2), 0.451, 'run 3 by pipe 10');
+  near(cdf(15, 2), 0.757, 'run 3 by pipe 15');
+  near(cdf(20, 2), 0.920, 'run 3 by pipe 20');
+  assert.equal(cdf(P.minPair - 1, 30), 0, 'never before pipe 5, however many misses');
+  for (let m = 1; m < 12; m += 1) {
+    for (const u of [0.1, 0.5, 0.9, 0.999]) {
+      assert.ok(adventSpawnPair(m, () => u, T) <= adventSpawnPair(m - 1, () => u, T), 'a miss never makes the piece later');
+    }
   }
 });
 
@@ -278,7 +307,7 @@ test('Play: the piece is caught once, into the store and the queue; practice kee
   m.advent = m.rollAdvent({ day: '2026-12-05', level: 3 }, 0);
   assert.equal(m.advent.piece, 5, "the day's own piece (weighted)");
   assert.deepEqual(m.adventOutcome(), { offered: true, found: null, late: false, status: { n: 0, tree: null } });
-  assert.equal(m.adventStores.get(2026).misses('2026-12-05'), 1, 'the pity window shrinks for the next run');
+  assert.equal(m.adventStores.get(2026).misses('2026-12-05'), 1, "a miss raises the next run's chance");
   // Practice (a test run or a Pretend date): the session's sandbox, nothing queued, the real record untouched.
   const reg = registry();
   const p = pieceScene({ test: true, reg });

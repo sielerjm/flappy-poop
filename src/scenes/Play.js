@@ -1959,7 +1959,7 @@ export class Play extends Phaser.Scene {
   /**
    * A Daily run's Advent piece (start): on a December day, one piece from those out that the store lacks (rolled
    * with a per-attempt RNG, never the shared course, so two runs of a day offer different pieces at different
-   * pairs) and the pair from which it may show (the day's misses shrink the window). Null off season, outside a
+   * pairs) and the pair from which it may show (rising odds from pipe 5; the day's misses raise them). Null off season, outside a
    * Daily, or with nothing left to find (finding 21). `this.adventRng` stands in for Math.random in tests.
    */
   rollAdvent(daily, startN) {

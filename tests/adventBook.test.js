@@ -162,3 +162,53 @@ test('the save panel\'s 🧩 Advent button wears the tree once earned (2.16)', (
   const panel = readFileSync(`${root}src/ui/savePanel.js`, 'utf8');
   assert.match(panel, /adventTreeGlyph\(/);
 });
+
+// Stage 1c, T2 (Michael, 27 Nov: "I'd delay it even a little bit more but not by much"): the lock click comes
+// lockDelayMs after a flight lands, and a book closed in that gap never clicks (2.18a's rule: nothing after close).
+test('the book: a flight\'s lock click comes lockDelayMs after it lands, and closing in the gap cancels it', async () => {
+  await import('./support/scenes.js'); // Phaser first
+  const { Advent } = await import('../src/scenes/Advent.js');
+  const a = T.advent.bookAnim;
+  assert.ok(a.lockDelayMs >= 100 && a.lockDelayMs <= 150, `a little later, not by much (${a.lockDelayMs} ms)`);
+  const book = () => {
+    const obj = () => ({ setDepth() { return this; }, setAlpha() { return this; }, setScale() { return this; }, destroy() {} });
+    const timers = [];
+    const s = Object.create(Advent.prototype);
+    Object.assign(s, {
+      hasArt: false,
+      layout: adventBookLayout(720, 1280, T),
+      sounds: [],
+      landed: [],
+      timers,
+      add: { rectangle: obj, image: obj },
+      tweens: { add: () => ({ stop() {} }) },
+      time: {
+        delayedCall(ms, fn) {
+          const tm = { ms, fn, removed: false, remove() { this.removed = true; } };
+          timers.push(tm);
+          return tm;
+        },
+      },
+      makeGlow: obj,
+      playSound(key) { this.sounds.push(key); },
+      land(p) { this.landed.push(p.cell); },
+    });
+    return s;
+  };
+  const fire = (s, ms) => s.timers.filter((tm) => tm.ms === ms && !tm.removed).forEach((tm) => (tm.removed = true, tm.fn()));
+  // Landed (a tap or the end of the flight): the art and the count at once, the click lockDelayMs later.
+  const s = book();
+  s.fly({ cell: 3 }, () => {});
+  s.flight.finish();
+  assert.deepEqual(s.landed, [3]);
+  assert.deepEqual(s.sounds, ['advent-add'], 'no click on the landing frame');
+  fire(s, a.lockDelayMs);
+  assert.deepEqual(s.sounds, ['advent-add', 'advent-lock'], 'the click, lockDelayMs later');
+  // Closed in the gap: never clicks.
+  const c = book();
+  c.fly({ cell: 7 }, () => {});
+  c.flight.finish();
+  c.flight.finish(true);
+  fire(c, a.lockDelayMs);
+  assert.deepEqual(c.sounds, ['advent-add'], 'the book closed before the click: none');
+});

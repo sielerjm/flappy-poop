@@ -38,6 +38,7 @@ export class Advent extends Phaser.Scene {
     // A scene is one object across opens: a flight cut short by a close must not reach this open (2.19 review).
     this.flight = null;
     this.flightTimer = null;
+    this.lockTimer = null;
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
     const W = this.scale.width; // the live field: the book stays centred
@@ -93,6 +94,8 @@ export class Advent extends Phaser.Scene {
       this.flight = null;
       this.flightTimer?.remove();
       this.flightTimer = null;
+      this.lockTimer?.remove();
+      this.lockTimer = null;
     });
     this.startArrivals();
   }
@@ -156,8 +159,13 @@ export class Advent extends Phaser.Scene {
       piece.destroy();
       dim.destroy();
       halo.destroy();
-      this.playSound('advent-lock', T.advent.sound.lockVolume);
       this.land(p, true);
+      // The click a beat after the piece settles (T2); a book closed in that gap never clicks (finish(true), shutdown).
+      this.lockTimer?.remove();
+      this.lockTimer = this.time.delayedCall(a.lockDelayMs, () => {
+        this.lockTimer = null;
+        this.playSound('advent-lock', T.advent.sound.lockVolume);
+      });
     };
     const end = () => {
       this.flight = null;
@@ -168,6 +176,8 @@ export class Advent extends Phaser.Scene {
       finish: (closing = false) => {
         if (closing) {
           for (const tw of tweens) tw.stop(); // the book is going: nothing new is drawn (the piece is already seen)
+          this.lockTimer?.remove();
+          this.lockTimer = null;
           return;
         }
         finishLanding();

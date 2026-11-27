@@ -2493,14 +2493,29 @@ export function rollAdventTarget(backlog, day, rng, t) {
 }
 
 /**
- * The pair, counted from the run's first, from which a run's piece may show: in [minPair, top], where top is
- * maxPair less pityStep for each of the day's runs that ended without the piece, never under floorPair.
+ * The chance the run's piece is offered at pair `pair` (counted from the run's first) if it has not been yet
+ * (Michael, 27 Nov): none before minPair (the slot after pipe 5), then startChance there, stepChance more for each
+ * later pair and missChance more for each of the day's runs that ended without it; capped at 1. No guarantee pair.
+ */
+export function adventPairChance(pair, misses, t) {
+  const p = t.advent.piece;
+  if (pair < p.minPair) return 0;
+  return Math.min(1, p.startChance + Math.max(0, misses) * p.missChance + (pair - p.minPair) * p.stepChance);
+}
+
+/**
+ * The pair from which a run's piece may show: one draw at the run's start from adventPairChance's rising odds
+ * (the first pair whose running chance of an offer passes the draw), so a run makes one rng() call. The chance
+ * reaches 1 within (1 - startChance) / stepChance pairs, so the walk always ends.
  */
 export function adventSpawnPair(misses, rng, t) {
-  const p = t.advent.piece;
-  const hi = Math.max(p.floorPair, p.maxPair - Math.max(0, misses) * p.pityStep);
-  const lo = Math.min(p.minPair, hi);
-  return lo + Math.floor(rng() * (hi - lo + 1));
+  const u = rng();
+  let none = 1;
+  for (let pair = t.advent.piece.minPair; ; pair += 1) {
+    const c = adventPairChance(pair, misses, t);
+    none *= 1 - c;
+    if (u < 1 - none || c >= 1) return pair;
+  }
 }
 
 /**

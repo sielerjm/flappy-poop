@@ -547,9 +547,10 @@ export const TUNING = {
     snowCap: { ox: -6.5, oy: -14.5 }, // px from a bottom pipe's cap top-left to the snow layer's top-left (process_art's --anchor report)
     // Advent pieces (Stage 2, 2.6): piece k comes out on k Dec, up to `count` (submit_advent_piece's 24); a December Daily run
     // offers one, rolled from the pieces out that the device has not found (today's weighs todayWeight, each other 1), in the
-    // first band slot nothing else took from a pair in [minPair, maxPair] pairs into the run (per-attempt RNG, never the
-    // course). Each run of the day that ends without it takes pityStep pairs off maxPair, down to floorPair.
-    piece: { count: 24, minPair: 3, maxPair: 20, pityStep: 3, floorPair: 6, todayWeight: 3 },
+    // first band slot nothing else took from the pair drawn at the run's start (per-attempt RNG, never the course): none
+    // before minPair (the slot after pipe 5), then a chance of startChance at it rising stepChance a pair, plus missChance for
+    // each run of the day that ended without it; no guarantee pair (Michael, 27 Nov, Stage 1c T9 / T10).
+    piece: { count: 24, minPair: 5, startChance: 0.05, stepChance: 0.01, missChance: 0.01, todayWeight: 3 },
     // The home screen's Advent button (2.15a; S14, Gate A sheet 5): the piece's box at iconPx in the round button, and
     // "N/24" (countPx, gold) centred countDx / countDy from the button's centre, on its lower right as the 📚's count.
     button: { iconPx: 60, countPx: 24, countDx: 40, countDy: 40 },
@@ -567,7 +568,7 @@ export const TUNING = {
     // 332 px frame) over a white glow (glowPad px) with the book dimmed by `dim` (appearMs, the chimes building), flies to
     // its slot (flyMs), lands with the lock click while its glow fades (fadeMs). At most `flights` pieces fly when the
     // book opens (the latest ones); older ones land in place at once. Under reduced motion none flies.
-    bookAnim: { appearMs: 1000, flyMs: 1300, fadeMs: 1000, popMs: 300, glowPad: 28, dim: 0.45, flights: 3 },
+    bookAnim: { appearMs: 1000, flyMs: 1300, fadeMs: 1000, popMs: 300, glowPad: 28, dim: 0.45, flights: 3, lockDelayMs: 120 }, // lockDelayMs: the click after the landing (Michael, 27 Nov, T2)
     // Snow storms (Stage 2, 2.7): December Daily runs only, from the day's shared course (course.storm), so every run of a
     // day meets the same storms at the same pairs. A pair at least firstPair pairs into the run, and pairs + gapPairs after
     // the last storm's first pair, starts one when its draw is under `chance`; a banner shows one pair ahead; the storm
@@ -588,7 +589,7 @@ export const TUNING = {
     },
     // December's sounds (2.7a; Michael's Pixabay clips, CREDITS.md): the twinkle when a piece is caught, and the blizzard
     // looped under a storm, faded in from the banner (blizzardFadeMs) and out as the storm ends. Levels for his listen check.
-    sound: { foundVolume: 0.6, blizzardVolume: 0.35, blizzardFadeMs: 1200, addVolume: 0.7, lockVolume: 0.8 }, // addVolume / lockVolume: the book's chimes and click (2.15a)
+    sound: { foundVolume: 0.6, blizzardVolume: 0.7, blizzardFadeMs: 1200, addVolume: 0.7, lockVolume: 0.8 }, // addVolume / lockVolume: the book's chimes and click (2.15a)
     // The 🎅 that stands in for the 🌞 all December: Santa, Mrs. Claus and Mx Claus, plain and in the five skin
     // tones. A visit picks from the plain three (plainSantas, pickSanta) unless the player saved one in the picker,
     // which offers every variant this device draws as one glyph (supportedSantas). Keep the plain three: they are
