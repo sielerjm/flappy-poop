@@ -12,11 +12,11 @@ export const CHANGELOG = [
     date: '27 Nov 2026',
     notes: {
       en: [
-        '🎅 Choose your Santa: in December, tap the 🎅 in the title of the Daily Dump window and pick your favourite, in any skin tone. It is saved on this device. Until you choose, the 🎅 changes each visit between Santa, Mrs. Claus and Mx Claus. A red dot shows where to tap, and the (?) in the window explains December.',
+        '🎅 Choose your boweliday character: in December, tap the 🎅 in the title of the Daily Dump window and pick your favourite, in any skin tone. It is saved on this device. Until you choose, it changes each visit between Santa, Mrs. Claus and Mx Claus. A red dot shows where to tap, and the (?) in the window explains December.',
         '💩 In December the loading screen\'s poop wears its Santa hat too, and the bean wears holly.',
       ],
       'zh-Hans': [
-        '🎅 选择你的圣诞老人：十二月里，点每日一拉窗口标题里的🎅，选你最喜欢的一个，任何肤色都行。只保存在这台设备上。选好之前，🎅每次来访都会在圣诞老人、圣诞老奶奶和中性圣诞人之间轮换。小红点告诉你该点哪里，窗口里的(?)会说明十二月的玩法。',
+        '🎅 选择你的节日角色：十二月里，点每日一拉窗口标题里的🎅，选你最喜欢的一个，任何肤色都行。只保存在这台设备上。选好之前，它每次来访都会在圣诞老人、圣诞老奶奶和中性圣诞人之间轮换。小红点告诉你该点哪里，窗口里的(?)会说明十二月的玩法。',
         '💩 十二月里，加载画面上的便便也戴上了圣诞帽，豆子也戴上了冬青。',
       ],
     },
@@ -56,12 +56,12 @@ export const CHANGELOG = [
     date: '26 Nov 2026',
     notes: {
       en: [
-        '🎅 From 1 December, all month long: a Santa stands in for the 🌞, a different one each time the home screen opens (Santa, Mrs. Claus and Mx Claus, in every skin tone).',
+        '🎅 From 1 December, all month long: a boweliday character stands in for the 🌞, a different one each time the home screen opens (Santa, Mrs. Claus or Mx Claus).',
         '💩 Your poop wears a Santa hat, and so do the bad bacteria; fiber turns into a candy cane, the probiotic into gingerbread, and snow sits on the pipes. Only the look changes: the game plays the same.',
         '❄️ Snow falls all month, on the home screen and in every game. The home screen says Happy Bowelidays! over the title, with a countdown under it: "20 sleeps till Christmas", then Merry Christmas! on the 25th.',
       ],
       'zh-Hans': [
-        '🎅 从12月1日起，整个十二月由圣诞老人代替🌞，每次打开主页都会换一位（圣诞老人、圣诞老奶奶和中性圣诞人，各种肤色都有）。',
+        '🎅 从12月1日起，整个十二月由节日角色代替🌞，每次打开主页都会换一位（圣诞老人、圣诞老奶奶或中性圣诞人）。',
         '💩 你的便便戴上了圣诞帽，有害细菌也戴上了；纤维变成拐杖糖，益生菌变成姜饼，管道上还积了雪。只是外观变了，玩法完全一样。',
         '❄️ 整个十二月都在下雪，主页和每种游戏模式里都有。主页标题上方是 Happy Bowelidays!，下方是圣诞倒计时：“离圣诞节还有20晚”，25日显示“圣诞快乐！”。',
       ],
