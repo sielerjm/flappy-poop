@@ -8335,7 +8335,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       // The holly bean (plan 17, 1b.2b): level 1's scripted pairs bring one; the world bean wears the holly twin on the
       // stock bean's hitbox circle, and the HUD's bean wears it too (Stage 1c, T12: December art everywhere).
       await until(`${play}.beans.getChildren().some((b) => b.active)`, 120);
-      const bean = await evaluate(`(() => { const p = ${play}; const b = p.beans.getChildren().find((q) => q.active); return JSON.stringify(b ? { key: b.texture.key, kind: b.getData('kind'), circle: b.body.isCircle, w: b.body.width, radius: b.getData('radius'), hud: p.beanIcon.texture.key } : null); })()`).then(JSON.parse);
+      const bean = await evaluate(`(() => { const p = ${play}; const b = p.beans.getChildren().find((q) => q.active); return JSON.stringify(b ? { key: b.texture.key, kind: b.getData('kind'), circle: b.body.isCircle, w: b.body.sourceWidth * b.scaleX, radius: b.getData('radius'), hud: p.beanIcon.texture.key } : null); })()`).then(JSON.parse);
       ok(bean?.key === 'bean-holly' && bean.kind === 'bean' && bean.circle && Math.abs(bean.w - 2 * TT.beans.beanRadius) < 1 && bean.radius === TT.beans.beanRadius && bean.hud === 'bean-holly', `the world bean wears bean-holly on the stock bean's circle (radius ${TT.beans.beanRadius}), the HUD bean too (T12) (${JSON.stringify(bean)})`);
       // A fart: the stock key stays poop-fart while the two hatted fart frames alternate on the stink frames' clock.
       await evaluate(`(() => { const p = ${play}; p.effects.addBean(); p.effects.addBean(); p.setCharged(true); p.activatePower(); return true; })()`);
@@ -8500,7 +8500,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       // two lines; the run's piece (the day's own, from pair 3) shows in a band slot, is caught, and lands in the store
       // and the advent queue with the day's 🌞 post; Over says "Found today's gift!" and "New best today!"; a second,
       // lower run queues nothing better, misses its piece and says neither; (2) on a 7 Dec pin a Daily meets its storm:
-      // the banner one pair ahead, then the pull (flap 0.92, scroll 1.08) and the storm's 144 flakes over the light 36,
+      // the banner one pair ahead, then the pull (flap 0.92, scroll 0.7) and the storm's 200 flakes over the light 36 in a headwind,
       // calm again after; (3) test mode on a Pretend 5 Dec: the piece goes to the session's sandbox, nothing is queued
       // and the real record stays as it was.
       if (date) {
@@ -8545,7 +8545,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         let last = null;
         while (Date.now() - t0 < maxMs) {
           await sleep(100);
-          last = await evaluate(`(() => { const p = ${play}; const it = p.items.getChildren().find((c) => c.getData('kind') === 'advent'); if (p.poop?.body) { p.poop.y = it && ${stop === 'found'} ? it.y : 640; p.poop.body.setVelocityY(0); } return JSON.stringify({ state: p.state, passed: p.pipesPassed - (p.advent?.startN ?? p.stormRun?.startN ?? 0), advent: p.advent, seen: it ? { key: it.texture.key, scale: it.scaleX, radius: it.getData('radius') } : null, level: p.stormRun?.level ?? 0, starts: p.stormRun?.starts ?? [], startN: p.stormRun?.startN ?? 0, banner: p.stormBanner.visible, flap: p.stormFlap, scroll: p.stormScroll, flakes: p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length, blizzard: Boolean(p.blizzard) }); })()`).then(JSON.parse);
+          last = await evaluate(`(() => { const p = ${play}; const it = p.items.getChildren().find((c) => c.getData('kind') === 'advent'); if (p.poop?.body) { p.poop.y = it && ${stop === 'found'} ? it.y : 640; p.poop.body.setVelocityY(0); } return JSON.stringify({ state: p.state, passed: p.pipesPassed - (p.advent?.startN ?? p.stormRun?.startN ?? 0), advent: p.advent, seen: it ? { key: it.texture.key, scale: it.scaleX, radius: it.getData('radius') } : null, level: p.stormRun?.level ?? 0, starts: p.stormRun?.starts ?? [], startN: p.stormRun?.startN ?? 0, banner: p.stormBanner.visible, flap: p.stormFlap, scroll: p.stormScroll, flakes: p.children.list.filter((c) => c.texture?.key === 'snowflake' && c.visible).length, blizzard: Boolean(p.blizzard), air: p.snowfall?.air?.() ? { wind: p.snowfall.air().wind, swirls: p.snowfall.air().swirls.length, tau: p.snowfall.air().tau ?? 0 } : null }); })()`).then(JSON.parse);
           if (last.state !== 'playing') break;
           if (typeof stop === 'function' ? stop(last) : stop === 'found' ? last.advent?.found : false) break;
         }
@@ -8675,6 +8675,7 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
       const first = run3.starts[0] - run3.startN;
       ok(Boolean(banner) && banner.passed === first - 2, `7 Dec: "Snowstorm ahead!" one pair before the storm (pairs flown ${banner?.passed}, the storm at +${first})`);
       ok(Boolean(full) && full.flap === T17.storm.flapMul && full.scroll === T17.storm.scrollMul && full.flakes === T17.snow.count + T17.storm.extra, `in the storm: flap ${full?.flap}, scroll ${full?.scroll}, ${full?.flakes} flakes (${T17.snow.count} + ${T17.storm.extra})${full?.blizzard ? ', the blizzard looping' : ''}`);
+      ok(Boolean(full?.air) && full.air.wind < 0 && full.air.swirls === T17.storm.swirls && full.air.tau === 0, `in the storm: a headwind, right to left (${full?.air?.wind?.toFixed?.(0)} px/s), ${full?.air?.swirls} spirals (want ${T17.storm.swirls}), no streaks (tau ${full?.air?.tau}) (1c.6, Gate A H2)`);
       ok(run3.level === 0 && run3.flap === 1 && run3.scroll === 1 && run3.flakes === T17.snow.count, `calm again after it: flap ${run3.flap}, scroll ${run3.scroll}, ${run3.flakes} flakes`);
       await crash();
       await homeAgain();

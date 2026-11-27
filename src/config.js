@@ -542,7 +542,10 @@ export const TUNING = {
     bowelidays: { widthFrac: 0.6, y: 290, aspect: 170 / 947 },
     countdownPx: 30, // px font of the countdown line under the title (1–25 Dec; readyLayout's countdown box)
     // Home snowfall (src/ui/snowfall.js): white dots drifting down the ready screen; none under reduced motion (D6).
-    snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9, windMin: 0.7, windMax: 1.3 }, // windMin / windMax: each flake's share of a wind (2.7), drawn once
+    snow: { count: 36, minSpeed: 28, maxSpeed: 64, driftPx: 16, driftMs: 3200, minPx: 6, maxPx: 12, alpha: 0.9, depth: 9, windMin: 0.7, windMax: 1.3, // windMin / windMax: each flake's share of a wind (2.7), drawn once
+      // A fart's streaks (1c.6, Gate A 11a / 11b): a flake at minV px/s or more is drawn stretched along its path; a super
+      // fart's also has a soft copy behind it, softH times as tall at softAlpha (a blur). None under reduced motion (no snow).
+      streak: { minV: 150, softH: 1.6, softAlpha: 0.25 } },
     santaDot: { radius: 9, color: 0xff3b30, ring: 2, ringColor: 0xffffff, homeDx: 31, homeDy: -31, titleInset: 3 }, // the red dot on the 🎅 (1b.2e; sheet 10): home's on the rim at 45°, the title's on the glyph's top-right corner
     snowCap: { ox: -6.5, oy: -14.5 }, // px from a bottom pipe's cap top-left to the snow layer's top-left (process_art's --anchor report)
     // Advent pieces (Stage 2, 2.6): piece k comes out on k Dec, up to `count` (submit_advent_piece's 24); a December Daily run
@@ -577,14 +580,17 @@ export const TUNING = {
     // (Michael, 27 Nov, 1c.4: 30 % on every level); the moving pairs' drift slows by the same share (Play.stepPipeMove),
     // so a gap shifts no more during a crossing than in calm air (tests/tuning.test.js). tests/adventStorm.test.js keeps
     // the climb per pair at 85 % or more and the 700 ms grace after a fart that ends in a storm clear of a pipe column.
-    // The look is Gate A's option B (Michael, 26 Nov): `extra` storm flakes over the light snow, falling fallMul times as
-    // fast, minPx to maxPx, blown left to right at their mean fall (a 45° slant) with gusts of ±gust that never reverse,
-    // and `swirls` whirls of radius swirlR (tangential speed up to swirlS) whose centres sit 2 × swirlR apart. A fart
-    // blows the snow right to left at fartWind px/s, eased over fartRampMs, in every December run (Michael, 26 Nov).
+    // The look is Gate A's option H2 (Michael, 27 Nov, sheet 11; 1c.6): a headwind, `extra` storm flakes over the light
+    // snow, falling fallMul times as fast, minPx to maxPx, blown right to left at their mean fall over tan(angleDeg) (about
+    // 20° below the horizontal) with gusts of ±gust that never reverse, and `swirls` whirls of radius swirlR (tangential
+    // speed up to swirlS, a pull of swirlPull of it toward the centre, so flakes spiral in) whose centres sit 2 × swirlR
+    // apart. No streaks: it reads as drag. A fart blows the snow right to left at fartWind px/s (a super fart superWind),
+    // eased over fartRampMs, in every December run, each flake drawn as a streak fartTau (superTau) s of its speed long
+    // (TUNING.advent.snow.streak); in a storm the fart's look takes over over the same ramp while the pull keeps rampMs.
     storm: {
       firstPair: 6, chance: 0.15, pairs: 4, gapPairs: 8, rampMs: 600, flapMul: 0.92, scrollMul: 0.7,
-      extra: 144, fallMul: 2, minPx: 5, maxPx: 14, gust: 0.35, swirls: 2, swirlR: 160, swirlS: 180,
-      fartWind: 420, fartRampMs: 250, bannerPx: 48, bannerY: 320,
+      extra: 200, fallMul: 2, minPx: 5, maxPx: 14, angleDeg: 20, gust: 0.5, swirls: 4, swirlR: 120, swirlS: 300, swirlPull: 0.45,
+      fartWind: 560, superWind: 760, fartTau: 0.035, superTau: 0.06, fartRampMs: 250, bannerPx: 48, bannerY: 320,
       // The gusts' wobble: two sines in [−1, 1] (share, period in s, phase), and how far from the field's edges a swirl's
       // centre may sit (px) and how fast it drifts (a share of the wind). Gate A's model (tools/advent_preview.py).
       gustWaves: [{ share: 0.65, periodS: 2.6, phase: 0 }, { share: 0.35, periodS: 1.1, phase: 1.3 }],

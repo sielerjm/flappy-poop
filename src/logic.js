@@ -2581,28 +2581,32 @@ export function stormScrollMul(level, t) {
 }
 
 /**
- * px/s of wind on the snow at storm level 0 to 1, `tSec` into the storm: left to right (positive) at the storm flakes'
- * mean fall (a 45° slant), times 1 + gust × a wobble of two sines in [−1, 1], so the gusts never turn it back.
+ * px/s of wind on the snow at storm level 0 to 1, `tSec` into the storm: a headwind, right to left (negative), at the
+ * storm flakes' mean fall over tan(angleDeg) (about 20° below the horizontal, 1c.6), times 1 + gust × a wobble of two
+ * sines in [−1, 1], so the gusts never turn it back.
  */
 export function stormWind(level, tSec, t) {
   if (!level) return 0;
   const s = t.advent.storm;
-  const mean = ((t.advent.snow.minSpeed + t.advent.snow.maxSpeed) / 2) * s.fallMul;
+  const mean = (((t.advent.snow.minSpeed + t.advent.snow.maxSpeed) / 2) * s.fallMul) / Math.tan((s.angleDeg * Math.PI) / 180);
   const wobble = s.gustWaves.reduce((sum, w) => sum + w.share * Math.sin((2 * Math.PI * tSec) / w.periodS + w.phase), 0);
-  return level * mean * (1 + s.gust * wobble);
+  return -level * mean * (1 + s.gust * wobble);
 }
 
-/** px/s of wind on the snow `elapsedMs` into a fart of `durationMs` (null: none): right to left at advent.storm.fartWind, eased in and out over fartRampMs. */
-export function fartWind(elapsedMs, durationMs, t) {
+/**
+ * px/s of wind on the snow `elapsedMs` into a fart of `durationMs` (null: none): right to left at advent.storm.fartWind
+ * (a super fart's superWind, 1c.6), eased in and out over fartRampMs.
+ */
+export function fartWind(elapsedMs, durationMs, t, superFart = false) {
   if (typeof elapsedMs !== 'number' || !(durationMs > 0) || elapsedMs <= 0 || elapsedMs >= durationMs) return 0;
-  const r = t.advent.storm.fartRampMs;
-  return -t.advent.storm.fartWind * Math.min(1, elapsedMs / r, (durationMs - elapsedMs) / r);
+  const s = t.advent.storm;
+  return -(superFart ? s.superWind : s.fartWind) * Math.min(1, elapsedMs / s.fartRampMs, (durationMs - elapsedMs) / s.fartRampMs);
 }
 
 /**
  * advent.storm.swirls whirl centres in `area` from `rng` (decoration: Math.random in the game), each at least
  * 2 × swirlR from the others (two that overlap, one turning each way, cancel out: Gate A, 26 Nov), turning
- * counter-clockwise (dir 1) and clockwise (dir −1) in turn: [{ x, y, R, S, dir }].
+ * counter-clockwise (dir 1) and clockwise (dir −1) in turn, each pulling flakes in by swirlPull: [{ x, y, R, S, pull, dir }].
  */
 export function swirlCentres(rng, area, t) {
   const s = t.advent.storm;
@@ -2611,7 +2615,7 @@ export function swirlCentres(rng, area, t) {
   const out = [];
   for (let tries = 0; out.length < s.swirls && tries < 400; tries += 1) {
     const c = { x: box.x0 + rng() * (box.x1 - box.x0), y: box.y0 + rng() * (box.y1 - box.y0) };
-    if (out.every((o) => Math.hypot(o.x - c.x, o.y - c.y) >= 2 * s.swirlR) || tries >= 399) out.push({ ...c, R: s.swirlR, S: s.swirlS, dir: out.length % 2 ? -1 : 1 });
+    if (out.every((o) => Math.hypot(o.x - c.x, o.y - c.y) >= 2 * s.swirlR) || tries >= 399) out.push({ ...c, R: s.swirlR, S: s.swirlS, pull: s.swirlPull, dir: out.length % 2 ? -1 : 1 });
   }
   return out;
 }

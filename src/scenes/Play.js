@@ -1088,7 +1088,7 @@ export class Play extends Phaser.Scene {
     this.advent = this.rollAdvent(daily, begin.pipes); // December: this Daily run's Advent piece, or null (plan 17, 2.6)
     this.calmAir(); // no storm carries over from the last run
     // December: a Daily run's snow storms (plan 17, 2.7), walked from the day's shared course as its pairs spawn.
-    this.stormRun = daily && adventSeason(daily.day, T) ? { startN: begin.pipes, starts: [], level: 0, ms: 0, swirls: [] } : null;
+    this.stormRun = daily && adventSeason(daily.day, T) ? { startN: begin.pipes, starts: [], level: 0, air: 0, ms: 0, swirls: [] } : null;
     this.runFarts = 0; // this run's farts and super farts, for the career counters
     this.runSuperFarts = 0;
     this.runFalls = 0; // ‼️ long falls this run (fallStarted)
@@ -1859,27 +1859,36 @@ export class Play extends Phaser.Scene {
   // ---- December's air (plan 17, 2.7)
 
   /**
-   * One frame of December's air in a run: a Daily's storm, eased in and out by its pairs (stormPhase; never during a
-   * fart, finding 27), its banner one pair ahead, its pull on the flap and the scroll; and the wind on the snow, a
-   * storm's left to right or a fart's right to left (every December run, Michael 26 Nov). Off season, nothing.
+   * One frame of December's air in a run: a Daily's storm, eased in and out by its pairs (stormPhase), its banner one
+   * pair ahead, its pull on the flap and the scroll (never during a fart, finding 27: st.level, eased over rampMs both
+   * ways, so the 700 ms grace after a fart that ends in a storm still clears a column, 1c.4); and the snow's look: the
+   * storm's headwind (st.air, by its pairs alone) under a fart's wind, which takes over as the fart eases in and hands
+   * back as it eases out (fartRampMs, Gate A 11d, 1c.6), its flakes streaked (a super fart's softly). Off season, nothing.
    */
   tickAir(delta) {
     const st = this.stormRun;
     if (!st && !this.snowfall) return;
     const farting = this.effects.powerActive();
+    const superFart = farting && Boolean(this.effects.powerIsSuper?.());
+    const fw = farting ? fartWind(this.effects.powerElapsed(), this.fartDurationMs, T, superFart) : 0;
+    const fartShare = fw ? -fw / (superFart ? T.advent.storm.superWind : T.advent.storm.fartWind) : 0; // 0 to 1, the fart's ease
     let level = 0;
+    let look = 0;
     if (st) {
       const { phase } = stormPhase(this.pipesPassed, st.starts, T);
       const step = delta / T.advent.storm.rampMs;
-      if (phase === 'storm' && !farting) {
-        if (st.level === 0) {
+      if (phase === 'storm') {
+        if (!(st.air > 0)) {
           st.ms = 0;
           st.swirls = swirlCentres(Math.random, { x: 0, y: 0, width: this.fieldW, height: GAME_HEIGHT }, T);
         }
-        st.level = Math.min(1, st.level + step);
-      } else st.level = Math.max(0, st.level - step);
+        st.air = Math.min(1, (st.air ?? 0) + step);
+      } else st.air = Math.max(0, (st.air ?? 0) - step);
+      if (phase === 'storm' && !farting) st.level = Math.min(1, st.level + step);
+      else st.level = Math.max(0, st.level - step);
       st.ms += delta;
       level = st.level;
+      look = st.air * (1 - fartShare);
       this.stormFlap = stormFlapMul(level, T);
       const scroll = stormScrollMul(level, T);
       if (scroll !== this.stormScroll) {
@@ -1894,15 +1903,20 @@ export class Play extends Phaser.Scene {
       this.setBlizzard(st.hum);
     }
     if (!this.snowfall) return;
-    const wind = farting ? fartWind(this.effects.powerElapsed(), this.fartDurationMs, T) : stormWind(level, (st?.ms ?? 0) / 1000, T);
-    if (level > 0) for (const s of st.swirls) s.x = ((((s.x + (T.advent.storm.swirlDrift * wind * delta) / 1000) % this.fieldW) + this.fieldW) % this.fieldW); // the whirls drift with a share of the wind
-    this.snowfall.setAir(wind || level ? { wind, swirls: level > 0 ? st.swirls.map((s) => ({ ...s, S: s.S * level })) : [] } : null);
-    this.snowfall.setStorm(level, T.advent.storm);
+    const sw = stormWind(look, (st?.ms ?? 0) / 1000, T);
+    const wind = fw + sw;
+    if (look > 0) for (const s of st.swirls) s.x = ((((s.x + (T.advent.storm.swirlDrift * sw * delta) / 1000) % this.fieldW) + this.fieldW) % this.fieldW); // the whirls drift with a share of the storm's wind
+    const tau = fartShare * (superFart ? T.advent.storm.superTau : T.advent.storm.fartTau);
+    this.snowfall.setAir(wind || look ? { wind, swirls: look > 0 ? st.swirls.map((s) => ({ ...s, S: s.S * look })) : [], tau, soft: superFart } : null);
+    this.snowfall.setStorm(look, T.advent.storm);
   }
 
   /** Calm air (a run's end and start): no storm pull, no banner, the snow back to its light fall. */
   calmAir() {
-    if (this.stormRun) this.stormRun.level = 0;
+    if (this.stormRun) {
+      this.stormRun.level = 0;
+      this.stormRun.air = 0;
+    }
     this.stormFlap = 1;
     if ((this.stormScroll ?? 1) !== 1) {
       this.stormScroll = 1;

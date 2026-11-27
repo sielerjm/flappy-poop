@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
 import { createCourse, createRng, stormStartsHere, stormPhase, stormCovers, stormWind, fartWind, swirlCentres, stormFlapMul, stormScrollMul, levelSpeed, gapBobY, pipeMoveParams } from '../src/logic.js';
-import { makeFlakes, stepFlakes } from '../src/ui/snowfall.js';
+import { makeFlakes, stepFlakes, streakShape } from '../src/ui/snowfall.js';
 import { playScene } from './support/scenes.js';
 
 const S = T.advent.storm;
@@ -93,8 +93,8 @@ test('the storm\'s pull: flap and scroll multipliers ramp with the storm\'s leve
   assert.ok(S.pairs >= 2 && S.rampMs > 0 && S.rampMs <= 1500);
 });
 
-test('stormWind: left to right at the storm flakes\' mean fall (45°), gusts of ±35 % that never reverse; none at level 0', () => {
-  const mean = ((SNOW.minSpeed + SNOW.maxSpeed) / 2) * S.fallMul;
+test('stormWind: a headwind, right to left at the storm flakes\' mean fall over tan(angleDeg) (H2, about 20° below the horizontal), gusts of ±gust that never reverse; none at level 0 (1c.6)', () => {
+  const mean = (((SNOW.minSpeed + SNOW.maxSpeed) / 2) * S.fallMul) / Math.tan((S.angleDeg * Math.PI) / 180);
   let lo = Infinity;
   let hi = -Infinity;
   let sum = 0;
@@ -105,9 +105,11 @@ test('stormWind: left to right at the storm flakes\' mean fall (45°), gusts of 
     hi = Math.max(hi, w);
     sum += w;
   }
-  assert.ok(lo > 0, 'never right to left');
-  assert.ok(Math.abs(sum / N - mean) < 0.05 * mean, `mean ${(sum / N).toFixed(1)} vs ${mean}`);
-  assert.ok(hi - lo >= 0.4 * mean && hi <= mean * (1 + S.gust) + 1e-9, 'gusty within ±gust');
+  assert.ok(hi < 0, 'never left to right');
+  assert.ok(S.angleDeg >= 15 && S.angleDeg <= 30, `flatter than 45° (${S.angleDeg}°)`);
+  assert.ok(Math.abs(-sum / N - mean) < 0.05 * mean, `mean ${(sum / N).toFixed(1)} vs ${-mean}`);
+  assert.ok(hi - lo >= 0.4 * mean && -lo <= mean * (1 + S.gust) + 1e-9, 'gusty within ±gust');
+  assert.ok(S.gust < 1, 'a gust never turns it back');
   assert.equal(stormWind(0, 3, T), 0);
   assert.ok(Math.abs(stormWind(0.5, 3, T) - stormWind(1, 3, T) / 2) < 1e-9);
 });
@@ -121,6 +123,10 @@ test('fartWind: right to left at full strength while the fart runs, ramped in an
   assert.ok(fartWind(S.fartRampMs / 2, D, T) < 0 && fartWind(S.fartRampMs / 2, D, T) > -S.fartWind, 'ramping in');
   assert.ok(fartWind(D - S.fartRampMs / 2, D, T) > -S.fartWind, 'ramping out');
   assert.equal(fartWind(D, D, T), 0);
+  // The super fart (T4): faster, the same ramps.
+  assert.equal(fartWind(D / 2, D, T, true), -S.superWind);
+  assert.ok(S.superWind > S.fartWind && S.fartWind >= 500, `fart ${S.fartWind}, super ${S.superWind} px/s (Gate A 11a / 11b)`);
+  assert.ok(fartWind(S.fartRampMs / 2, D, T, true) > -S.superWind, 'ramping in');
   // Nearly flat: against the light snow's mean fall, about 84° from straight down.
   const angle = (Math.atan2(S.fartWind, (SNOW.minSpeed + SNOW.maxSpeed) / 2) * 180) / Math.PI;
   assert.ok(angle >= 75 && angle < 90, `${angle.toFixed(1)}°`);
@@ -134,7 +140,20 @@ test('swirlCentres: inside the field, every two at least 2R apart (two that over
     for (const c of cs) assert.ok(c.x >= area.x && c.x <= area.x + area.width && c.y >= area.y && c.y <= area.y + area.height);
     for (let i = 0; i < cs.length; i += 1) for (let j = i + 1; j < cs.length; j += 1) assert.ok(Math.hypot(cs[i].x - cs[j].x, cs[i].y - cs[j].y) >= 2 * S.swirlR);
     assert.deepEqual(cs.map((c) => c.dir), cs.map((_, i) => (i % 2 ? -1 : 1)), 'alternating turns');
+    for (const c of cs) assert.deepEqual([c.R, c.S, c.pull], [S.swirlR, S.swirlS, S.swirlPull], 'each head spirals in (pull)');
   }
+  // B10: the heads fit their box. K heads 2R apart in a row or a column of the margin box, with room to spare.
+  const bw = area.width - 2 * S.swirlMargin.x;
+  const bh = area.height - S.swirlMargin.top - S.swirlMargin.bottom;
+  // Their discs (radius R, centres in the box) cover 0.3 or less of the box grown by R: K 4 at R 120 is 0.25; the
+  // limit B10 found (more than four of R 160, 0.375 and up) fails it.
+  const share = (S.swirls * Math.PI * S.swirlR ** 2) / ((bw + 2 * S.swirlR) * (bh + 2 * S.swirlR));
+  assert.ok(share <= 0.3, `${S.swirls} heads of R ${S.swirlR} in ${bw} x ${bh}: ${share.toFixed(3)} of it`);
+  for (let seed = 51; seed <= 500; seed += 1) {
+    const cs = swirlCentres(createRng(seed), area, T);
+    for (let i = 0; i < cs.length; i += 1) for (let j = i + 1; j < cs.length; j += 1) assert.ok(Math.hypot(cs[i].x - cs[j].x, cs[i].y - cs[j].y) >= 2 * S.swirlR, `seed ${seed}`);
+  }
+  assert.ok(S.swirlPull > 0 && S.swirlPull < 1, `pull ${S.swirlPull}: curls in, never straight at the centre`);
 });
 
 test('stepFlakes in the air: the wind carries a flake sideways (wrapping across the field), a swirl turns it, calm air is as before', () => {
@@ -151,12 +170,40 @@ test('stepFlakes in the air: the wind carries a flake sideways (wrapping across 
   const one = [{ x: 400, y: 600, px: 8, vy: 40, phase: 0, m: 1 }];
   stepFlakes(one, 100, 0, area, SNOW, { wind: 0, swirls: [{ x: 400 - S.swirlR / 2, y: 600, R: S.swirlR, S: S.swirlS, dir: 1 }] });
   assert.ok(one[0].y < 600, `the swirl lifts it (${one[0].y.toFixed(1)})`);
+  // The drawn velocity (1c.6): each step stores vx, vy (the wind, the swirls and the drift sine's slope), which the
+  // streaks are drawn along.
+  const fly = [{ x: 400, y: 600, px: 8, vy: 40, phase: 0, m: 1 }];
+  stepFlakes(fly, 16, 0, area, SNOW, { wind: -560, swirls: [] });
+  const drift = (SNOW.driftPx * 2 * Math.PI * 1000) / SNOW.driftMs;
+  assert.ok(Math.abs(fly[0].vx - (-560 + drift)) < 1e-6 && fly[0].dvy === 40 && fly[0].vy === 40, `vx ${fly[0].vx}, dvy ${fly[0].dvy}`);
+  const calmV = [{ x: 400, y: 600, px: 8, vy: 40, phase: Math.PI / 2, m: 1 }];
+  stepFlakes(calmV, 16, 0, area, SNOW);
+  assert.ok(Math.abs(calmV[0].vx) < 1e-9 && calmV[0].dvy === 40, 'calm: the fall alone (cos 90° = 0)');
+  // How it is drawn: round below streak.minV or with no tau; else a streak px + speed × tau long along its path.
+  const ST = SNOW.streak;
+  assert.equal(streakShape(fly[0], null, ST), null, 'calm air: round');
+  assert.equal(streakShape(fly[0], { wind: -560, tau: 0 }, ST), null, 'a storm (no tau): round');
+  assert.equal(streakShape({ px: 8, vx: -100, dvy: 40 }, { tau: S.fartTau }, ST), null, 'slow: round');
+  const sh = streakShape(fly[0], { tau: S.fartTau }, ST);
+  const sp = Math.hypot(fly[0].vx, 40);
+  assert.ok(Math.abs(sh.len - (8 + sp * S.fartTau)) < 1e-9 && sh.h === 8 && Math.abs(sh.rot - Math.atan2(40, fly[0].vx)) < 1e-9, JSON.stringify(sh));
+  // The longest streaks (a flake that catches the most wind, windMax): Gate A 11a 15 to 30 px, 11b 35 to 62 px.
+  const longest = (F, tau) => F * SNOW.windMax * tau;
+  assert.ok(longest(S.fartWind, S.fartTau) >= 15 && longest(S.fartWind, S.fartTau) <= 30, `fart ${longest(S.fartWind, S.fartTau)} px`);
+  assert.ok(longest(S.superWind, S.superTau) >= 35 && longest(S.superWind, S.superTau) <= 62, `super ${longest(S.superWind, S.superTau)} px`);
+  // A head's pull (T5's spirals): a flake inside it moves toward its centre as well as around it.
+  const head = { x: 400 - S.swirlR / 2, y: 600, R: S.swirlR, S: S.swirlS, dir: 1, pull: 0.45 };
+  const a = [{ x: 400, y: 600, px: 8, vy: 0, phase: 0, m: 1 }];
+  const b = [{ x: 400, y: 600, px: 8, vy: 0, phase: 0, m: 1 }];
+  stepFlakes(a, 100, 0, area, SNOW, { wind: 0, swirls: [head] });
+  stepFlakes(b, 100, 0, area, SNOW, { wind: 0, swirls: [{ ...head, pull: 0 }] });
+  assert.ok(a[0].x < b[0].x - 5, `pulled in toward the head (${a[0].x.toFixed(1)} vs ${b[0].x.toFixed(1)})`);
 });
 
 // ---- Play's wiring (2.7), on stub scenes: the storm's ramp, pull and banner; a fart's wind on the snow.
 
 /** A Play stand-in mid-run: a storm schedule, a recording snowfall and banner, the fart switch. */
-function airScene({ starts = [20], passed = 0, farting = false, storm = true } = {}) {
+function airScene({ starts = [20], passed = 0, farting = false, storm = true, superFart = false } = {}) {
   const calls = { scroll: 0, air: [], storm: [] };
   const banner = { visible: false, text: '', setText(s) { this.text = s; return this; }, setVisible(v) { this.visible = v; return this; } };
   const s = playScene({
@@ -168,7 +215,7 @@ function airScene({ starts = [20], passed = 0, farting = false, storm = true } =
     stormScroll: 1,
     stormBanner: banner,
     fartDurationMs: 3000,
-    effects: { powerActive: () => farting, powerElapsed: () => 1000 },
+    effects: { powerActive: () => farting, powerElapsed: () => 1000, powerIsSuper: () => superFart },
     snowfall: { setAir: (a) => calls.air.push(a), setStorm: (l) => calls.storm.push(l) },
     applyScroll: () => (calls.scroll += 1),
   });
@@ -191,7 +238,9 @@ test('Play.tickAir: the storm eases in over its pairs (flap weaker, scroll dragg
   assert.ok(calls.scroll > 0, 'the scroll was pushed onto the world');
   assert.equal(calls.storm.at(-1), 1);
   const air = calls.air.at(-1);
-  assert.ok(air.wind > 0 && air.swirls.length === S.swirls, 'left to right, with its whirls');
+  assert.ok(air.wind < 0 && air.swirls.length === S.swirls, 'a headwind, right to left, with its whirls');
+  assert.ok(!air.tau && !air.soft, 'no streaks in a storm: it reads as drag, not speed');
+  assert.ok(air.swirls.every((w) => w.pull === S.swirlPull), 'spirals');
   s.pipesPassed = 19 + S.pairs; // past it
   for (let i = 0; i < 60; i += 1) s.tickAir(S.rampMs / 30);
   assert.equal(s.stormRun.level, 0);
@@ -204,6 +253,12 @@ test('Play.tickAir: no storm during a fart (finding 27); the fart blows the snow
   assert.equal(s.stormRun.level, 0, 'the storm waits out the fart');
   assert.equal(s.stormFlap, 1);
   assert.equal(calls.air.at(-1).wind, -S.fartWind, 'right to left at full strength mid-fart');
+  assert.deepEqual([calls.air.at(-1).tau, calls.air.at(-1).soft], [S.fartTau, false], 'streaked (11a)');
+  assert.equal(calls.storm.at(-1), 0, 'no storm look under the fart');
+  // A super fart (T4, 11b): faster, longer streaks, the soft copy.
+  const sup = airScene({ passed: 20, farting: true, superFart: true });
+  sup.s.tickAir(16);
+  assert.deepEqual([sup.calls.air.at(-1).wind, sup.calls.air.at(-1).tau, sup.calls.air.at(-1).soft], [-S.superWind, S.superTau, true]);
   // A Singleplayer run in December (no storms): the fart's wind all the same.
   const single = airScene({ storm: false, farting: true });
   single.s.tickAir(16);
@@ -239,6 +294,38 @@ test('Play.tickAir: a fart in a storm lifts the drag (the scroll, the flap and t
   on = false;
   for (let i = 0; i < 40; i += 1) s.tickAir(S.rampMs / 20);
   assert.deepEqual([s.stormRun.level, s.stormScroll, s.stormFlap], [1, S.scrollMul, S.flapMul], 'the storm is back after it');
+});
+
+test('Play.tickAir: in a storm the fart\'s look takes over over fartRampMs while the pull keeps its own rampMs (1c.6, 11d; the grace test below guards the pull)', () => {
+  const D = 3000;
+  const { s, calls } = airScene({ passed: 20 });
+  for (let i = 0; i < 40; i += 1) s.tickAir(S.rampMs / 20);
+  assert.equal(calls.storm.at(-1), 1, 'the full storm look');
+  let e = 0;
+  let on = true;
+  s.fartDurationMs = D;
+  s.effects = { powerActive: () => on, powerElapsed: () => e, powerIsSuper: () => false };
+  const dt = 1000 / 60;
+  while (e < S.fartRampMs) {
+    e = Math.min(S.fartRampMs, e + dt);
+    s.tickAir(dt);
+  }
+  assert.equal(calls.storm.at(-1), 0, `the storm's flakes gone after ${S.fartRampMs} ms`);
+  assert.equal(calls.air.at(-1).wind, -S.fartWind, "the fart's wind alone");
+  assert.ok(s.stormRun.level > 0 && s.stormScroll < 1, `the pull still easing out (level ${s.stormRun.level.toFixed(2)}): it keeps rampMs`);
+  while (e < D - S.fartRampMs / 2) { // on to the fart's own ease-out: the storm's look is coming back
+    e = Math.min(D - S.fartRampMs / 2, e + dt);
+    s.tickAir(dt);
+  }
+  const half = calls.storm.at(-1);
+  assert.ok(half > 0.3 && half < 0.7, `half way back (${half})`);
+  const mid = calls.air.at(-1);
+  assert.ok(mid.wind < 0 && mid.tau > 0 && mid.tau < S.fartTau, `the winds blend, the streaks shorten (${mid.wind.toFixed(0)} px/s, tau ${mid.tau})`);
+  assert.equal(s.stormRun.level, 0, 'no pull while the fart runs');
+  on = false;
+  s.tickAir(dt);
+  assert.equal(calls.storm.at(-1), 1, 'the storm look is back as the fart ends');
+  assert.ok(s.stormRun.level > 0 && s.stormRun.level < 0.1, 'the pull comes back over rampMs, not at once');
 });
 
 test('a fart ending inside a storm: the 700 ms grace still clears a pipe column at every Daily level while the drag eases back in (1c.4)', () => {
