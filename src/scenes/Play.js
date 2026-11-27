@@ -129,8 +129,11 @@ import {
   createResync,
   adventBacklog,
   rollAdventTarget,
-  adventSpawnPair,
+  adventSpawnRoll,
   adventSpawnHere,
+  adventClockShown,
+  adventClockHidden,
+  adventClockCaught,
   adventStatus,
   adventBookSeason,
   adventBookPieces,
@@ -1998,6 +2001,8 @@ export class Play extends Phaser.Scene {
    * with a per-attempt RNG, never the shared course, so two runs of a day offer different pieces at different
    * pairs) and the pair from which it may show (rising odds from pipe 5; the day's misses raise them). Null off season, outside a
    * Daily, or with nothing left to find (finding 21). `this.adventRng` stands in for Math.random in tests.
+   * For the piece's Quality (1c.Q, recording only) it keeps the roll's `keep` (1 − u), the `misses` it was rolled
+   * with, and `reach`, the last pair the run has spawned (adventPairHere), counted from the run's first.
    */
   rollAdvent(daily, startN) {
     if (!daily || !adventSeason(daily.day, T)) return null;
@@ -2005,15 +2010,44 @@ export class Play extends Phaser.Scene {
     const rng = this.adventRng ?? Math.random;
     const piece = rollAdventTarget(adventBacklog(store.found(), daily.day, T), daily.day, rng, T);
     if (piece === null) return null;
-    return { piece, day: daily.day, season: this.adventSeasonOf(daily.day), startN, pair: adventSpawnPair(store.misses(daily.day), rng, T), spawned: false, found: false };
+    const misses = store.misses(daily.day);
+    const { pair, keep } = adventSpawnRoll(misses, rng, T);
+    return { piece, day: daily.day, season: this.adventSeasonOf(daily.day), startN, pair, keep, misses, reach: 0, spawned: false, found: false };
   }
 
-  /** The run's piece caught: into the store (once, its first day), and for a real run queued for the board (S12). */
+  /** Is the run's piece `a` its day's own (piece k on k Dec)? Only that one keeps a Quality score (1c.Q). */
+  adventIsToday(a) {
+    return a.piece === Number(a.day.slice(8, 10));
+  }
+
+  /**
+   * Pair n of a run (spawnPipePair): does the run's piece show here (adventSpawnHere, `slotTaken` by another item or
+   * a storm)? Every pair stretches the run's reach; a showing freezes the day's Quality score if none is held yet and
+   * writes it at once (1c.Q), so a reload after the piece showed cannot roll it again. No piece this run: false.
+   */
+  adventPairHere(n, slotTaken) {
+    const a = this.advent;
+    if (!a) return false;
+    a.reach = Math.max(a.reach ?? 0, n - a.startN);
+    if (!adventSpawnHere(a, n, slotTaken, this.textures.exists(ADVENT_ART.piece))) return false;
+    a.spawned = true;
+    const store = this.adventStoreFor(a.day, this.runIsTest);
+    store?.setClock(a.day, adventClockShown(store.clock(a.day), { keep: a.keep, pair: n - a.startN, today: this.adventIsToday(a) }));
+    return true;
+  }
+
+  /**
+   * The run's piece caught: into the store (once, its first day), and for a real run queued for the board (S12). Its
+   * Quality (1c.Q): the day's own piece keeps the clock's held score; then the clock restarts (adventClockCaught).
+   */
   takeAdvent() {
     const a = this.advent;
     if (!a || a.found) return;
     a.found = true;
-    const added = this.adventStoreFor(a.day, this.runIsTest)?.add(a.piece, a.day);
+    const store = this.adventStoreFor(a.day, this.runIsTest);
+    const caught = store ? adventClockCaught(store.clock(a.day), { today: this.adventIsToday(a) }) : null;
+    const added = store?.add(a.piece, a.day, caught?.quality ?? null);
+    if (caught) store.setClock(a.day, caught.clock);
     if (added && !this.runIsTest && this.daily) this.adventQueue.add({ playerId: this.daily.playerId, season: a.season, piece: a.piece, day: a.day });
     this.playSample('advent-found', T.advent.sound.foundVolume, sfx.pickup); // the twinkle (2.7a); the pickup blip until it has loaded
   }
@@ -2021,13 +2055,18 @@ export class Play extends Phaser.Scene {
   /**
    * At a December Daily's end (endRun): a run that offered a piece and ended without it counts a miss for the day
    * (the window's pity); for Over, { offered, found (the piece, or null), late (not the day's own piece), status }.
+   * A run whose piece never showed also runs the day's Quality clock on (1c.Q: s times the chance it stays hidden
+   * through the run's reach at the misses it was rolled with); one that showed and was let go changes nothing.
    */
   adventOutcome() {
     const day = this.dailyRunDay;
     const store = this.adventStoreFor(day, this.runIsTest);
     if (!store) return null;
     const a = this.advent;
-    if (a && !a.found) store.addMiss(day);
+    if (a && !a.found) {
+      store.addMiss(day);
+      if (!a.spawned) store.setClock(day, adventClockHidden(store.clock(day), { reach: a.reach ?? 0, misses: a.misses ?? 0 }, T));
+    }
     return { offered: Boolean(a), found: a?.found ? a.piece : null, late: Boolean(a?.found && a.piece !== Number(day.slice(8, 10))), status: adventStatus(store.found(), day, T) };
   }
 
@@ -4341,10 +4380,7 @@ export class Play extends Phaser.Scene {
     if (st) this.walkStorm(st, n);
     // Pair n's slot is flown inside a storm that starts at pair n + 1 too: look one pair ahead (2.11).
     const stormy = Boolean(st && (stormCovers(st.starts, n, T) || stormStartsHere(this.course.storm(n + 1), n + 1, st.starts.at(-1) ?? null, st.startN, T, st.levels)));
-    if (adventSpawnHere(this.advent, n, slotTaken || stormy, this.textures.exists(ADVENT_ART.piece))) {
-      this.advent.spawned = true;
-      this.spawnBandItem(ADVENT_ART.piece, still ? stillY() : null, shift);
-    }
+    if (this.adventPairHere(n, slotTaken || stormy)) this.spawnBandItem(ADVENT_ART.piece, still ? stillY() : null, shift);
     if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH, move ? top : null);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).

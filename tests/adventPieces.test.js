@@ -376,7 +376,7 @@ function pieceScene({ day = '2026-12-05', test = false, storage = fakeStorage(),
 test('Play: a December Daily rolls one piece from the backlog at a pair in the window; off season, practice off the real record, or nothing left: no piece', () => {
   const s = pieceScene({ rng: () => 0 });
   const a = s.rollAdvent({ day: '2026-12-05', level: 3 }, 120);
-  assert.deepEqual(a, { piece: 1, day: '2026-12-05', season: 2026, startN: 120, pair: P.minPair, spawned: false, found: false });
+  assert.deepEqual(a, { piece: 1, day: '2026-12-05', season: 2026, startN: 120, pair: P.minPair, keep: 1, misses: 0, reach: 0, spawned: false, found: false });
   assert.equal(s.rollAdvent({ day: '2026-11-20', level: 3 }, 0), null, 'off season');
   assert.equal(s.rollAdvent(null, 0), null, 'not a Daily');
   const full = pieceScene();
