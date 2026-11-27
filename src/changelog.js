@@ -8,6 +8,20 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.36.0',
+    date: '27 Nov 2026',
+    notes: {
+      en: [
+        '🎅 Choose your Santa: in December, tap the 🎅 in the title of the Daily Dump window and pick your favourite, in any skin tone. It is saved on this device. Until you choose, the 🎅 changes each visit between Santa, Mrs. Claus and Mx Claus. A red dot shows where to tap, and the (?) in the window explains December.',
+        '💩 In December the loading screen\'s poop wears its Santa hat too, and the bean wears holly.',
+      ],
+      'zh-Hans': [
+        '🎅 选择你的圣诞老人：十二月里，点每日一拉窗口标题里的🎅，选你最喜欢的一个，任何肤色都行。只保存在这台设备上。选好之前，🎅每次来访都会在圣诞老人、圣诞老奶奶和中性圣诞人之间轮换。小红点告诉你该点哪里，窗口里的(?)会说明十二月的玩法。',
+        '💩 十二月里，加载画面上的便便也戴上了圣诞帽，豆子也戴上了冬青。',
+      ],
+    },
+  },
+  {
     version: '0.35.0',
     date: '26 Nov 2026',
     notes: {
