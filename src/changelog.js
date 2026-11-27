@@ -13,11 +13,15 @@ export const CHANGELOG = [
     notes: {
       en: [
         '🎅 Choose your boweliday character: in December, tap the 🎅 in the title of the Daily Dump window and pick your favourite, in any skin tone. It is saved on this device. Until you choose, it changes each visit between Santa, Mrs. Claus and Mx Claus. A red dot shows where to tap, and the (?) in the window explains December.',
-        '💩 In December the loading screen\'s poop wears its Santa hat too, and the bean wears holly.',
+        '💩 In December the loading screen\'s poop wears its Santa hat too, the bean wears holly, and the December look reaches every corner: the counters in a run, the game-over panel and its share card, How to play and the Shop.',
+        '✨ Fairy lights twinkle along the top of the screen all December, on the home screen and in every game.',
+        '🧩 A puzzle piece shows from pipe 5 on: each pipe you pass makes it a little more likely, and so does each run that day that ended without it. The (?) in the Advent puzzle explains the rules, and each piece you add tells you how many are still to go.',
       ],
       'zh-Hans': [
         '🎅 选择你的节日角色：十二月里，点每日一拉窗口标题里的🎅，选你最喜欢的一个，任何肤色都行。只保存在这台设备上。选好之前，它每次来访都会在圣诞老人、圣诞老奶奶和中性圣诞人之间轮换。小红点告诉你该点哪里，窗口里的(?)会说明十二月的玩法。',
-        '💩 十二月里，加载画面上的便便也戴上了圣诞帽，豆子也戴上了冬青。',
+        '💩 十二月里，加载画面上的便便也戴上了圣诞帽，豆子也戴上了冬青；节日装扮也遍布各处：游戏中的计数、游戏结束界面和分享图、玩法说明和商店。',
+        '✨ 整个十二月，屏幕顶部挂着一串闪烁的圣诞彩灯，主页和每种游戏模式里都有。',
+        '🧩 拼图从第 5 根管道起才会出现：每多过一根管道，出现的机会就大一点；当天每有一局没找到，机会也会大一点。圣诞拼图里的(?)说明规则，每放进一块拼图，都会告诉你还差几块。',
       ],
     },
   },
