@@ -2751,7 +2751,8 @@ export function adventTreeGlyph(award) {
 /**
  * The Advent book's layout (plan 17, 2.15; Gate A sheet 5) on a `width` x `height` field: the panel centred, the ✕ in its
  * top-right corner, "N of 24 found" above the grid, and the 24 slots (top-left corners, reading order) of `slot` px
- * (a cell at spriteDisplayScale) with no gaps, so the full set reads as one picture; `centre` is the grid's.
+ * (a cell at spriteDisplayScale) with no gaps, so the full set reads as one picture; `centre` is the grid's. `frame` is
+ * a piece's drawn frame (plan 56: the cell plus padPx on every side, where its jigsaw tabs reach), centred on its slot.
  */
 export function adventBookLayout(width, height, t) {
   const b = t.advent.book;
@@ -2759,6 +2760,7 @@ export function adventBookLayout(width, height, t) {
   const cx = width / 2;
   const cy = height / 2;
   const slot = p.cellPx * t.spriteDisplayScale;
+  const frame = (p.cellPx + 2 * p.padPx) * t.spriteDisplayScale;
   const left = cx - (p.cols * slot) / 2;
   const top = cy + b.gridDy;
   const slots = Array.from({ length: p.cols * p.rows }, (_, c) => ({ x: left + slot * (c % p.cols), y: top + slot * Math.floor(c / p.cols) }));
@@ -2768,9 +2770,20 @@ export function adventBookLayout(width, height, t) {
     help: { x: cx - b.width / 2 + 44, y: cy - b.height / 2 + 44 }, // the (?) mirrors the ✕ (1c.7, T8)
     count: { x: cx, y: cy + b.countDy },
     slot,
+    frame,
     slots,
     centre: { x: cx, y: top + (p.rows * slot) / 2 },
   };
+}
+
+/**
+ * The shade of the locked slot `cell` (plan 56, D6 a, Michael 28 Nov): lockFill and lockFillB in a checkerboard, so two
+ * locked neighbours never share a shade and each silhouette reads apart without a stroke (a fill tint cannot draw one).
+ */
+export function adventLockShade(cell, t) {
+  const { cols } = t.advent.puzzle;
+  const b = t.advent.book;
+  return ((cell % cols) + Math.floor(cell / cols)) % 2 ? b.lockFillB : b.lockFill;
 }
 
 /**

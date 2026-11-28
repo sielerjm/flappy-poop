@@ -557,11 +557,15 @@ export const TUNING = {
     // The home screen's Advent button (2.15a; S14, Gate A sheet 5): the piece's box at iconPx in the round button, and
     // "N/24" (countPx, gold) centred countDx / countDy from the button's centre, on its lower right as the 📚's count.
     button: { iconPx: 60, countPx: 24, countDx: 40, countDy: 40 },
-    // The Advent book's picture (Stage 2c, 2.13): Michael's picture cut by tools/advent_puzzle.py into cols x rows square
-    // cells of cellPx texture px (2x, drawn at half: 166 logical px), frames in reading order (cell c at column c mod cols,
-    // row floor(c / cols)). Piece k (out on k Dec) fills cell order[k − 1]: one plain shuffle shared by every player
-    // (Michael, S7, 26 Nov), made once with createRng(20261201) and Fisher-Yates and fixed here as data.
-    puzzle: { cols: 4, rows: 6, cellPx: 332, order: [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6] },
+    // The Advent book's picture (Stage 2c, 2.13): Michael's picture cut by tools/advent_puzzle.py into cols x rows cells of
+    // cellPx texture px (2x, drawn at half: 166 logical px), frames in reading order (cell c at column c mod cols, row
+    // floor(c / cols)). Piece k (out on k Dec) fills cell order[k − 1]: one plain shuffle shared by every player
+    // (Michael, S7, 26 Nov), made once with createRng(20261201) and Fisher-Yates and fixed here as data. Since plan 56
+    // the cells are jigsaw pieces (`--shape jigsaw --seed 20261201 --tab 0.26`, Gate A sheet B, Michael 28 Nov): each
+    // frame is its cell plus padPx on every side, where its tabs reach (alpha 0 beyond the piece; the grid's outer edges
+    // are flat), so a frame is cellPx + 2 x padPx (516) and draws at 258 logical px centred on its 166 px slot. padPx 0
+    // would be a square sheet.
+    puzzle: { cols: 4, rows: 6, cellPx: 332, padPx: 92, order: [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6] },
     // December's fairy lights (Stage 1c, 1c.9, T14; Gate A sheet 11, L1, Michael 27 Nov): assets/advent/fairy-lights.png
     // (texW x texH, its ends evened by tools/process_art.py so it tiles) drawn at `scale` in a tile sprite the field's
     // width, its wire's top at wireTop (the art's wire starts wireDy px down), at `depth`: over the pipes and the ceiling
@@ -577,15 +581,22 @@ export const TUNING = {
     },
     // The Advent book (2.15, Gate A sheet 5, Michael 26 Nov): a width x height panel centred on the field, "N of 24 found"
     // (countPx) countDy from its centre, the grid's top gridDy from it; slots of cellPx x spriteDisplayScale (166) with no gaps.
-    // A locked slot is a flat lockFill square with a 1 px lockLine; a piece found on its own day wears a gold star of
-    // radius starR, starInset px in from its slot's top-right corner.
-    book: { width: 696, height: 1112, countPx: 36, countDy: -508, gridDy: -460, lockFill: 0x2a1420, lockLine: 0x4a2a3a, starR: 13, starInset: 18 },
+    // A locked slot is its own piece's silhouette (the frame under a fill tint) in a checkerboard of lockFill and lockFillB,
+    // so locked neighbours read apart (plan 56, D6 a, Michael 28 Nov); without the sheet or a fill tint (a Canvas
+    // renderer would show the picture) it is a flat lockFill square with a 1 px lockLine. A piece found on its own day
+    // wears a gold star of radius starR, starInset px in from its slot's top-right corner (a cell's corners are always
+    // solid picture: the tabs sit in the middle of each edge).
+    book: { width: 696, height: 1112, countPx: 36, countDy: -508, gridDy: -460, lockFill: 0x2a1420, lockFillB: 0x371d2a, lockLine: 0x4a2a3a, starR: 13, starInset: 18 },
     // The add-piece animation (2.15a; S14): a piece the book has not shown yet appears at the grid's centre at 1:1 (its
-    // 332 px frame) over a white glow (glowPad px) with the book dimmed by `dim` (appearMs, the chimes building), flies to
-    // its slot (flyMs), lands with the lock click while its glow fades (fadeMs). At most `flights` pieces fly when the
-    // book opens (the latest ones); older ones land in place at once. Under reduced motion none flies.
+    // 516 px frame) over a white glow with the book dimmed by `dim` (appearMs, the chimes building), flies to its slot
+    // (flyMs), lands with the lock click while its glow fades (fadeMs). At most `flights` pieces fly when the book opens
+    // (the latest ones); older ones land in place at once. Under reduced motion none flies. The glow (plan 56, D5,
+    // Michael 28 Nov): a flight's is a white halo from the piece's own outline reaching glowPad texture px, one texture
+    // for that flight, dropped when its landing's fade ends; an instant landing's is a white fill-tinted copy of the piece
+    // behind it, tintGrow larger at tintAlpha (no new texture), so a book opened on many unseen pieces paints no blurs in
+    // bulk. Without the sheet or a fill tint it is the rounded-square halo of the cell.
     bookAnim: {
-      appearMs: 1000, flyMs: 1300, fadeMs: 1000, popMs: 300, glowPad: 28, dim: 0.45, flights: 3, lockDelayMs: 120, // lockDelayMs: the click after the landing (Michael, 27 Nov, T2)
+      appearMs: 1000, flyMs: 1300, fadeMs: 1000, popMs: 300, glowPad: 28, tintGrow: 1.06, tintAlpha: 0.8, dim: 0.45, flights: 3, lockDelayMs: 120, // lockDelayMs: the click after the landing (Michael, 27 Nov, T2)
       // The "N of 24 to go!" line with the click (1c.7, T7; Gate A 11e): bold gold at px (shrunk by 2 to fit maxW) on a
       // dark pill, centred on the book; pops in (popMs, from 0.6), holds holdMs, floats up floatPx and fades (fadeMs).
       // Under reduced motion it shows still for the same time, then goes.
