@@ -7,14 +7,14 @@
   {"imports": {
     "./src/achievements.js": "./src/achievements.js?h=7fb0bd43b1",
     "./src/advent.js": "./src/advent.js?h=36d4b4f5e0",
-    "./src/changelog.js": "./src/changelog.js?h=d003d10427",
+    "./src/changelog.js": "./src/changelog.js?h=82815f6f04",
     "./src/config.js": "./src/config.js?h=a4529dd94f",
     "./src/education.js": "./src/education.js?h=ef29b1fb5e",
     "./src/fsrs.js": "./src/fsrs.js?h=d8492a1fbe",
     "./src/i18n.js": "./src/i18n.js?h=3b00efa61c",
     "./src/input/pad.js": "./src/input/pad.js?h=e5def632b0",
     "./src/leaderboard.js": "./src/leaderboard.js?h=8eca0fe41f",
-    "./src/logic.js": "./src/logic.js?h=7742f1213e",
+    "./src/logic.js": "./src/logic.js?h=8245c175c4",
     "./src/main.js": "./src/main.js?h=03595257a9",
     "./src/online.js": "./src/online.js?h=2fed66a7f9",
     "./src/onlineAccount.js": "./src/onlineAccount.js?h=08f891661f",
@@ -41,7 +41,7 @@
     "./src/scenes/Leaderboard.js": "./src/scenes/Leaderboard.js?h=91b436e0c7",
     "./src/scenes/OnlineRace.js": "./src/scenes/OnlineRace.js?h=b07d0886eb",
     "./src/scenes/Over.js": "./src/scenes/Over.js?h=5845a2ff7f",
-    "./src/scenes/Play.js": "./src/scenes/Play.js?h=cf9dddac3b",
+    "./src/scenes/Play.js": "./src/scenes/Play.js?h=d399009cb7",
     "./src/scenes/Quiz.js": "./src/scenes/Quiz.js?h=7fdea351f0",
     "./src/scenes/SantaPicker.js": "./src/scenes/SantaPicker.js?h=3ddb68ac6e",
     "./src/scenes/Settings.js": "./src/scenes/Settings.js?h=efcc0be240",
@@ -85,7 +85,7 @@
     "./src/ui/toggle.js": "./src/ui/toggle.js?h=30040abc11",
     "./src/ui/tournamentPanel.js": "./src/ui/tournamentPanel.js?h=5715a22ac3",
     "./src/ui/tray.js": "./src/ui/tray.js?h=874120a491",
-    "./src/versus.js": "./src/versus.js?h=6535328307"
+    "./src/versus.js": "./src/versus.js?h=32d4a16c4f"
   }}
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -99,10 +99,10 @@
   <!-- The module graph is four levels deep, and a browser only learns a level once the one above has arrived: these start the big first-run modules at once (plan 35, 2.4). The hrefs are exactly the URLs the imports use, or the preload is wasted: bare in the tree, and `npm run push` writes the import map's ?h= into them and into the main tag (tools/sw_stamp.mjs, plan 35, 3.1). -->
   <link rel="modulepreload" href="src/main.js?h=03595257a9">
   <link rel="modulepreload" href="src/config.js?h=a4529dd94f">
-  <link rel="modulepreload" href="src/logic.js?h=7742f1213e">
+  <link rel="modulepreload" href="src/logic.js?h=8245c175c4">
   <link rel="modulepreload" href="src/i18n.js?h=3b00efa61c">
   <link rel="modulepreload" href="src/scenes/Boot.js?h=7b5151e34c">
-  <link rel="modulepreload" href="src/scenes/Play.js?h=cf9dddac3b">
+  <link rel="modulepreload" href="src/scenes/Play.js?h=d399009cb7">
   <!-- ?v= on the icons: browsers cache favicons and manifest icons by URL for a long time; bump it when the icon art changes. -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=2">
