@@ -48,10 +48,10 @@ in the same reading order, cut from the same fitted picture, so the picture unde
 Outside its piece a frame is alpha 0. Every internal edge gets one tab (its side, its place in the middle third of the
 edge, its size and lean drawn from --seed; the same seed gives the same bytes); the grid's outer edges are flat.
 Each piece's mask is widened by --widen px so two antialiased cut edges never leave a hairline seam. The alpha rules
-invert: alpha 0 outside the piece, 255 in its core. With --colours the sheet is quantized with its alpha kept, then
-the palette is fixed so no core pixel lands at 254 (entries at alpha 250 or more snap to 255; a pixel that was opaque
-in the cut but still sits on a see-through entry moves to its nearest opaque one; a pixel that was alpha 0 moves to a
-fully clear entry).
+invert: alpha 0 outside the piece, 255 in its core. With --colours the sheet is quantized with its alpha kept, the
+picture first, so no core pixel lands at 254 and the picture bands no more than the rect sheet: colours - 33 entries
+for the picture (the shipped octree call on the picture alone, each opaque pixel taking the picture's own index), 32
+for the antialiased edge pixels (the octree on them alone), 1 clear (see quantize_alpha).
         --shape     rect (default: the square cells above, unchanged) or jigsaw
         --pad-px    texture px of see-through margin around each cell, even (default: the smallest even number that
                     holds the tallest tab, its antialiased pixel, the widen and 2 px of margin; the run reports it).
@@ -76,15 +76,18 @@ Jigsaw checks (the self-test runs each on the real cut and catches each broken i
   (5) the four corner squares (cell // 3 a side) and the star's disc clipped to the cell at alpha 255 in every frame,
       before quantizing and on the written sheet;
   (6) two neighbours overlap only within the widen band;
-  (7) the written sheet is at most --max-kb.
+  (7) the written sheet is at most --max-kb;
+  (8) with --colours, the written sheet's opaque pixels stay within RMSE 3.0 of the picture (no worse banding than
+      the rect sheet's 2.46).
 """
 import argparse
 import hashlib
+import math
 import random
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageStat
 
 FONT_PATHS = [
     "/System/Library/Fonts/Supplemental/Arial Black.ttf",
@@ -104,6 +107,7 @@ LOCK_B = (0x37, 0x1d, 0x2a)  # the second, lighter lock shade (D6 a): 40 % of th
 MAX_SIDE = 4096  # the largest texture side the game allows (tests/assets.test.js)
 STAR_INSET = 36  # texture px: TUNING.advent.book.starInset (18 logical px) at 2x
 SUPERSAMPLE = 4  # the masks are drawn at this many times the frame size, then boxed down (antialiased edges)
+MAX_RMSE = 3.0  # the quantized picture's largest RMSE from the picture (the 256-colour rect sheet: 2.46)
 
 
 def font(size):
@@ -318,6 +322,28 @@ def check_overlap(frames, cols, rows, cell, pad, widen, name="frames"):
                 if hit:
                     problems.append(f"{name}: frame {b} reaches {hit} px into frame {a}, deeper than the widen band ({k} px)")
     return problems
+
+
+def picture_rmse(frames, cols, rows, cell, pad, picture):
+    """RMSE over R, G, B between the picture and each frame's alpha-255 pixels inside its own cell."""
+    canvas = Image.new("RGB", picture.size)
+    cover = Image.new("L", picture.size, 0)
+    for c, fr in enumerate(frames):
+        own = fr.crop((pad, pad, pad + cell, pad + cell))
+        solid = own.getchannel("A").point(lambda v: 255 if v == 255 else 0)
+        at = ((c % cols) * cell, (c // cols) * cell)
+        canvas.paste(own.convert("RGB"), at, solid)
+        cover.paste(solid, at)
+    st = ImageStat.Stat(ImageChops.difference(canvas, picture.convert("RGB")), cover)
+    return math.sqrt(sum(st.sum2) / (3 * st.count[0])) if st.count[0] else float("inf")
+
+
+def check_fidelity(frames, cols, rows, cell, pad, picture, max_rmse=MAX_RMSE, name="advent-puzzle.png"):
+    """(8) The written sheet's opaque pixels stay within max_rmse of the picture (the 256-colour rect sheet: 2.46)."""
+    rmse = picture_rmse(frames, cols, rows, cell, pad, picture)
+    if rmse > max_rmse:
+        return [f"{name}: its opaque pixels are {rmse:.2f} RMSE from the picture, over {max_rmse} (banding)"]
+    return []
 
 
 def check_kb(path, max_kb, name="advent-puzzle.png"):
@@ -659,48 +685,52 @@ def jigsaw_cut(fitted, cols, rows, cell, pad, seed, widen, tab, rng_factory=rand
                pad_needed=pad_needed, outlines=outlines)
 
 
-def quantize_alpha(sheet, colours):
-    """The RGBA sheet at `colours` colours with its alpha kept (the shipped call: octree with k-means), then the
-    palette fix, so the quantized core stays at 255 and the outside at 0: entries at alpha 250 or more snap to 255; a
-    pixel at 255 in the sheet still on a see-through entry moves to the opaque entry nearest its own RGB; a pixel at 0
-    in the sheet on an entry above 0 moves to a clear entry. Returns (P image, a note of what moved)."""
-    q = sheet.quantize(colours, method=Image.Quantize.FASTOCTREE, kmeans=2, dither=Image.Dither.FLOYDSTEINBERG)
-    pal = q.getpalette("RGBA")
-    entries = [tuple(pal[k:k + 4]) for k in range(0, len(pal), 4)]
-    snapped = sum(1 for e in entries if 250 <= e[3] < 255)
-    entries = [(r, g, b, 255) if a >= 250 else (r, g, b, a) for r, g, b, a in entries]
-    opaque = [k for k, e in enumerate(entries) if e[3] == 255]
-    clear = [k for k, e in enumerate(entries) if e[3] == 0]
-    if not opaque or not clear:
-        raise ValueError(f"the {len(entries)}-colour palette has {len(opaque)} opaque and {len(clear)} clear entries")
-    w = q.size[0]
-    index = Image.frombytes("L", q.size, q.tobytes())
-    lut = [entries[k][3] if k < len(entries) else 0 for k in range(256)]
-    q_alpha = index.point(lut)
-    src = sheet.getchannel("A")
-    want_opaque = ImageChops.multiply(src.point(lambda a: 255 if a == 255 else 0), q_alpha.point(lambda a: 255 if a < 255 else 0))
-    want_clear = ImageChops.multiply(src.point(lambda a: 255 if a == 0 else 0), above_zero(q_alpha))
-    data = bytearray(q.tobytes())
-    rgb = sheet.convert("RGB")
-    nearest = {}
-    moved_opaque = moved_clear = 0
-    for flags, opaque_side in ((want_opaque.tobytes(), True), (want_clear.tobytes(), False)):
-        at = flags.find(b"\xff")
-        while at != -1:
-            if opaque_side:
-                colour = rgb.getpixel((at % w, at // w))
-                if colour not in nearest:
-                    nearest[colour] = min(opaque, key=lambda k: sum((entries[k][n] - colour[n]) ** 2 for n in range(3)))
-                data[at] = nearest[colour]
-                moved_opaque += 1
-            else:
-                data[at] = clear[0]
-                moved_clear += 1
-            at = flags.find(b"\xff", at + 1)
-    out = Image.frombytes("P", q.size, bytes(data))
+EDGE_COLOURS = 32  # palette entries kept for the antialiased edge pixels (the rest go to the picture, one to clear)
+
+
+def quantize_alpha(cut, picture, cols, rows, cell, colours):
+    """The cut's sheet at `colours` colours with its alpha kept, the picture first. Quantizing the RGBA sheet in one
+    go gave the thin antialiased edge ring (about 2 % of the pixels) 113 of 256 entries and the picture only 142, so the
+    picture banded more than today's sheet (RMSE 3.7 against 2.5) and no pixel stayed at 255. Instead: the picture
+    alone through the shipped call (octree, k-means 2) at colours - EDGE_COLOURS - 1 entries, every alpha-255 pixel
+    taking the picture's own index at that spot (each frame pixel is the picture's pixel there); the edge pixels
+    (alpha 1 to 254) through the octree on their own at EDGE_COLOURS entries; alpha 0 on one clear entry. So the core
+    stays at 255 and the outside at 0 by construction. Returns (P image, a note)."""
+    sheet, pad, side = cut.sheet, cut.pad, cut.side
+    alpha = sheet.getchannel("A")
+    edge_flags = alpha.point(lambda v: 255 if 0 < v < 255 else 0).tobytes()
+    edge_at = []
+    at = edge_flags.find(b"\xff")
+    while at != -1:
+        edge_at.append(at)
+        at = edge_flags.find(b"\xff", at + 1)
+    n_edge = EDGE_COLOURS if edge_at else 0
+    pic = picture.quantize(colours - n_edge - 1, method=Image.Quantize.FASTOCTREE, kmeans=2)
+    pic_pal = pic.getpalette("RGB")
+    n_pic = len(pic_pal) // 3
+    W, H = picture.size
+    padded = Image.new("L", (W + 2 * pad, H + 2 * pad), 0)
+    padded.paste(Image.frombytes("L", pic.size, pic.tobytes()), (pad, pad))
+    index = Image.new("L", sheet.size, 0)
+    for c in range(cols * rows):
+        i, j = c % cols, c // cols
+        index.paste(padded.crop((i * cell, j * cell, i * cell + side, j * cell + side)), sheet_box(c, cols, side)[:2])
+    edge_entries, edge_index = [], b""
+    if edge_at:
+        rgba = sheet.tobytes()
+        strip = Image.frombytes("RGBA", (len(edge_at), 1), b"".join(rgba[4 * p:4 * p + 4] for p in edge_at))
+        eq = strip.quantize(n_edge, method=Image.Quantize.FASTOCTREE, kmeans=2)
+        ep = eq.getpalette("RGBA")
+        edge_entries = [tuple(ep[k:k + 4]) for k in range(0, len(ep), 4)][:n_edge]
+        edge_index = eq.tobytes()
+    clear = n_pic + len(edge_entries)
+    data = bytearray(Image.composite(index, Image.new("L", sheet.size, clear), above_zero(alpha)).tobytes())
+    for k, p in enumerate(edge_at):
+        data[p] = n_pic + edge_index[k]
+    out = Image.frombytes("P", sheet.size, bytes(data))
+    entries = [tuple(pic_pal[k:k + 3]) + (255,) for k in range(0, 3 * n_pic, 3)] + edge_entries + [(0, 0, 0, 0)]
     out.putpalette([x for e in entries for x in e], rawmode="RGBA")
-    note = (f"palette fix: {snapped} entr{'y' if snapped == 1 else 'ies'} snapped to alpha 255, {moved_opaque} opaque "
-            f"pixel(s) moved to an opaque entry, {moved_clear} clear pixel(s) to a clear entry")
+    note = f"{n_pic} picture entries, {len(edge_entries)} for {len(edge_at)} edge pixels, 1 clear"
     return out, note
 
 
@@ -791,7 +821,7 @@ def run_jigsaw(args, order):
     problems += check_overlap(cut.frames, cols, rows, cell, cut.pad, args.widen, "the cut")
     outputs = {"advent-puzzle.png": cut.sheet}
     if args.colours:
-        outputs["advent-puzzle.png"], note = quantize_alpha(cut.sheet, args.colours)
+        outputs["advent-puzzle.png"], note = quantize_alpha(cut, fitted, cols, rows, cell, args.colours)
         print(f"colours:  advent-puzzle.png at {args.colours} colours; {note}")
     outputs.update(jigsaw_previews(cut, fitted, cols, rows, cell, order))
     for name, im in outputs.items():
@@ -806,8 +836,11 @@ def run_jigsaw(args, order):
     problems += check_outside(wf, cols, rows, cell, cut.pad, cut.reach, "advent-puzzle.png")
     problems += check_core(wf, cell, cut.pad, args.star_r, "advent-puzzle.png")
     problems += check_kb(sheet_path, args.max_kb)
+    if args.colours:
+        problems += check_fidelity(wf, cols, rows, cell, cut.pad, fitted)
     kb = sheet_path.stat().st_size / 1024
-    print(f"size:     advent-puzzle.png {kb:.0f} KB (before oxipng); texture {sw * sh * 4 / 1e6:.1f} MB as RGBA")
+    print(f"size:     advent-puzzle.png {kb:.0f} KB (before oxipng); texture {sw * sh * 4 / 1e6:.1f} MB as RGBA; "
+          f"picture RMSE {picture_rmse(wf, cols, rows, cell, cut.pad, fitted):.2f}")
     return problems, {"cut": cut, "fitted": fitted, "sheet": sheet_path, "frames": wf}
 
 
@@ -890,6 +923,8 @@ def selftest_jigsaw(args, order):
     case("(6) neighbours overlap only within the widen band",
          lambda: check_overlap(cut().frames, cols, rows, cell, cut().pad, args.widen, "the cut"))
     case(f"(7) advent-puzzle.png within {args.max_kb} KB", lambda: check_kb(real()["sheet"], args.max_kb))
+    case(f"(8) the written sheet's opaque pixels within RMSE {MAX_RMSE} of the picture",
+         lambda: check_fidelity(written(), cols, rows, cell, cut().pad, fitted()))
 
     # Broken inputs, each caught by the check named.
     caught("(3) a mask not widened (--widen 0) leaves a seam",
@@ -932,6 +967,11 @@ def selftest_jigsaw(args, order):
         return check_overlap(wide.frames, cols, rows, cell, wide.pad, 1, "widen 6")
     caught("(6) a mask widened too far (6 px against --widen 1)", too_wide)
     caught("(7) a sheet over its budget (1 KB)", lambda: check_kb(real()["sheet"], 1))
+
+    def one_pass():
+        q = cut().sheet.quantize(args.colours or 256, method=Image.Quantize.FASTOCTREE, kmeans=2)
+        return check_fidelity(frames_of(q, cols, rows, cut().side), cols, rows, cell, cut().pad, fitted(), name="one-pass fixture")
+    caught("(8) the sheet quantized in one pass (the edges take the picture's colours)", one_pass)
     return all(results)
 
 
