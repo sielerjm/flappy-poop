@@ -388,10 +388,14 @@ def draw_borders(img, cols, rows, cell, width=2):
     return img
 
 
-def draw_labels(fitted, labels, cols, rows, cell):
-    """The grid with one big label per cell (dark text, light halo), thin white cell borders."""
+def draw_labels(fitted, labels, cols, rows, cell, outlines=None):
+    """The grid with one big label per cell (dark text, light halo), thin white cell borders (or, with `outlines`,
+    each jigsaw piece's outline)."""
     img = fitted.copy()
-    draw_borders(img, cols, rows, cell)
+    if outlines is None:
+        draw_borders(img, cols, rows, cell)
+    else:
+        draw_outlines(img, outlines)
     d = ImageDraw.Draw(img)
     # The largest size at which the widest label (stroke included) fits 80 % of a cell.
     widest = max(labels, key=len)
@@ -538,16 +542,225 @@ class Cut:
         self.__dict__.update(kw)
 
 
+KAPPA = 0.5523  # a quarter circle as one cubic Bezier
+BEZIER_STEPS = 24  # points per Bezier segment of a tab's outline
+EDGE_MARGIN = 0.012  # of the edge: the gap kept between a tab and the middle third's ends
+
+
+def bezier(p0, p1, p2, p3, steps=BEZIER_STEPS):
+    """Points along a cubic Bezier from p0 (left out) to p3 (included)."""
+    out = []
+    for i in range(1, steps + 1):
+        t = i / steps
+        mt = 1 - t
+        a, b, c, d = mt * mt * mt, 3 * mt * mt * t, 3 * mt * t * t, t * t * t
+        out.append((a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0], a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1]))
+    return out
+
+
+def tab_shape(rng, tab):
+    """One internal edge's tab, drawn from rng: (side, height, outline). The outline runs along the edge in edge units
+    (u from 0 to 1 along it, v out of it, the edge 1 long): straight, a shoulder into the neck, out to the head's widest
+    point, round over the head, and back, then straight to the end. side (+1 or -1) says which neighbour the tab
+    belongs to. Every call draws the same seven values in the same order, so one seed gives one puzzle."""
+    r = rng.random  # only random(): its sequence for an int seed is the same on every Python 3
+    side = 1 if r() < 0.5 else -1
+    h = tab * (0.93 + 0.07 * r())  # the tab's height: the tallest is `tab`
+    rh = 0.37 * h * (0.95 + 0.10 * r())  # the head's radius (the trial's head: 0.74 of its height across)
+    wn = 0.22 * h * (0.92 + 0.16 * r())  # the neck's half-width at its narrowest (the trial's: 0.45 of the height across)
+    hn = 0.30 * h * (0.90 + 0.20 * r())  # how far out the neck is narrowest
+    lean = 0.04 * h * (2 * r() - 1)  # the head a little off the neck's centre line
+    u0 = 0.5 + 0.04 * (2 * r() - 1)  # the tab's place along the edge
+    wb = wn + 0.12 * h  # where the shoulder leaves the edge
+    half = max(wb, rh + abs(lean))  # the tab's half-width along the edge
+    u0 = min(max(u0, 1 / 3 + EDGE_MARGIN + half), 2 / 3 - EDGE_MARGIN - half)  # inside the middle third: corners solid
+    hc = h - rh  # the head's centre
+    k1, k2, k3, kr = 0.6 * (wb - wn), 0.6 * hn, 0.55 * (hc - hn), KAPPA * rh
+    A, B = (u0 - wb, 0.0), (u0 - wn, hn)
+    C, T, D = (u0 + lean - rh, hc), (u0 + lean, h), (u0 + lean + rh, hc)
+    E, F = (u0 + wn, hn), (u0 + wb, 0.0)
+    pts = [(0.0, 0.0), A]
+    pts += bezier(A, (A[0] + k1, 0.0), (B[0], B[1] - k2), B)
+    pts += bezier(B, (B[0], B[1] + k3), (C[0], C[1] - k3), C)
+    pts += bezier(C, (C[0], C[1] + kr), (T[0] - kr, T[1]), T)
+    pts += bezier(T, (T[0] + kr, T[1]), (D[0], D[1] + kr), D)
+    pts += bezier(D, (D[0], D[1] - k3), (E[0], E[1] + k3), E)
+    pts += bezier(E, (E[0], E[1] - k2), (F[0] - k1, 0.0), F)
+    pts.append((1.0, 0.0))
+    return side, h, pts
+
+
+def jigsaw_edges(cols, rows, cell, rng, tab):
+    """Every internal edge's curve in picture px, drawn from rng in a fixed order (the horizontal edges row by row,
+    then the vertical ones column by column). h[(i, j)]: between rows j and j + 1 in column i, left to right;
+    v[(i, j)]: between columns i and i + 1 in row j, top to bottom. Returns (h, v, the tallest tab in px)."""
+    h, v, tallest = {}, {}, 0.0
+    for j in range(rows - 1):
+        for i in range(cols):
+            side, th, pts = tab_shape(rng, tab)
+            h[(i, j)] = [((i + u) * cell, (j + 1 + side * w) * cell) for u, w in pts]
+            tallest = max(tallest, th * cell)
+    for i in range(cols - 1):
+        for j in range(rows):
+            side, th, pts = tab_shape(rng, tab)
+            v[(i, j)] = [((i + 1 + side * w) * cell, (j + u) * cell) for u, w in pts]
+            tallest = max(tallest, th * cell)
+    return h, v, tallest
+
+
+def piece_outline(i, j, cols, rows, cell, h, v):
+    """Cell (i, j)'s outline in picture px, clockwise: top, right, bottom, left (outer edges straight)."""
+    x0, y0, x1, y1 = i * cell, j * cell, (i + 1) * cell, (j + 1) * cell
+    top = [(x0, y0), (x1, y0)] if j == 0 else h[(i, j - 1)]
+    right = [(x1, y0), (x1, y1)] if i == cols - 1 else v[(i, j)]
+    bottom = [(x1, y1), (x0, y1)] if j == rows - 1 else h[(i, j)][::-1]
+    left = [(x0, y1), (x0, y0)] if i == 0 else v[(i - 1, j)][::-1]
+    return top + right[1:] + bottom[1:] + left[1:-1]
+
+
 def jigsaw_cut(fitted, cols, rows, cell, pad, seed, widen, tab, rng_factory=random.Random):
-    raise NotImplementedError("the jigsaw cutter is step 1.2 (plan 56)")
+    """Cut the fitted picture into jigsaw frames (see Cut). pad None takes the smallest even pad the cut needs."""
+    rng = rng_factory(seed)
+    h, v, tallest = jigsaw_edges(cols, rows, cell, rng, tab)
+    reach = int(-(-tallest // 1)) + 1 + widen  # the tallest tab rounded up, its antialiased pixel, the widen
+    pad_needed = reach + 2 + (reach % 2)  # 2 px of clear margin, made even
+    if pad is None:
+        pad = pad_needed
+    if pad < pad_needed:
+        raise ValueError(f"--pad-px {pad} is under the {pad_needed} px this cut needs (reach {reach} + 2)")
+    side = frame_side(cell, pad)
+    W, H = cols * cell, rows * cell
+    padded = Image.new("RGBA", (W + 2 * pad, H + 2 * pad), (0, 0, 0, 0))
+    padded.paste(fitted.convert("RGBA"), (pad, pad))
+    clear = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    sheet = Image.new("RGBA", (cols * side, rows * side), (0, 0, 0, 0))
+    masks, frames, outlines = [], [], []
+    S = SUPERSAMPLE
+    for c in range(cols * rows):
+        i, j = c % cols, c // cols
+        ox, oy = i * cell - pad, j * cell - pad  # the frame's origin in picture px
+        outline = piece_outline(i, j, cols, rows, cell, h, v)
+        outlines.append(outline)
+        big = Image.new("L", (side * S, side * S), 0)
+        ImageDraw.Draw(big).polygon([((x - ox) * S, (y - oy) * S) for x, y in outline], fill=255)
+        mask = big.resize((side, side), Image.Resampling.BOX)
+        if widen:
+            mask = mask.filter(ImageFilter.MaxFilter(2 * widen + 1))
+        inside = Image.new("L", (side, side), 0)  # the picture's part of the frame: flat outer edges
+        inside.paste(255, (max(0, -ox), max(0, -oy), min(side, W - ox), min(side, H - oy)))
+        mask = ImageChops.multiply(mask, inside)
+        frame = padded.crop((i * cell, j * cell, i * cell + side, j * cell + side))
+        frame.putalpha(mask)
+        frame = Image.composite(frame, clear, above_zero(mask))  # RGB 0 wherever alpha is 0
+        masks.append(mask)
+        frames.append(frame)
+        sheet.paste(frame, sheet_box(c, cols, side)[:2])
+    return Cut(masks=masks, frames=frames, sheet=sheet, pad=pad, side=side, tallest=tallest, reach=reach,
+               pad_needed=pad_needed, outlines=outlines)
 
 
 def quantize_alpha(sheet, colours):
-    raise NotImplementedError("the quantizing with alpha is step 1.2 (plan 56)")
+    """The RGBA sheet at `colours` colours with its alpha kept (the shipped call: octree with k-means), then the
+    palette fix, so the quantized core stays at 255 and the outside at 0: entries at alpha 250 or more snap to 255; a
+    pixel at 255 in the sheet still on a see-through entry moves to the opaque entry nearest its own RGB; a pixel at 0
+    in the sheet on an entry above 0 moves to a clear entry. Returns (P image, a note of what moved)."""
+    q = sheet.quantize(colours, method=Image.Quantize.FASTOCTREE, kmeans=2, dither=Image.Dither.FLOYDSTEINBERG)
+    pal = q.getpalette("RGBA")
+    entries = [tuple(pal[k:k + 4]) for k in range(0, len(pal), 4)]
+    snapped = sum(1 for e in entries if 250 <= e[3] < 255)
+    entries = [(r, g, b, 255) if a >= 250 else (r, g, b, a) for r, g, b, a in entries]
+    opaque = [k for k, e in enumerate(entries) if e[3] == 255]
+    clear = [k for k, e in enumerate(entries) if e[3] == 0]
+    if not opaque or not clear:
+        raise ValueError(f"the {len(entries)}-colour palette has {len(opaque)} opaque and {len(clear)} clear entries")
+    w = q.size[0]
+    index = Image.frombytes("L", q.size, q.tobytes())
+    lut = [entries[k][3] if k < len(entries) else 0 for k in range(256)]
+    q_alpha = index.point(lut)
+    src = sheet.getchannel("A")
+    want_opaque = ImageChops.multiply(src.point(lambda a: 255 if a == 255 else 0), q_alpha.point(lambda a: 255 if a < 255 else 0))
+    want_clear = ImageChops.multiply(src.point(lambda a: 255 if a == 0 else 0), above_zero(q_alpha))
+    data = bytearray(q.tobytes())
+    rgb = sheet.convert("RGB")
+    nearest = {}
+    moved_opaque = moved_clear = 0
+    for flags, opaque_side in ((want_opaque.tobytes(), True), (want_clear.tobytes(), False)):
+        at = flags.find(b"\xff")
+        while at != -1:
+            if opaque_side:
+                colour = rgb.getpixel((at % w, at // w))
+                if colour not in nearest:
+                    nearest[colour] = min(opaque, key=lambda k: sum((entries[k][n] - colour[n]) ** 2 for n in range(3)))
+                data[at] = nearest[colour]
+                moved_opaque += 1
+            else:
+                data[at] = clear[0]
+                moved_clear += 1
+            at = flags.find(b"\xff", at + 1)
+    out = Image.frombytes("P", q.size, bytes(data))
+    out.putpalette([x for e in entries for x in e], rawmode="RGBA")
+    note = (f"palette fix: {snapped} entr{'y' if snapped == 1 else 'ies'} snapped to alpha 255, {moved_opaque} opaque "
+            f"pixel(s) moved to an opaque entry, {moved_clear} clear pixel(s) to a clear entry")
+    return out, note
+
+
+def draw_outlines(img, outlines, width=2):
+    """Each piece's outline as a thin white line."""
+    d = ImageDraw.Draw(img)
+    for o in outlines:
+        d.line(o + [o[0]], fill=BORDER, width=width, joint="curve")
+    return img
+
+
+def assemble(cut, cols, rows, cell, background, margin=24, fill=None):
+    """The frames put back at their cell origin minus pad on `background`, `margin` px around the picture. fill (a
+    function of the cell) paints each piece in one colour from its alpha instead of the picture."""
+    W, H, p = cols * cell, rows * cell, cut.pad
+    canvas = Image.new("RGBA", (W + 2 * p, H + 2 * p), background + (255,))
+    for c, fr in enumerate(cut.frames):
+        if fill is not None:
+            fr = Image.new("RGBA", fr.size, fill(c) + (255,))
+            fr.putalpha(cut.masks[c])
+        canvas.alpha_composite(fr, ((c % cols) * cell, (c // cols) * cell))
+    m = min(margin, p)
+    return canvas.crop((p - m, p - m, p + W + m, p + H + m)).convert("RGB")
+
+
+def exploded_sheet(cut, cols, rows, gap=24):
+    """The frames apart (each frame's full side, `gap` px between) on the panel colour."""
+    s = cut.side
+    canvas = Image.new("RGBA", (cols * s + (cols + 1) * gap, rows * s + (rows + 1) * gap), PANEL + (255,))
+    for c, fr in enumerate(cut.frames):
+        canvas.alpha_composite(fr, (gap + (c % cols) * (s + gap), gap + (c // cols) * (s + gap)))
+    return canvas.convert("RGB")
 
 
 def jigsaw_previews(cut, fitted, cols, rows, cell, order):
-    raise NotImplementedError("the jigsaw check sheets are step 1.2 (plan 56)")
+    """The jigsaw check sheets (every output but advent-puzzle.png)."""
+    release = [""] * (cols * rows)
+    for k, c in enumerate(order, start=1):
+        release[c] = f"{k} Dec"
+    dark = assemble(cut, cols, rows, cell, PANEL)
+    built = assemble(cut, cols, rows, cell, PANEL, margin=0)
+    plain = draw_outlines(fitted.copy(), cut.outlines)
+    w, h = fitted.size
+    compare = Image.new("RGB", (2 * w + GAP, h + CAPTION_H), LIGHT)
+    compare.paste(built, (0, CAPTION_H))
+    compare.paste(plain, (w + GAP, CAPTION_H))
+    d = ImageDraw.Draw(compare)
+    f = font(36)
+    d.text((w / 2, CAPTION_H / 2), "assembled from the frames", font=f, fill=DARK, anchor="mm")
+    d.text((w + GAP + w / 2, CAPTION_H / 2), "fitted picture with the piece outlines", font=f, fill=DARK, anchor="mm")
+    return {
+        "contact-numbered.png": draw_labels(fitted, [str(c) for c in range(cols * rows)], cols, rows, cell, cut.outlines),
+        "release-map.png": draw_labels(fitted, release, cols, rows, cell, cut.outlines),
+        "compare.png": compare,
+        "assembled-dark.png": dark,
+        "assembled-light.png": assemble(cut, cols, rows, cell, LIGHT),
+        "exploded.png": exploded_sheet(cut, cols, rows),
+        "silhouettes.png": assemble(cut, cols, rows, cell, PANEL,
+                                    fill=lambda c: LOCK_A if (c % cols + c // cols) % 2 == 0 else LOCK_B),
+    }
 
 
 def run_jigsaw(args, order):
