@@ -66,10 +66,7 @@ export class Advent extends Phaser.Scene {
     this.pieces = book ? adventBookPieces(book.found, book.season, T) : [];
     const owned = new Map(this.pieces.map((p) => [p.cell, p]));
     this.hasArt = this.textures.exists('advent-puzzle'); // offline before its first load: owned slots show as lit squares
-    // Plan 56: a fill tint (Phaser 4's TintModes.FILL) only on WebGL. A Canvas renderer may ignore it and show the
-    // picture in a locked slot (a spoiler), so there the locks are squares and an instant landing glows as a square.
-    const fill = globalThis.Phaser?.TintModes?.FILL;
-    this.fillTint = fill !== undefined && this.game?.renderer?.type === globalThis.Phaser?.WEBGL ? fill : null;
+    this.fillTint = this.fillTintMode();
     this.glowKeys = new Set(); // the flights' outline glow textures still alive (dropped after each fade, and on close)
     // S14: the pieces not yet shown added wait in locked slots and arrive by the animation; they count as seen from now
     // (closing mid-way still lands them), so the home button stops glowing.
@@ -300,6 +297,16 @@ export class Advent extends Phaser.Scene {
     if (!this.glowKeys?.has(key)) return;
     this.glowKeys.delete(key);
     if (this.textures.exists(key)) this.textures.remove(key);
+  }
+
+  /**
+   * Plan 56: the fill tint (Phaser 4's TintModes.FILL) only on WebGL, else null. A Canvas renderer may ignore it and
+   * show the picture in a locked slot (a spoiler), so there the locks are squares and an instant landing glows as one.
+   */
+  fillTintMode() {
+    const P = globalThis.Phaser;
+    const fill = P?.TintModes?.FILL;
+    return typeof fill === 'number' && P.WEBGL !== undefined && this.game?.renderer?.type === P.WEBGL ? fill : null;
   }
 
   /** A sample through Play's sound rules (mute, sound off); nothing until its file has landed. */

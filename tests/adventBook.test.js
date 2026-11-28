@@ -317,3 +317,189 @@ test('the "to go" line (T7) never sits over the picture: it shows, then goes by 
   (done.onComplete ?? done.fn)();
   assert.ok(made.every((o) => o.destroyed), 'and leaves nothing behind');
 });
+
+// --- Plan 56, 2.4: the jigsaw book's draw sites on scene stubs (the frame, the tinted locks, the glow, the star) ---
+
+/** A recording game object: every setter stores what it was given and returns the object. */
+function rec(type, args) {
+  const o = { type, args, depth: 0, alpha: 1, scaleX: 1, tint: null, tintMode: null, destroyed: false };
+  Object.assign(o, {
+    setDepth(d) { o.depth = d; return o; },
+    setAlpha(a) { o.alpha = a; return o; },
+    setScale(s) { o.scaleX = s; return o; },
+    setDisplaySize(w, h) { o.display = [w, h]; return o; },
+    setTint(t) { o.tint = t; return o; },
+    setTintMode(m) { o.tintMode = m; return o; },
+    setStrokeStyle(w, c) { o.stroke = [w, c]; return o; },
+    fillStyle() { return o; },
+    fillPoints() { return o; },
+    lineStyle() { return o; },
+    strokePoints() { return o; },
+    destroy() { o.destroyed = true; },
+  });
+  return o;
+}
+
+/** The book on stubs: `made` lists every image / rectangle / graphics the methods add, `tweens` every tween config. */
+async function stubBook(fields = {}) {
+  await import('./support/scenes.js'); // Phaser first
+  const { Advent } = await import('../src/scenes/Advent.js');
+  const made = [];
+  const tweens = [];
+  const removed = [];
+  const s = Object.assign(Object.create(Advent.prototype), {
+    hasArt: true,
+    fillTint: 1,
+    layout: adventBookLayout(720, 1280, T),
+    made,
+    tweens: { add: (cfg) => (tweens.push(cfg), { stop() {} }) },
+    tweenList: tweens,
+    removed,
+    glowKeys: new Set(),
+    locks: new Map(),
+    shownCount: 0,
+    setCount() {},
+    textures: { exists: () => true, remove: (k) => removed.push(k) },
+    add: {
+      image: (...a) => (made.push(rec('image', a)), made.at(-1)),
+      rectangle: (...a) => (made.push(rec('rectangle', a)), made.at(-1)),
+      graphics: (...a) => (made.push(rec('graphics', a)), made.at(-1)),
+    },
+    ...fields,
+  });
+  return s;
+}
+
+const P56 = T.advent.puzzle;
+const centreOf = (L, cell) => [L.slots[cell].x + L.slot / 2, L.slots[cell].y + L.slot / 2];
+
+test('drawPiece (plan 56): the piece\'s frame at L.frame centred on its slot at depth 2, the star at the slot\'s top-right corner; offline a lit square of the slot', async () => {
+  const s = await stubBook();
+  const L = s.layout;
+  assert.equal(L.frame, (P56.cellPx + 2 * P56.padPx) * T.spriteDisplayScale);
+  for (const cell of [0, 9, 23]) {
+    s.made.length = 0;
+    const { image, star } = s.drawPiece({ cell, onDay: cell === 9 });
+    const [cx, cy] = centreOf(L, cell);
+    assert.equal(image.type, 'image');
+    assert.deepEqual(image.args, [cx, cy, 'advent-puzzle', cell], `cell ${cell}: its own frame at the slot's centre`);
+    assert.deepEqual(image.display, [L.frame, L.frame], 'drawn at the frame, not squashed into the slot');
+    assert.equal(image.depth, 2, 'over the locks at 1, so a tab covers the locked neighbour\'s blank');
+    assert.equal(image.tint, null, 'an owned piece is never tinted');
+    if (cell === 9) {
+      assert.deepEqual(star.args, [{ x: L.slots[9].x + L.slot - T.advent.book.starInset, y: L.slots[9].y + T.advent.book.starInset }], 'D4 (a): the slot\'s top-right corner');
+      assert.equal(star.depth, 3);
+    } else assert.equal(star, null, 'no star off its day');
+  }
+  const off = await stubBook({ hasArt: false });
+  const { image } = off.drawPiece({ cell: 4, onDay: false });
+  const [cx, cy] = centreOf(off.layout, 4);
+  assert.deepEqual(image.args, [cx, cy, off.layout.slot, off.layout.slot, 0xc89a64], 'without the sheet: the lit square of the slot');
+});
+
+test('makeLock (plan 56, D6 a): each locked slot is its own piece\'s frame under the fill tint in the checkerboard\'s shade; without a fill tint or the sheet, a flat square', async () => {
+  const { adventLockShade } = await import('../src/logic.js');
+  const s = await stubBook();
+  const L = s.layout;
+  for (let cell = 0; cell < P56.cols * P56.rows; cell += 1) {
+    const o = s.makeLock(cell);
+    const [cx, cy] = centreOf(L, cell);
+    assert.equal(o.type, 'image');
+    assert.deepEqual(o.args, [cx, cy, 'advent-puzzle', cell], `cell ${cell}`);
+    assert.deepEqual(o.display, [L.frame, L.frame]);
+    assert.equal(o.tintMode, 1, 'a fill tint, so the lock is a silhouette and never the picture');
+    assert.equal(o.tint, adventLockShade(cell, T));
+    assert.equal(o.depth, 1);
+  }
+  for (const fields of [{ fillTint: null }, { hasArt: false }, { hasArt: false, fillTint: null }]) {
+    const q = await stubBook(fields);
+    const o = q.makeLock(5);
+    const [cx, cy] = centreOf(q.layout, 5);
+    assert.equal(o.type, 'rectangle', JSON.stringify(fields));
+    assert.deepEqual(o.args, [cx, cy, q.layout.slot - 2, q.layout.slot - 2, T.advent.book.lockFill]);
+    assert.deepEqual(o.stroke, [1, T.advent.book.lockLine]);
+    assert.equal(o.depth, 1);
+  }
+});
+
+test('fillTintMode (plan 56): the fill tint only when Phaser has TintModes.FILL and the renderer is WebGL; a Canvas renderer or an older Phaser gets null (square locks)', async () => {
+  const s = await stubBook();
+  const was = { TintModes: globalThis.Phaser.TintModes, WEBGL: globalThis.Phaser.WEBGL, CANVAS: globalThis.Phaser.CANVAS };
+  try {
+    Object.assign(globalThis.Phaser, { TintModes: { MULTIPLY: 0, FILL: 1 }, WEBGL: 2, CANVAS: 1 });
+    s.game = { renderer: { type: 2 } };
+    assert.equal(s.fillTintMode(), 1, 'WebGL with FILL');
+    s.game = { renderer: { type: 1 } };
+    assert.equal(s.fillTintMode(), null, 'Canvas: the tint may be ignored');
+    s.game = undefined;
+    assert.equal(s.fillTintMode(), null, 'no renderer');
+    delete globalThis.Phaser.TintModes;
+    s.game = { renderer: { type: 2 } };
+    assert.equal(s.fillTintMode(), null, 'no TintModes');
+  } finally {
+    for (const [k, v] of Object.entries(was)) {
+      if (v === undefined) delete globalThis.Phaser[k];
+      else globalThis.Phaser[k] = v;
+    }
+  }
+});
+
+test('makeGlow (plan 56, D5): a flight\'s outline glow from the piece\'s own frame; an instant landing\'s a white fill-tinted copy just under the piece; without a fill tint the rounded square', async () => {
+  const a = T.advent.bookAnim;
+  const asked = [];
+  const s = await stubBook({ outlineGlow: (cell) => (asked.push(cell), `advent-glow-${cell}`) });
+  const g = s.makeGlow({ cell: 7 }, 100, 200, 0.5, 'outline', 6);
+  assert.deepEqual(g.args, [100, 200, 'advent-glow-7'], 'keyed by its cell');
+  assert.equal(g.scaleX, 0.5);
+  assert.equal(g.depth, 5);
+  assert.deepEqual(asked, [7]);
+  const tint = s.makeGlow({ cell: 7 }, 100, 200, 0.5, 'tint', 2);
+  assert.deepEqual(asked, [7], 'an instant landing paints no outline (up to 21 at once)');
+  assert.deepEqual(tint.args, [100, 200, 'advent-puzzle', 7], 'the piece\'s own frame');
+  assert.equal(tint.tint, 0xffffff);
+  assert.equal(tint.tintMode, 1);
+  assert.equal(tint.scaleX, 0.5 * a.tintGrow);
+  assert.equal(tint.alpha, a.tintAlpha);
+  assert.equal(tint.depth, 1.5, 'just under the piece');
+  // The outline cannot be made (no canvas): the tinted copy instead.
+  const none = await stubBook({ outlineGlow: () => null });
+  const n = none.makeGlow({ cell: 2 }, 0, 0, 1, 'outline', 6);
+  assert.deepEqual([n.args[2], n.args[3], n.tintMode, n.depth], ['advent-puzzle', 2, 1, 5.5]);
+  // No fill tint (Canvas) or no sheet: S14's rounded-square halo (painted once under advent-glow; here it exists).
+  for (const fields of [{ fillTint: null, outlineGlow: () => null }, { hasArt: false }]) {
+    const q = await stubBook(fields);
+    const r = q.makeGlow({ cell: 2 }, 10, 20, 0.5, 'tint', 2);
+    assert.deepEqual(r.args, [10, 20, 'advent-glow'], JSON.stringify(Object.keys(fields)));
+    assert.equal(r.depth, 5);
+  }
+});
+
+test('land and fly (plan 56): the glow and the flying piece at the frame\'s scale (L.frame / framePx = L.slot / cellPx), and the outline texture dropped when its fade ends', async () => {
+  const framePx = P56.cellPx + 2 * P56.padPx;
+  const glows = [];
+  const s = await stubBook({ makeGlow: (p, x, y, scale, kind, depth) => (glows.push({ cell: p.cell, x, y, scale, kind, depth }), rec('image', [])) });
+  const L = s.layout;
+  const scale = L.slot / P56.cellPx;
+  assert.ok(Math.abs(scale * framePx - L.frame) < 1e-9, 'one scale for the slot and the frame');
+  s.glowKeys.add('advent-glow-11');
+  s.locks.set(11, rec('image', []));
+  s.land({ cell: 11, onDay: false }, 'outline');
+  const [cx, cy] = centreOf(L, 11);
+  assert.deepEqual(glows, [{ cell: 11, x: cx, y: cy, scale, kind: 'outline', depth: 2 }]);
+  assert.ok(!s.locks.has(11), 'the lock gives way');
+  const fade = s.tweenList.at(-1);
+  assert.equal(fade.alpha, 0);
+  fade.onComplete();
+  assert.deepEqual(s.removed, ['advent-glow-11'], 'the outline texture goes with its fade (at most one alive)');
+  s.dropGlow(11);
+  s.dropGlow(4);
+  assert.deepEqual(s.removed, ['advent-glow-11'], 'nothing to drop twice, or for a tint');
+  // The flight: the piece's frame at 1:1 at the centre, landing at the drawn scale.
+  const f = await stubBook({ makeGlow: () => rec('image', []), playSound() {}, time: { delayedCall: () => ({ remove() {} }) } });
+  f.fly({ cell: 3 }, () => {});
+  const piece = f.made.find((o) => o.type === 'image' && o.args[2] === 'advent-puzzle');
+  assert.deepEqual(piece.args, [f.layout.centre.x, f.layout.centre.y, 'advent-puzzle', 3]);
+  const move = f.tweenList.find((c) => typeof c.scale === 'function');
+  assert.equal(move.scale(piece), scale, 'lands at L.frame / framePx');
+  assert.deepEqual([move.x, move.y], centreOf(f.layout, 3));
+});
