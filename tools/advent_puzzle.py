@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""advent_puzzle.py: cut Michael's Advent picture into a puzzle sheet and its check sheets (plan 17, step 2.13).
+"""advent_puzzle.py: cut Michael's Advent picture into a puzzle sheet and its check sheets (plan 17, step 2.13; jigsaw
+pieces: plan 56, steps 1.1 and 1.2).
 
 The picture is fitted to cols x cell by rows x cell, split into cols x rows square frames in reading order
 (cell c is column c % cols, row c // cols) and written out with the release order: piece k (released on
@@ -9,6 +10,8 @@ review and for the later step that copies the frames into the game.
 Run:    uv run --with pillow python3 tools/advent_puzzle.py --src PICTURE.png --out DIR \
             --cols 4 --rows 6 --cell 332 --order 7,14,4,18,17,22,12,10,20,3,23,19,8,13,1,0,11,16,21,9,15,2,5,6 \
             [--pad] [--colours 256] [--selftest]
+        jigsaw: the same, plus --shape jigsaw [--pad-px N] [--seed 20261201] [--widen 1] [--tab 0.33]
+            [--max-kb 600] [--star-r 48]; see "Jigsaw mode" below
         --src       the picture (any size; RGB or RGBA)
         --out       output folder (created if missing)
         --cols, --rows, --cell   the grid and the frame side in px
@@ -39,12 +42,49 @@ Checks (the real run and the self-test call the same functions):
   - advent-puzzle.png is exactly cols*cell x rows*cell;
   - no output pixel has alpha below 255;
   - the frames rebuilt from advent-puzzle.png equal the fitted picture, pixel for pixel.
+
+Jigsaw mode (--shape jigsaw; plan 56). Each frame is the cell plus pad_px on every side (frame = cell + 2 x pad_px),
+in the same reading order, cut from the same fitted picture, so the picture under every tab is the true picture.
+Outside its piece a frame is alpha 0. Every internal edge gets one tab (its side, its place in the middle third of the
+edge, its size and lean drawn from --seed; the same seed gives the same bytes); the grid's outer edges are flat.
+Each piece's mask is widened by --widen px so two antialiased cut edges never leave a hairline seam. The alpha rules
+invert: alpha 0 outside the piece, 255 in its core. With --colours the sheet is quantized with its alpha kept, then
+the palette is fixed so no core pixel lands at 254 (entries at alpha 250 or more snap to 255; a pixel that was opaque
+in the cut but still sits on a see-through entry moves to its nearest opaque one; a pixel that was alpha 0 moves to a
+fully clear entry).
+        --shape     rect (default: the square cells above, unchanged) or jigsaw
+        --pad-px    texture px of see-through margin around each cell, even (default: the smallest even number that
+                    holds the tallest tab, its antialiased pixel, the widen and 2 px of margin; the run reports it).
+                    Not --pad, which pads a too-small picture (above)
+        --seed      the tabs' seed (default 20261201, the release order's seed)
+        --widen     px each piece's mask grows by against seams (default 1)
+        --tab       the tallest tab as a share of the cell (default 0.33, the 25 Nov trial's 110 px on 333)
+        --max-kb    budget for the written advent-puzzle.png in KB (default 600)
+        --star-r    radius in texture px of the star's disc that must be solid, centred STAR_INSET px in from the
+                    cell's top and right edges (default 48)
+Jigsaw outputs: the four above (the labels and compare drawn with the piece outlines), plus
+  assembled-dark.png    the frames put back together at 1:1 on the book's panel colour
+  assembled-light.png   the same on a light background
+  exploded.png          the frames apart, on the panel colour
+  silhouettes.png       each piece's alpha as a flat locked shape, in a two-shade checkerboard, put back together
+Jigsaw checks (the self-test runs each on the real cut and catches each broken input):
+  (1) the sheet is cols x frame by rows x frame, each side at most 4096;
+  (2) the same seed twice gives identical masks, another seed different ones;
+  (3) the frames put back at their cell origin minus pad_px cover every picture pixel at alpha 255 in at least one
+      frame, with the picture's RGB under any alpha above 0 (before quantizing); alpha 255 again on the written sheet;
+  (4) alpha 0 more than the tabs' reach outside the cell, and alpha 0 outside the picture (flat outer edges);
+  (5) the four corner squares (cell // 3 a side) and the star's disc clipped to the cell at alpha 255 in every frame,
+      before quantizing and on the written sheet;
+  (6) two neighbours overlap only within the widen band;
+  (7) the written sheet is at most --max-kb.
 """
 import argparse
+import hashlib
+import random
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 FONT_PATHS = [
     "/System/Library/Fonts/Supplemental/Arial Black.ttf",
@@ -56,6 +96,14 @@ LIGHT = (255, 250, 235)
 BORDER = (255, 255, 255)
 GAP, CAPTION_H = 40, 72
 OUTPUTS = ["advent-puzzle.png", "contact-numbered.png", "release-map.png", "compare.png"]
+# Jigsaw mode (plan 56).
+JIGSAW_OUTPUTS = OUTPUTS + ["assembled-dark.png", "assembled-light.png", "exploded.png", "silhouettes.png"]
+PANEL = (0x1a, 0x0b, 0x14)  # the book's panel (src/scenes/Advent.js)
+LOCK_A = (0x2a, 0x14, 0x20)  # TUNING.advent.book.lockFill
+LOCK_B = (0x37, 0x1d, 0x2a)  # the second, lighter lock shade (D6 a): 40 % of the way from lockFill to lockLine
+MAX_SIDE = 4096  # the largest texture side the game allows (tests/assets.test.js)
+STAR_INSET = 36  # texture px: TUNING.advent.book.starInset (18 logical px) at 2x
+SUPERSAMPLE = 4  # the masks are drawn at this many times the frame size, then boxed down (antialiased edges)
 
 
 def font(size):
@@ -100,6 +148,183 @@ def check_alpha(img, name="image"):
     if lo < 255:
         n = sum(img.getchannel("A").histogram()[:255])
         return [f"{name} has {n} pixel(s) with alpha below 255 (lowest {lo})"]
+    return []
+
+
+# ---------------------------------------------------------------- jigsaw checks (plan 56; shared with --selftest)
+def frame_side(cell, pad):
+    """A jigsaw frame's side: the cell plus pad on every side."""
+    return cell + 2 * pad
+
+
+def sheet_box(c, cols, side):
+    """Frame c's box on a sheet of side x side frames in reading order."""
+    x, y = (c % cols) * side, (c // cols) * side
+    return x, y, x + side, y + side
+
+
+def frames_of(sheet, cols, rows, side):
+    """The sheet's frames in reading order, as RGBA images (a P sheet is decoded through its palette)."""
+    s = sheet.convert("RGBA")
+    return [s.crop(sheet_box(c, cols, side)) for c in range(cols * rows)]
+
+
+def count_nonzero(img):
+    """Pixels above 0 in an L image."""
+    return sum(img.histogram()[1:])
+
+
+def above_zero(img):
+    """An L image's pixels above 0 as 255, the rest 0."""
+    return img.point(lambda v: 255 if v else 0)
+
+
+def masks_digest(masks):
+    """One sha256 over every frame mask (size and bytes), in order."""
+    h = hashlib.sha256()
+    for m in masks:
+        h.update(f"{m.size[0]}x{m.size[1]}".encode())
+        h.update(m.tobytes())
+    return h.hexdigest()
+
+
+def check_jigsaw_size(img, cols, rows, cell, pad, name="sheet"):
+    """(1) The sheet is cols x frame by rows x frame (frame = cell + 2 x pad), each side at most MAX_SIDE."""
+    side = frame_side(cell, pad)
+    want = (cols * side, rows * side)
+    problems = []
+    if img.size != want:
+        problems.append(f"{name} is {img.size[0]} x {img.size[1]}, expected {want[0]} x {want[1]} "
+                        f"(frames of {side} px: cell {cell} + 2 x pad {pad})")
+    for label, v in zip(("width", "height"), img.size):
+        if v > MAX_SIDE:
+            problems.append(f"{name} {label} {v} is over {MAX_SIDE}")
+    return problems
+
+
+def check_seeded(mask_hash, seed):
+    """(2) mask_hash(seed) is the digest of a cut's masks: the same seed twice must agree, seed + 1 must differ."""
+    a, b, other = mask_hash(seed), mask_hash(seed), mask_hash(seed + 1)
+    problems = []
+    if a != b:
+        problems.append(f"seed {seed} cut twice gives different masks ({a[:12]} vs {b[:12]})")
+    if a == other:
+        problems.append(f"seeds {seed} and {seed + 1} give the same masks ({a[:12]})")
+    return problems
+
+
+def check_coverage(frames, cols, rows, cell, pad, picture=None, name="frames"):
+    """(3) Put back at their cell origin minus pad, the frames cover every picture pixel at alpha 255 in at least one
+    frame (two partial edges never add up to a solid pixel on screen: they leave a seam). With `picture`, every frame
+    pixel above alpha 0 also carries the picture's RGB there."""
+    side = frame_side(cell, pad)
+    W, H = cols * cell, rows * cell
+    cover = Image.new("L", (W + 2 * pad, H + 2 * pad), 0)
+    padded = None
+    if picture is not None:
+        padded = Image.new("RGB", cover.size, (0, 0, 0))
+        padded.paste(picture.convert("RGB"), (pad, pad))
+    problems = []
+    for c, fr in enumerate(frames):
+        x, y = (c % cols) * cell, (c // cols) * cell  # the frame's origin on the padded canvas
+        box = (x, y, x + side, y + side)
+        a = fr.getchannel("A")
+        cover.paste(ImageChops.lighter(cover.crop(box), a), box[:2])
+        if padded is not None:
+            seen = above_zero(a)
+            diff = ImageChops.difference(fr.convert("RGB"), padded.crop(box))
+            n = sum(count_nonzero(ImageChops.multiply(band, seen)) for band in diff.split())
+            if n:
+                problems.append(f"{name}: frame {c} has {n} channel value(s) under alpha above 0 that differ from the picture")
+    core = cover.crop((pad, pad, pad + W, pad + H))
+    lo = core.getextrema()[0]
+    if lo < 255:
+        n = sum(core.histogram()[:255])
+        problems.append(f"{name}: {n} picture pixel(s) at alpha 255 in no frame (lowest {lo}): a seam")
+    return problems
+
+
+def check_outside(frames, cols, rows, cell, pad, reach, name="frames"):
+    """(4) Alpha 0 more than `reach` px outside the cell in every frame, at least 2 px of margin left beyond the reach,
+    and alpha 0 outside the picture (the grid's outer edges are flat: no tab points out of the picture)."""
+    side = frame_side(cell, pad)
+    W, H = cols * cell, rows * cell
+    problems = []
+    if pad - reach < 2:
+        problems.append(f"pad {pad} leaves {pad - reach} px beyond the tabs' reach of {reach}; it needs at least 2")
+    lo, hi = max(pad - reach, 0), min(pad + cell + reach, side)
+    for c, fr in enumerate(frames):
+        a = fr.getchannel("A")
+        ring = a.copy()
+        ring.paste(0, (lo, lo, hi, hi))
+        n = count_nonzero(ring)
+        if n:
+            problems.append(f"{name}: frame {c} has {n} pixel(s) above alpha 0 beyond the reach ({reach} px outside the cell)")
+        ox, oy = (c % cols) * cell - pad, (c // cols) * cell - pad  # the frame's origin in picture px
+        out = a.copy()
+        out.paste(0, (max(0, -ox), max(0, -oy), min(side, W - ox), min(side, H - oy)))
+        n = count_nonzero(out)
+        if n:
+            problems.append(f"{name}: frame {c} has {n} pixel(s) above alpha 0 outside the picture (a tab on an outer edge)")
+    return problems
+
+
+def core_mask(cell, star_r):
+    """A cell-sized L mask of what must be solid in every piece: the four corner squares (cell // 3 a side: the tabs
+    and blanks sit in the middle third of each edge) and the star's disc (radius star_r, centred STAR_INSET px in from
+    the cell's top and right edges) clipped to the cell."""
+    m = Image.new("L", (cell, cell), 0)
+    d = ImageDraw.Draw(m)
+    k = cell // 3
+    for x0, y0 in ((0, 0), (cell - k, 0), (0, cell - k), (cell - k, cell - k)):
+        d.rectangle((x0, y0, x0 + k - 1, y0 + k - 1), fill=255)
+    cx, cy = cell - STAR_INSET, STAR_INSET
+    d.ellipse((cx - star_r, cy - star_r, cx + star_r, cy + star_r), fill=255)
+    return m
+
+
+def check_core(frames, cell, pad, star_r, name="frames"):
+    """(5) The corner squares and the star's disc clipped to the cell are at alpha 255 in every frame."""
+    m = core_mask(cell, star_r)
+    problems = []
+    for c, fr in enumerate(frames):
+        a = fr.getchannel("A").crop((pad, pad, pad + cell, pad + cell))
+        short = ImageChops.multiply(a.point(lambda v: 255 if v < 255 else 0), m)
+        n = count_nonzero(short)
+        if n:
+            lo = ImageChops.lighter(a, ImageChops.invert(m)).getextrema()[0]
+            problems.append(f"{name}: frame {c} has {n} corner or star pixel(s) below alpha 255 (lowest {lo})")
+    return problems
+
+
+def check_overlap(frames, cols, rows, cell, pad, widen, name="frames"):
+    """(6) Two neighbours overlap only within the widen band: each frame's alpha-above-0 shape, eroded by
+    2 x widen + 2 px, never meets its right or lower neighbour's alpha above 0, nor the other way round."""
+    side = frame_side(cell, pad)
+    k = 2 * widen + 2
+    solid = [above_zero(fr.getchannel("A")) for fr in frames]
+    inner = [s.filter(ImageFilter.MinFilter(2 * k + 1)) for s in solid]
+    problems = []
+    for c in range(cols * rows):
+        cx, cy = c % cols, c // cols
+        for dx, dy in ((1, 0), (0, 1)):
+            if cx + dx >= cols or cy + dy >= rows:
+                continue
+            n = c + dx + dy * cols
+            for a, b, sx, sy in ((c, n, dx * cell, dy * cell), (n, c, -dx * cell, -dy * cell)):
+                there = Image.new("L", (side, side), 0)
+                there.paste(solid[b], (sx, sy))  # b's frame in a's frame coordinates
+                hit = count_nonzero(ImageChops.multiply(inner[a], there))
+                if hit:
+                    problems.append(f"{name}: frame {b} reaches {hit} px into frame {a}, deeper than the widen band ({k} px)")
+    return problems
+
+
+def check_kb(path, max_kb, name="advent-puzzle.png"):
+    """(7) The written sheet is at most max_kb KB."""
+    size = Path(path).stat().st_size
+    if size > max_kb * 1024:
+        return [f"{name} is {size / 1024:.0f} KB, over the {max_kb} KB budget"]
     return []
 
 
@@ -302,6 +527,201 @@ def selftest(args, order):
     return all(results)
 
 
+# ---------------------------------------------------------------- jigsaw cutter (plan 56)
+class Cut:
+    """One jigsaw cut. masks: the L masks (side x side) in reading order; frames: the same as RGBA (the picture under
+    the mask, RGB 0 where alpha is 0); sheet: the frames on one RGBA sheet; pad: the frame margin; side: the frame's
+    side; tallest: the tallest tab in px; reach: px the widened masks reach outside their cell; pad_needed: the
+    smallest even pad for this cut; outlines: each piece's outline in picture px (for the check sheets)."""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+def jigsaw_cut(fitted, cols, rows, cell, pad, seed, widen, tab, rng_factory=random.Random):
+    raise NotImplementedError("the jigsaw cutter is step 1.2 (plan 56)")
+
+
+def quantize_alpha(sheet, colours):
+    raise NotImplementedError("the quantizing with alpha is step 1.2 (plan 56)")
+
+
+def jigsaw_previews(cut, fitted, cols, rows, cell, order):
+    raise NotImplementedError("the jigsaw check sheets are step 1.2 (plan 56)")
+
+
+def run_jigsaw(args, order):
+    """The real jigsaw run. Returns (problems, info); info holds the cut, the fitted picture, the written sheet's path
+    and its decoded frames."""
+    cols, rows, cell = args.cols, args.rows, args.cell
+    problems = check_order(order, cols, rows)
+    if problems:
+        return problems, {}
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    img = Image.open(args.src)
+    w, h = img.size
+    print(f"input:    {args.src} ({img.mode}, {w} x {h})")
+    fitted, (l, r, t, b), how, flattened = fit(img, cols * cell, rows * cell, args.pad)
+    verb = {"crop": "cropped", "pad": "padded", "none": "no crop or pad"}[how]
+    print(f"fit:      {verb} left {l}, right {r}, top {t}, bottom {b} px -> {fitted.size[0]} x {fitted.size[1]}")
+    print(f"flattened: {flattened} pixel(s) with alpha below 255")
+    cut = jigsaw_cut(fitted, cols, rows, cell, args.pad_px, args.seed, args.widen, args.tab)
+    sw, sh = cut.sheet.size
+    print(f"jigsaw:   seed {args.seed}; tallest tab {cut.tallest:.1f} px (--tab {args.tab}); widen {args.widen} px; "
+          f"reach {cut.reach} px")
+    print(f"pad:      {cut.pad} px (the smallest that fits: {cut.pad_needed}); frames {cut.side} px; sheet {sw} x {sh}")
+    problems += check_jigsaw_size(cut.sheet, cols, rows, cell, cut.pad, "the cut sheet")
+    problems += check_coverage(cut.frames, cols, rows, cell, cut.pad, fitted, "the cut")
+    problems += check_outside(cut.frames, cols, rows, cell, cut.pad, cut.reach, "the cut")
+    problems += check_core(cut.frames, cell, cut.pad, args.star_r, "the cut")
+    problems += check_overlap(cut.frames, cols, rows, cell, cut.pad, args.widen, "the cut")
+    outputs = {"advent-puzzle.png": cut.sheet}
+    if args.colours:
+        outputs["advent-puzzle.png"], note = quantize_alpha(cut.sheet, args.colours)
+        print(f"colours:  advent-puzzle.png at {args.colours} colours; {note}")
+    outputs.update(jigsaw_previews(cut, fitted, cols, rows, cell, order))
+    for name, im in outputs.items():
+        path = out_dir / name
+        im.save(path, optimize=True)
+        print(f"wrote:    {path} ({im.size[0]} x {im.size[1]}, {im.mode})")
+    sheet_path = out_dir / "advent-puzzle.png"
+    written = Image.open(sheet_path)
+    wf = frames_of(written, cols, rows, cut.side)
+    problems += check_jigsaw_size(written, cols, rows, cell, cut.pad, "advent-puzzle.png")
+    problems += check_coverage(wf, cols, rows, cell, cut.pad, None, "advent-puzzle.png")
+    problems += check_outside(wf, cols, rows, cell, cut.pad, cut.reach, "advent-puzzle.png")
+    problems += check_core(wf, cell, cut.pad, args.star_r, "advent-puzzle.png")
+    problems += check_kb(sheet_path, args.max_kb)
+    kb = sheet_path.stat().st_size / 1024
+    print(f"size:     advent-puzzle.png {kb:.0f} KB (before oxipng); texture {sw * sh * 4 / 1e6:.1f} MB as RGBA")
+    return problems, {"cut": cut, "fitted": fitted, "sheet": sheet_path, "frames": wf}
+
+
+def selftest_jigsaw(args, order):
+    """The real jigsaw arguments pass every check; each broken input must be caught by the same check functions."""
+    cols, rows, cell = args.cols, args.rows, args.cell
+    results = []
+
+    def report(label, ok, detail):
+        results.append(ok)
+        print(f"selftest: {'ok  ' if ok else 'FAIL'} {label}{(': ' + detail) if detail else ''}")
+
+    def case(label, fn):
+        """A check on the real cut: ok when it finds no problem."""
+        try:
+            found = fn()
+            report(label, not found, "; ".join(found[:3]))
+        except Exception as e:  # the cutter's stub raises until step 1.2
+            report(label, False, f"{type(e).__name__}: {e}")
+
+    def caught(label, fn):
+        """A broken input: ok when the check finds a problem."""
+        try:
+            found = fn()
+            report(label, bool(found), "; ".join(found[:2]) if found else "not caught")
+        except Exception as e:
+            report(label, False, f"{type(e).__name__}: {e}")
+
+    state = {}
+
+    def real():
+        if "error" in state:
+            raise state["error"]
+        if "info" not in state:
+            try:
+                state["problems"], state["info"] = run_jigsaw(args, order)
+            except Exception as e:
+                state["error"] = e
+                raise
+        return state["info"]
+
+    def fitted():
+        if "fitted" not in state:
+            state["fitted"] = fit(Image.open(args.src), cols * cell, rows * cell, args.pad)[0]
+        return state["fitted"]
+
+    def recut(**kw):
+        """The real cut again with some arguments changed (same pad as the real cut)."""
+        base = dict(pad=real()["cut"].pad, seed=args.seed, widen=args.widen, tab=args.tab)
+        base.update(kw)
+        rng = base.pop("rng_factory", random.Random)
+        return jigsaw_cut(fitted(), cols, rows, cell, base["pad"], base["seed"], base["widen"], base["tab"], rng)
+
+    def cut():
+        return real()["cut"]
+
+    def written():
+        return real()["frames"]
+
+    # The real arguments.
+    case("real arguments pass", lambda: real() and state["problems"])
+    for name in JIGSAW_OUTPUTS:
+        case(f"{name} written", lambda name=name: [] if (Path(args.out) / name).is_file() else [f"{name} missing"])
+    case("(1) advent-puzzle.png is cols x frame by rows x frame, each side at most 4096",
+         lambda: check_jigsaw_size(Image.open(real()["sheet"]), cols, rows, cell, cut().pad, "advent-puzzle.png"))
+    case(f"(2) seed {args.seed} cut twice gives the same masks, seed {args.seed + 1} different ones",
+         lambda: check_seeded(lambda s: masks_digest(recut(seed=s).masks), args.seed))
+    case("(3) the cut covers every picture pixel at alpha 255 with the picture's RGB",
+         lambda: check_coverage(cut().frames, cols, rows, cell, cut().pad, fitted(), "the cut"))
+    case("(3) the written sheet covers every picture pixel at alpha 255",
+         lambda: check_coverage(written(), cols, rows, cell, cut().pad, None, "advent-puzzle.png"))
+    case("(4) alpha 0 beyond the reach and outside the picture, in the cut",
+         lambda: check_outside(cut().frames, cols, rows, cell, cut().pad, cut().reach, "the cut"))
+    case("(4) alpha 0 beyond the reach and outside the picture, on the written sheet",
+         lambda: check_outside(written(), cols, rows, cell, cut().pad, cut().reach, "advent-puzzle.png"))
+    case(f"(5) corners and the star's disc (r {args.star_r}) at alpha 255, in the cut",
+         lambda: check_core(cut().frames, cell, cut().pad, args.star_r, "the cut"))
+    case(f"(5) corners and the star's disc (r {args.star_r}) at alpha 255, on the written sheet",
+         lambda: check_core(written(), cell, cut().pad, args.star_r, "advent-puzzle.png"))
+    case("(6) neighbours overlap only within the widen band",
+         lambda: check_overlap(cut().frames, cols, rows, cell, cut().pad, args.widen, "the cut"))
+    case(f"(7) advent-puzzle.png within {args.max_kb} KB", lambda: check_kb(real()["sheet"], args.max_kb))
+
+    # Broken inputs, each caught by the check named.
+    caught("(3) a mask not widened (--widen 0) leaves a seam",
+           lambda: check_coverage(recut(widen=0).frames, cols, rows, cell, cut().pad, fitted(), "widen 0"))
+
+    def beyond():
+        frames = [f.copy() for f in written()]
+        frames[5].putpixel((1, cut().side // 2), (200, 120, 60, 255))
+        return check_outside(frames, cols, rows, cell, cut().pad, cut().reach, "beyond fixture")
+    caught("(4) an opaque pixel beyond the reach", beyond)
+
+    def narrow():
+        s = Image.open(real()["sheet"])
+        return check_jigsaw_size(s.crop((0, 0, s.size[0] - 1, s.size[1])), cols, rows, cell, cut().pad, "narrow fixture")
+    caught("(1) a sheet 1 px too narrow", narrow)
+
+    def outer_tab():
+        frames = [f.copy() for f in written()]
+        a = frames[0].getchannel("A")  # cell 0: its top and left edges are the picture's
+        p = cut().pad
+        ImageDraw.Draw(a).ellipse((p - 30, p + cell // 2 - 20, p - 4, p + cell // 2 + 20), fill=255)
+        frames[0].putalpha(a)
+        return check_outside(frames, cols, rows, cell, p, cut().reach, "outer-tab fixture")
+    caught("(4) a tab on an outer edge (inside the reach, outside the picture)", outer_tab)
+
+    caught("(2) a seed that does not reproduce (an unseeded random)",
+           lambda: check_seeded(lambda s: masks_digest(recut(seed=s, rng_factory=lambda _s: random.Random()).masks),
+                                args.seed))
+
+    def core_254():
+        frames = [f.copy() for f in written()]
+        p = cut().pad
+        r, g, b, _ = frames[9].getpixel((p + 5, p + 5))
+        frames[9].putpixel((p + 5, p + 5), (r, g, b, 254))
+        return check_core(frames, cell, p, args.star_r, "254 fixture")
+    caught("(5) a quantized core pixel at 254", core_254)
+
+    def too_wide():
+        wide = recut(widen=6, pad=None)  # its own pad: 5 px more reach than the real cut's
+        return check_overlap(wide.frames, cols, rows, cell, wide.pad, 1, "widen 6")
+    caught("(6) a mask widened too far (6 px against --widen 1)", too_wide)
+    caught("(7) a sheet over its budget (1 KB)", lambda: check_kb(real()["sheet"], 1))
+    return all(results)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--src", required=True)
@@ -313,8 +733,31 @@ def main():
     ap.add_argument("--pad", action="store_true")
     ap.add_argument("--colours", type=int, default=0)
     ap.add_argument("--selftest", action="store_true")
+    # Jigsaw mode (plan 56); ignored under --shape rect.
+    ap.add_argument("--shape", choices=["rect", "jigsaw"], default="rect")
+    ap.add_argument("--pad-px", type=int, default=None)
+    ap.add_argument("--seed", type=int, default=20261201)
+    ap.add_argument("--widen", type=int, default=1)
+    ap.add_argument("--tab", type=float, default=0.33)
+    ap.add_argument("--max-kb", type=int, default=600)
+    ap.add_argument("--star-r", type=int, default=48)
     args = ap.parse_args()
     order = parse_order(args.order)
+    if args.shape == "jigsaw":
+        if args.pad_px is not None and (args.pad_px < 0 or args.pad_px % 2):
+            raise SystemExit(f"FAIL: --pad-px must be even and at least 0, got {args.pad_px}")
+        if args.widen < 0:
+            raise SystemExit(f"FAIL: --widen must be at least 0, got {args.widen}")
+        if args.selftest:
+            ok = selftest_jigsaw(args, order)
+            print("selftest: PASS" if ok else "selftest: FAIL")
+            return 0 if ok else 1
+        problems, _ = run_jigsaw(args, order)
+        for p in problems:
+            print(f"FAIL: {p}")
+        if not problems:
+            print("PASS")
+        return 1 if problems else 0
     if args.selftest:
         ok = selftest(args, order)
         print("selftest: PASS" if ok else "selftest: FAIL")
