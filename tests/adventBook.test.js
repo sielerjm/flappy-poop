@@ -33,6 +33,33 @@ test('adventBookLayout keeps the book centred on a wide field', () => {
   assert.equal(L.slots[0].x, 500 - 2 * 166);
 });
 
+test('adventBookLayout: a piece\'s frame is its cell plus padPx a side at spriteDisplayScale, the slot still the cell (plan 56, 2.1)', () => {
+  const p = T.advent.puzzle;
+  const L = adventBookLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  assert.equal(L.slot, 166, 'the slot is still the 332 px cell at half size');
+  assert.equal(L.frame, 258, 'the 516 px frame (332 + 2 x 92) at half size');
+  assert.equal(L.frame, (p.cellPx + 2 * p.padPx) * T.spriteDisplayScale);
+  assert.equal((L.frame - L.slot) / 2, 46, 'the pad reaches whole logical px past the slot on every side');
+  assert.equal(adventBookLayout(1000, GAME_HEIGHT, T).frame, 258, 'the same on a wide field');
+});
+
+test('adventLockShade: locked slots in a two-shade checkerboard, so neighbours never share a shade (plan 56, D6 a)', async () => {
+  const { adventLockShade } = await import('../src/logic.js');
+  assert.equal(typeof adventLockShade, 'function', 'adventLockShade is exported from logic.js');
+  const b = T.advent.book;
+  assert.equal(b.lockFillB, 0x371d2a, 'Michael\'s Gate A shade (D6 a)');
+  assert.notEqual(b.lockFillB, b.lockFill);
+  assert.equal(adventLockShade(0, T), b.lockFill, 'cell 0 (column 0, row 0) takes lockFill');
+  assert.equal(adventLockShade(1, T), b.lockFillB);
+  assert.equal(adventLockShade(4, T), b.lockFillB, 'cell 4: column 0, row 1');
+  assert.equal(adventLockShade(5, T), b.lockFill, 'cell 5: column 1, row 1');
+  const { cols, rows } = T.advent.puzzle;
+  for (let c = 0; c < cols * rows; c++) {
+    if ((c + 1) % cols) assert.notEqual(adventLockShade(c, T), adventLockShade(c + 1, T), `cells ${c} and ${c + 1} side by side`);
+    if (c + cols < cols * rows) assert.notEqual(adventLockShade(c, T), adventLockShade(c + cols, T), `cells ${c} and ${c + cols} one above the other`);
+  }
+});
+
 test('adventBookPieces: piece k in cell order[k − 1], on-the-day marked, other seasons and junk ignored', () => {
   const found = { 1: '2026-12-01', 3: '2026-12-05', 14: '2026-12-14', 2: '2025-12-02', 30: '2026-12-30', 5: 'soon' };
   assert.deepEqual(adventBookPieces(found, 2026, T), [

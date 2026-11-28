@@ -43,27 +43,32 @@ test('every this.load.image() / load.spritesheet() in src/ points at an existing
 // Plan 17, 2.13: grid sheets (several rows of square frames) take their frame size and grid from a TUNING
 // constant, not literals, so the strip rule below skips them and this table checks them. `pending` names a sheet
 // whose loader is not built yet (with the step that builds it); a pending entry whose loader exists fails, so the
-// entry is dropped when the loader lands (the orphans test's allowlist rule).
+// entry is dropped when the loader lands (the orphans test's allowlist rule). Plan 56, 2.1: a frame is its cell plus
+// padPx on every side (0 for a plain grid; the Advent jigsaw's tabs reach into it), and `frame` is the exact expression
+// the loader's frameWidth / frameHeight must read (no prefix match: `cellPx` alone would pass a prefix).
 const gridSheets = {
-  'advent-puzzle': { path: 'assets/advent/advent-puzzle.png', grid: TUNING.advent.puzzle, knob: 'puzzle.cellPx' }, // the Advent book's preload (plan 17, 2.15)
+  'advent-puzzle': { path: 'assets/advent/advent-puzzle.png', grid: TUNING.advent.puzzle, frame: 'T.advent.puzzle.cellPx + 2 * T.advent.puzzle.padPx' }, // the Advent book's preload (plan 17, 2.15; plan 56)
 };
 
-test('every grid sheet is cols x rows frames of its constant, loaded with that constant (plan 17, 2.13)', () => {
+test('every grid sheet is cols x rows frames of its constant (cell plus padPx a side), loaded with that expression (plan 17, 2.13; plan 56)', () => {
   for (const [key, g] of Object.entries(gridSheets)) {
-    const { cols, rows, cellPx } = g.grid;
+    const { cols, rows, cellPx, padPx } = g.grid;
     assert.ok(cols > 0 && rows > 0 && cellPx > 0, `${key}: cols, rows, cellPx`);
-    assert.ok(cols * cellPx <= 4096 && rows * cellPx <= 4096, `${key}: each side at most 4096 px`);
+    assert.ok(Number.isInteger(padPx) && padPx >= 0, `${key}: padPx, a whole number of px (0 for a plain grid)`);
+    const framePx = cellPx + 2 * padPx;
+    assert.ok(cols * framePx <= 4096 && rows * framePx <= 4096, `${key}: each side at most 4096 px`);
     const load = loads.find((l) => l.key === key);
     if (g.pending) assert.equal(load, undefined, `${key}: its loader is in (${load?.file}); drop its \`pending\` entry`);
     else {
       assert.equal(load?.type, 'spritesheet', `${key}: loaded as a spritesheet`);
       assert.equal(load.path, g.path, `${key}: loaded from ${g.path}`);
       const call = readFileSync(load.file, 'utf8').match(new RegExp(`load\\.spritesheet\\(\\s*['"]${key}['"][^)]*\\)`))[0];
-      for (const side of ['frameWidth', 'frameHeight']) assert.match(call, new RegExp(`${side}:\\s*[\\w.]*${g.knob.replace('.', '\\.')}`), `${key}: ${side} from ${g.knob}`);
+      const exact = g.frame.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      for (const side of ['frameWidth', 'frameHeight']) assert.match(call, new RegExp(`${side}:\\s*${exact}\\s*[,}]`), `${key}: ${side} is exactly ${g.frame}`);
     }
     const file = join(root, g.path);
     if (!existsSync(file)) continue; // the placeholder or Michael's cut arrives with its loader
-    assert.deepEqual(pngSize(file), { w: cols * cellPx, h: rows * cellPx }, `${g.path}: ${cols} x ${rows} frames of ${cellPx} px`);
+    assert.deepEqual(pngSize(file), { w: cols * framePx, h: rows * framePx }, `${g.path}: ${cols} x ${rows} frames of ${framePx} px`);
   }
 });
 

@@ -94,6 +94,16 @@ test('TUNING.advent.puzzle: 4 x 6 cells, one per piece, and the release order a 
   assert.deepEqual(p.order, [7, 14, 4, 18, 17, 22, 12, 10, 20, 3, 23, 19, 8, 13, 1, 0, 11, 16, 21, 9, 15, 2, 5, 6]);
 });
 
+test('TUNING.advent.puzzle.padPx: a jigsaw frame is its cell plus padPx on every side, even, the sheet inside 4096 (plan 56, 2.1)', () => {
+  const p = T.advent.puzzle;
+  assert.equal(p.padPx, 92, 'Gate A, candidate B (--tab 0.26): the tightest pad its tabs need');
+  assert.ok(Number.isInteger(p.padPx) && p.padPx >= 0, 'padPx is a whole number of texture px (0 is a square sheet)');
+  assert.equal(p.padPx % 2, 0, 'padPx is even, so padPx / 2 is whole logical px at half size');
+  const framePx = p.cellPx + 2 * p.padPx;
+  assert.equal(framePx, 516);
+  assert.ok(p.cols * framePx <= 4096 && p.rows * framePx <= 4096, `each sheet side at most 4096 px (${p.cols * framePx} x ${p.rows * framePx})`);
+});
+
 test('TUNING.advent.santas: the 18 variants, each once, the plain 🎅 first', () => {
   const s = T.advent.santas;
   assert.equal(s.length, 18);
