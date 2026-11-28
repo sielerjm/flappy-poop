@@ -8,6 +8,18 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.38.0',
+    date: '28 Nov 2026',
+    notes: {
+      en: [
+        '🧩 The Advent puzzle’s pieces are now real jigsaw pieces: their tabs lock together into one picture, and each piece still to find shows as a dark jigsaw shape. Pieces you have already found stay in their places.',
+      ],
+      'zh-Hans': [
+        '🧩 圣诞拼图的每一块现在都是真正的拼图块：凸起和凹口互相咬合，拼成一幅画；还没找到的拼图显示为深色的拼图形状。已经找到的拼图位置不变。',
+      ],
+    },
+  },
+  {
     version: '0.37.0',
     date: '28 Nov 2026',
     notes: {

@@ -6,7 +6,7 @@ import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 import { createJsonStore } from './store.js';
 import { TUNING, LEADERBOARD } from './config.js';
 
-export const VERSION = '0.37.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
+export const VERSION = '0.38.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 /** The version line (About, How to play and Settings only: VERSION_LINE_OVERLAYS): `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
 export function versionText(locale, version = VERSION) {
   return t(locale, 'versionLine').replace('{version}', version);
