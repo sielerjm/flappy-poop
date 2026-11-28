@@ -6,14 +6,14 @@ import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 import { createJsonStore } from './store.js';
 import { TUNING, LEADERBOARD } from './config.js';
 
-export const VERSION = '0.36.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
+export const VERSION = '0.37.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 /** The version line (About, How to play and Settings only: VERSION_LINE_OVERLAYS): `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
 export function versionText(locale, version = VERSION) {
   return t(locale, 'versionLine').replace('{version}', version);
 }
 
 /** Player-facing stamp on the About overlay: the time of the last push (written by `npm run push`). */
-export const LAST_UPDATED = '28 Nov 2026, 00:06';
+export const LAST_UPDATED = '28 Nov 2026, 10:35';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 

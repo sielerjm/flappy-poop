@@ -2953,6 +2953,12 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         const p1Coins = await evaluate(`${P1}.effects.coins()`);
         await evaluate(`(() => { const p = ${P1}; p.score = 3; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = ${want.end1}; p.pipesPassed = ${want.end1}; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
         ok(await until(`${P1}.levelBreak && ${P1}.state === 'paused'`), 'P1 crosses its finish line into a level break while P2 plays on');
+        // Plan 46 (plan 48, 2.3): a match's bar stays on the level just crossed, full, until GO, and the other
+        // player's marker moves along it (rivalMarker with me.done); single player keeps today's bar.
+        const barNow = (who, other) => evaluate(`import('./src/i18n.js').then((i) => { const p = ${who}; const o = ${other}; return JSON.stringify({ label: p.levelBar.labelText(), lv1: i.levelLabel(p.locale, 1), lv2: i.levelLabel(p.locale, 2), fill: p.levelBar.value(), done: p.barDoneLevel ?? null, rival: p.levelBar.rival(), otherLevel: o.level, otherShare: Math.min(1, o.pipesPassed / ${want.end1}) }); })`).then(JSON.parse);
+        await sleep(150);
+        const bar1 = await barNow(P1, P2);
+        ok(bar1.done === 1 && bar1.label === bar1.lv1 && bar1.fill === 1 && bar1.otherLevel === 1 && bar1.rival?.relation === 'same' && Math.abs(bar1.rival.frac - bar1.otherShare) < 0.11, `P1's bar in its break stays on level 1, full, P2's marker along it at its share (${JSON.stringify(bar1)})`);
         await sleep(250);
         const bonus = await evaluate(`JSON.stringify({ score: ${P1}.score, slot: ${VS}.match.slots[0].score, popup: ${P1}.scorePopup.text, alpha: ${P1}.scorePopup.alpha, running: Boolean(${P1}.popupTween?.isPlaying()) })`).then(JSON.parse);
         const p1Paid = (await evaluate(`${P1}.effects.coins()`)) - p1Coins;
@@ -3026,6 +3032,9 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         const p2Before = await evaluate(`JSON.stringify({ score: ${P2}.score, coins: ${P2}.effects.coins(), wins: ${VS}.match.slots[1].levelWins })`).then(JSON.parse);
         await evaluate(`(() => { const p = ${P2}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = ${want.end1}; p.pipesPassed = ${want.end1}; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
         ok(await until(`${P2}.levelBreak && ${P2}.state === 'paused'`), 'P2 crosses its finish line into its break');
+        await sleep(150);
+        const bar2 = [await barNow(P1, P2), await barNow(P2, P1)];
+        ok(bar2.every((b) => b.done === 1 && b.label === b.lv1 && b.fill === 1 && b.rival?.frac === 1 && b.rival.relation === 'same'), `both over the line: each bar on level 1, full, the other's marker beside it at the flag, untinted (${JSON.stringify(bar2)})`);
         // Second over the line: no +25 and no popup (P1 took them), the level's coins all the same.
         const p2After = await evaluate(`JSON.stringify({ score: ${P2}.score, slot: ${VS}.match.slots[1].score, coins: ${P2}.effects.coins(), wins: ${VS}.match.slots[1].levelWins, popup: ${P2}.scorePopup.visible && ${P2}.scorePopup.alpha > 0 ? ${P2}.scorePopup.text : null })`).then(JSON.parse);
         ok(p2After.score === p2Before.score && p2After.slot === p2After.score && p2After.popup !== `+${want.bonus}` && p2After.coins - p2Before.coins === 1 + TT.coin.cleanLevelBonus && p2After.wins === p2Before.wins, `P2 second over the line: score still ${p2After.score} (no +${want.bonus}, no popup), coins +${p2After.coins - p2Before.coins}, no level win`);
@@ -3058,6 +3067,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         const tapped = await evaluate(`JSON.stringify({ stage: ${VS}.levelStage, hints: [${P1}.levelHint.visible, ${P2}.levelHint.visible], pills: [${P1}.shopButtonShown(), ${P2}.shopButtonShown()] })`).then(JSON.parse);
         ok(tapped.stage === 'count' && !tapped.hints[0] && !tapped.hints[1] && !tapped.pills[0] && !tapped.pills[1], `P2 ready too: the shared count starts (${tapped.stage}); both prompts and both 💰 go`);
         ok(await until(`${VS}.countText.visible && ${VS}.countText.text === '3'`, 20), 'the count shows 3');
+        const barCount = [await barNow(P1, P2), await barNow(P2, P1)];
+        ok(barCount.every((b) => b.done === 1 && b.label === b.lv1 && b.fill === 1), `during the 3-2-1 both bars still show level 1, full (${JSON.stringify(barCount.map((b) => [b.label, b.fill]))})`);
         await evaluate(`${P2}.flap({ x: 100, y: 600 }), true`);
         await sleep(100);
         const cancelled = await evaluate(`JSON.stringify({ stage: ${VS}.levelStage, counting: ${VS}.countText.visible, a: ${VS}.isReady(${P1}), b: ${VS}.isReady(${P2}), hintB: ${P2}.levelHint.text, hintShown: ${P2}.levelHint.visible })`).then(JSON.parse);
@@ -3079,6 +3090,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         const started = JSON.parse(await evaluate('globalThis.__go'));
         ok(go && elapsed >= 3 * want.countdownMs && started.levels[0] === 2 && started.levels[1] === 2 && !started.lb[0] && !started.lb[1] && started.stage === null && started.ready === 0 && started.shown && started.text === 'GO!' && started.status === 'playing' && Math.abs(started.d[0] - started.d[1]) < 1, `GO starts level 2 on both halves together as it shows, ${elapsed} ms after Settings closed (distances ${started.d.map((d) => d.toFixed(1)).join(' / ')})`);
         ok(await until(`!${VS}.countText.visible`, (want.countdownMs + 800) / 100), 'GO goes after its beat, the level under way');
+        const bar3 = [await barNow(P1, P2), await barNow(P2, P1)];
+        ok(bar3.every((b) => b.done === null && b.label === b.lv2 && b.fill < 0.5 && b.rival?.relation === 'same'), `GO: both bars moved on to level 2, the markers with them (${JSON.stringify(bar3.map((b) => [b.label, b.fill, b.rival]))})`);
         await sleep(150);
         const ghosts = await evaluate(`JSON.stringify({ v: [${P1}.ghost.visible, ${P2}.ghost.visible], a: [${P1}.ghost.alpha, ${P2}.ghost.alpha], dx: [${P1}.ghost.x - ${P1}.poopX, ${P2}.ghost.x - ${P2}.poopX] })`).then(JSON.parse);
         ok(ghosts.v[0] && ghosts.v[1] && ghosts.a.every((x) => x > 0.3) && ghosts.dx.every((x) => Math.abs(x) < 25), `side by side on the course, each ghost sits on the other's poop (dx ${ghosts.dx.map((x) => x.toFixed(0)).join(' / ')}, alpha ${ghosts.a.map((x) => x.toFixed(2)).join(' / ')})`);
@@ -7591,6 +7604,11 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         const toLine = (last) => evaluate(`(() => { const p = ${P}; const { L, T } = __race; ${last ? 'p.level = T.levels.lastLevel; p.applyLevel();' : ''} const end = L.levelEnd(p.level, T); p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = end; p.pipesPassed = end; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 60; return true; })()`);
         await toLine(false);
         ok(await until(`${P}.levelBreak && ${P}.state === 'paused' && ${P}.level === 2`, 4000), "the host reached level 1's line: its break");
+        // Plan 46 (plan 48, 2.3): the host's bar stays on level 1, full, with the guest's marker on it, until GO.
+        const raceBar = () => evaluate(`import('./src/i18n.js').then((i) => { const p = ${P}; return JSON.stringify({ label: p.levelBar.labelText(), lv1: i.levelLabel(p.locale, 1), lv2: i.levelLabel(p.locale, 2), fill: p.levelBar.value(), done: p.barDoneLevel ?? null, rival: p.levelBar.rival() }); })`).then(JSON.parse);
+        await sleep(150);
+        const rb1 = await raceBar();
+        ok(rb1.done === 1 && rb1.label === rb1.lv1 && rb1.fill === 1 && rb1.rival?.relation === 'same', `the host's bar in its break stays on level 1, full, the guest's marker on it (${JSON.stringify(rb1)})`);
         ok(await until(`${OR}.match.slots[0].levelWins === 1`, 2000), `the host took level 1 after the grace (${await evaluate(`__race.log.filter((l) => l.includes('first')).join(' | ')`)})`);
         ok(await until(`${P}.levelHint.visible`, 1500), `after the beat: "${await evaluate(`${P}.levelHint.text`)}"`);
         await evaluate(`(${P}.handleChrome('tap'), true)`);
@@ -7603,6 +7621,8 @@ export async function run(url = DEFAULT_URL, { only = null, date = null } = {}) 
         ok(await until(`${OR}.levelStage === 'count'`, 6000), 'the guest readied: the shared count runs, the wait line gone: ' + !(await evaluate(`${OR}.waitText.visible`)));
         const go = await evaluate(`${OR}.referee.count()?.startAt`);
         ok(await until(`!${P}.levelBreak && ${P}.state === 'playing'`, 5000), 'GO: the host left its break');
+        const rb2 = await raceBar();
+        ok(rb2.done === null && rb2.label === rb2.lv2 && rb2.fill < 0.5, `GO: the host's bar moved on to level 2 (${JSON.stringify(rb2)})`);
         ok(await until(`__race.bot.beginAt !== null`, 1000) && Math.abs((await evaluate('__race.bot.beginAt')) - go) < 50, `the guest began within a frame of the server GO (${(await evaluate('__race.bot.beginAt')) - go} ms)`);
         await pin();
         ok(await until(`__race.bot.finalAt !== null`, 3000) && (await until(`__race.log.some((l) => l.startsWith('A> first') && l.includes('"seat":"guest"'))`, 1500)), 'the guest crossed the final line first and the host gave it the line');
