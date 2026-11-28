@@ -3786,7 +3786,9 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             December branch of submit_daily_score, daily_board's gift, fold_player, the tree claims.
   adventBook.test.js        The Advent book (plan 17, 2.15 to 2.16): adventBookLayout / Pieces / Season, chromeIntent's advent
                             input, the overlay on the stack, the sheet in its own preload, the found-day store's seen flag,
-                            fetchAdventBoard, the 🧩 tab, adventTreeGlyph, the save panel's button.
+                            fetchAdventBoard, the 🧩 tab, adventTreeGlyph, the save panel's button; plan 56: the padded
+                            frame (adventBookLayout.frame), adventLockShade, and scene stubs of drawPiece, makeLock,
+                            fillTintMode, makeGlow, land and fly.
   adventScene.test.js       The countdown line, and the December skin on the real Play prototype: the stock key
                             as state, the fart and boost alternation, the one lazy flight and its re-apply.
   ready.test.js             readyLayout boxes inside the field, non-overlapping,
@@ -4565,7 +4567,7 @@ tools/
                             the wait, a no and Resend in the same room. Plan 39's online-join-link (4.3): the
                             real page opened at ?join= takes the code out of the address, opens 🌐, keeps it
                             through a failed sign-in, joins on Retry; a gone room says the link expired.
-                            Full smoke: 46 sections, 1113 checks.
+                            Full smoke: 46 sections, 1114 checks.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
