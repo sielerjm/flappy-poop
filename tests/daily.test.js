@@ -93,7 +93,8 @@ test('the daily store keeps one attempt and hands it back only for the same day 
   assert.equal(store.load('2026-11-10', OTHER), null, 'another player on this device is not locked out');
   assert.deepEqual(store.peek(), rec, 'peek reads it whatever the day');
   store.save({ ...rec, score: 41, pipes: 30, collected: { fiber: 2 }, final: true });
-  assert.deepEqual(store.load('2026-11-10', ID), { ...rec, score: 41, pipes: 30, collected: { fiber: 2 }, final: true });
+  // A final attempt carries the day's best (plan 17, 2.3: December's replays keep the higher; off season it is the attempt).
+  assert.deepEqual(store.load('2026-11-10', ID), { ...rec, score: 41, pipes: 30, collected: { fiber: 2 }, final: true, best: { score: 41, pipes: 30, collected: { fiber: 2 } } });
   assert.equal(store.save({ ...rec, day: '10 Nov' }), null, 'junk is refused');
   assert.equal(store.save({ ...rec, score: -1 }), null);
   assert.equal(store.save({ ...rec, playerId: 'short' }), null);

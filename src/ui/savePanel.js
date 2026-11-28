@@ -10,7 +10,7 @@
 
 import { TEST_MODE, EDUCATION } from '../config.js';
 import { t, welcomeText } from '../i18n.js';
-import { isTestWord } from '../logic.js';
+import { isTestWord, adventTreeGlyph } from '../logic.js';
 import { loadLocal, saveLocal, ensureId, validateName, checkNewName, exportCode, importCode, merge } from '../save.js';
 import { panelFrameCss } from './panelFrame.js';
 
@@ -173,7 +173,8 @@ function build() {
   const codeBlock = h('div', { class: 'block' }, codeLabel, h('div', { class: 'row' }, code, copy), codeNote);
   const profileBtn = h('button', { type: 'button', id: 'save-profile-btn', class: 'outline' }); // this player's profile: stats and achievements (plan 08)
   const eduBtn = h('button', { type: 'button', id: 'save-edu-btn', class: 'outline', hidden: true }); // 📚 Education data (plan 21): while education mode is available, or a consent or a share needs it (AUD-037)
-  const profileRow = h('div', { class: 'row profile-row' }, profileBtn, eduBtn);
+  const adventBtn = h('button', { type: 'button', id: 'save-advent-btn', class: 'outline', hidden: true }); // 🧩 the Advent book (plan 17, 2.15): while it has a season to show
+  const profileRow = h('div', { class: 'row profile-row' }, profileBtn, eduBtn, adventBtn);
   const clearBtn = h('button', { type: 'button', id: 'save-clear-btn', class: 'outline' }); // Sign out: opens its confirm
   const mergeBtn = h('button', { type: 'button', id: 'save-merge-btn', class: 'outline' });
   const accountRow = h('div', { class: 'row account-row' }, clearBtn, mergeBtn);
@@ -251,6 +252,7 @@ function build() {
   copy.addEventListener('click', () => onCopy(copy));
   profileBtn.addEventListener('click', () => onProfile());
   eduBtn.addEventListener('click', () => onEduData());
+  adventBtn.addEventListener('click', () => onAdvent());
   clearBtn.addEventListener('click', () => openFlow(flow === 'logout' ? null : 'logout', true));
   mergeBtn.addEventListener('click', () => openFlow(flow === 'merge' ? null : 'merge', true));
   logoutCopy.addEventListener('click', () => onCopy(logoutCopy, logoutCode));
@@ -268,7 +270,7 @@ function build() {
   dom = {
     root, card, title, intro, doors, newBtn, haveBtn, back, nameBlock, nameRow, nameLabel, name, saveBtn, note, haveBlock, loadLabel, load, loadBtn, loginCard, guestLine,
     explainBlock, explainTitle, explainBody, explainCode, explainCopy, explainOk, helpBtn, helpBlock, helpTitle, helpList, helpOk,
-    who, whoBest, codeBlock, codeLabel, code, copy, codeNote, profileRow, profileBtn, eduBtn, accountRow, clearBtn, mergeBtn,
+    who, whoBest, codeBlock, codeLabel, code, copy, codeNote, profileRow, profileBtn, eduBtn, adventBtn, accountRow, clearBtn, mergeBtn,
     logoutBlock, logoutWarn, logoutCode, logoutCopy, logoutNotes, logoutCancel, logoutGo,
     mergeBlock, mergeIn, cards, cardDevice, cardCode, pickLine, checkLine, onlineLine, mergeCancel, mergeGo, status,
   };
@@ -315,6 +317,7 @@ function applyLocale(locale) {
   dom.codeNote.textContent = t(locale, 'saveCodeNote');
   dom.profileBtn.textContent = t(locale, 'saveProfile');
   dom.eduBtn.textContent = t(locale, 'saveEduData');
+  dom.adventBtn.textContent = `${t(locale, 'saveAdvent')} ${adventTreeGlyph(ctx?.play?.adventTree?.() ?? null)}`.trim(); // the tree once earned (2.16)
   dom.clearBtn.textContent = t(locale, 'saveSignOut');
   dom.mergeBtn.textContent = t(locale, 'saveMergeOpen');
   dom.logoutWarn.textContent = t(locale, 'saveSignOutWarning');
@@ -348,6 +351,13 @@ function onEduData() {
   const play = ctx?.play;
   closeSavePanel();
   play?.openEduData?.({ onClose: () => play.openSavePanel?.() }); // closing it comes back here (Michael, A2)
+}
+
+/** The 🧩 Advent button (plan 17, 2.15): this panel closes and Play opens the Advent book; closing the book comes back here. */
+function onAdvent() {
+  const play = ctx?.play;
+  closeSavePanel();
+  play?.openAdvent?.({ onClose: () => play.openSavePanel?.() });
 }
 
 /**
@@ -434,7 +444,8 @@ function render() {
   const eduOff = ctx?.play?.educationAvailable?.() === false;
   dom.profileBtn.hidden = !inside;
   dom.eduBtn.hidden = !(inside ? eduReach : eduOff && eduReach);
-  dom.profileRow.hidden = focused || aside || (dom.profileBtn.hidden && dom.eduBtn.hidden);
+  dom.adventBtn.hidden = !(ctx?.play?.adventBook?.() ?? null); // the book's season (December, or last December while a piece is owned)
+  dom.profileRow.hidden = focused || aside || (dom.profileBtn.hidden && dom.eduBtn.hidden && dom.adventBtn.hidden);
   dom.accountRow.hidden = !inside || aside;
   dom.helpBtn.hidden = !inside || explain;
   dom.helpBtn.classList.toggle('open', help);

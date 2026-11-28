@@ -1,13 +1,13 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, fitScale, statsLayout, utcDayKey, focusNearest, focusStep } from '../logic.js';
+import { chromeIntent, overlayOutsideHit, fitScale, statsLayout, utcDayKey, focusNearest, focusStep, dailyGlyphNow } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
-import { isTopOverlay, hasOverlayUnder, openChangelog } from '../ui/overlayStack.js';
+import { isTopOverlay, hasOverlayUnder } from '../ui/overlayStack.js';
 import { createScrollView } from '../ui/scrollView.js';
 import { createButton } from '../ui/button.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { TAG_GLYPHS } from '../leaderboard.js';
-import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText, eduProfileRows, streakProfileRows } from '../i18n.js';
+import { t, fillDaily, levelLabel, badgeTitle, badgeDesc, dailyDayText, eduProfileRows, streakProfileRows } from '../i18n.js';
 import { ACHIEVEMENTS, EDU_ACHIEVEMENTS, achievementById, averageGrade, openQuests, progressOf } from '../achievements.js';
 import { validateName } from '../save.js';
 import { localDayKey, studyStreakNow, shownCounters } from '../education.js';
@@ -110,16 +110,10 @@ export class Stats extends Phaser.Scene {
     this.detail = this.add
       .text(cx, L.detailY, '', { ...STYLE, fontSize: '24px', color: MUTED, fontStyle: 'normal', wordWrap: { width: L.detailW, useAdvancedWrap: true }, lineSpacing: 4 })
       .setOrigin(0.5);
-    const version = this.add
-      .text(cx, L.versionY, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: PINK, fontStyle: 'normal' })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    version.on('pointerdown', () => openChangelog(this));
     const close = this.add.text(L.close.x, L.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.closeBtn = close;
-    this.versionLine = version;
-    this.fixed = [dimmer, panelRect, this.title, this.status, this.detail, version, close];
+    this.fixed = [dimmer, panelRect, this.title, this.status, this.detail, close];
     this.scroll = null;
     this.view = null; // what is drawn, once it is in (the smoke reads it)
     this.badgeItems = [];
@@ -127,8 +121,8 @@ export class Stats extends Phaser.Scene {
     this.tagItems = [];
     this.careerItems = [];
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    // Controller: ✕ and the version line until the profile is in; then the badges join (scrolled).
-    this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('changelog', version)] });
+    // Controller: ✕ until the profile is in; then the badges join (scrolled).
+    this.focus = createFocus(this, T, { items: [pressable('close', close)] });
     this.focus.show(); // only under a controller (registry padMode)
 
     const gen = ++this.gen;
@@ -175,7 +169,7 @@ export class Stats extends Phaser.Scene {
       .filter((b) => b.entry)
       .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
     const day = utcDayKey();
-    const locked = ACHIEVEMENTS.filter((e) => !(e.id in unlocked) && (!e.from || openQuests(day).includes(e)));
+    const locked = ACHIEVEMENTS.filter((e) => !(e.id in unlocked) && !(e.hiddenBy && e.hiddenBy in unlocked) && (!e.from || openQuests(day).includes(e))); // hiddenBy: one Advent tree a player (plan 17, 2.6b)
     return {
       state: 'ok',
       own: true,
@@ -259,7 +253,7 @@ export class Stats extends Phaser.Scene {
       tournament: server.tournament,
       counters: server.counters,
       earned: server.achievements.map((a) => ({ entry: achievementById(a.id), at: a.at })).filter((b) => b.entry),
-      locked: openQuests(utcDayKey()).filter((e) => !earnedIds.has(e.id)),
+      locked: openQuests(utcDayKey()).filter((e) => !earnedIds.has(e.id) && !earnedIds.has(e.hiddenBy)),
       tags: server.tags ?? [],
       // Their day streaks, as the server counts them (plan 34, 34.14); none from a server before 34.14.
       streaks: server.streaks ?? null,
@@ -290,7 +284,7 @@ export class Stats extends Phaser.Scene {
     const top = L.band.y - L.band.height / 2;
     let y = top + 30;
     const header = (key) => {
-      sv.add(this.add.text(L.left, y, t(locale, key), { ...STYLE, fontSize: '32px', color: PINK, align: 'left' }).setOrigin(0, 0.5));
+      sv.add(this.add.text(L.left, y, fillDaily(t(locale, key), dailyGlyphNow(this.registry, T)), { ...STYLE, fontSize: '32px', color: PINK, align: 'left' }).setOrigin(0, 0.5));
       y += 52;
     };
     const row = (key, value, color = '#ffffff') => {
@@ -423,7 +417,7 @@ export class Stats extends Phaser.Scene {
     // list order, up / down to the cell above or below; any nav press closes an open card first.
     const wasShown = this.focus.shown;
     this.focus.destroy();
-    this.focus = createFocus(this, T, { items: [pressable('close', this.closeBtn), ...items, pressable('changelog', this.versionLine)], scrolled: sv });
+    this.focus = createFocus(this, T, { items: [pressable('close', this.closeBtn), ...items], scrolled: sv });
     this.focus.move = (dir) => this.navigate(dir);
     if (wasShown) this.focus.show();
     this.buildCard();
@@ -464,18 +458,13 @@ export class Stats extends Phaser.Scene {
       .zone(G.button.x, G.button.y, G.button.width, G.button.height)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.createUser());
-    const version = this.add
-      .text(G.panel.x, G.versionY, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: PINK, fontStyle: 'normal' })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    version.on('pointerdown', () => openChangelog(this));
     const close = this.add.text(G.close.x, G.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.closeBtn = close;
     this.scroll = null;
     this.view = { state: 'gate' };
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('create', zone), pressable('changelog', version)] });
+    this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('create', zone)] });
     this.focus.show(); // only under a controller (registry padMode)
   }
 
@@ -511,13 +500,13 @@ export class Stats extends Phaser.Scene {
     } else {
       const cells = f.items.map((item, i) => ({ item, i })).filter(({ i }) => isCell(i));
       if (!isCell(f.index)) {
-        // From ✕ (or nothing) down is the first cell; from the version line up is the last.
-        next = dir === 'down' && id(f.index) !== 'changelog' ? cells[0]?.i : dir === 'up' && id(f.index) === 'changelog' ? cells.at(-1)?.i : f.index;
+        // From ✕ (or nothing) down is the first cell.
+        next = dir === 'down' ? cells[0]?.i : f.index;
       } else {
         const rect = (item) => item.obj.getBounds();
         const others = cells.filter(({ i }) => i !== f.index).map(({ item, i }) => ({ index: i, rect: rect(item) }));
         next = focusNearest(rect(f.items[f.index]), others, dir);
-        if (next < 0) next = f.items.findIndex((item) => item.id === (dir === 'up' ? 'close' : 'changelog'));
+        if (next < 0 && dir === 'up') next = f.items.findIndex((item) => item.id === 'close'); // off the bottom: stays
       }
     }
     if (next === undefined || next < 0) return;

@@ -54,11 +54,11 @@ export function createInfoCard(scene, box, { ownCamera = false, depth = 1100, on
     get open() {
       return open;
     },
-    /** Show { glyph | icon (a texture key), title, lines, color }: the parts stacked, the card fitted around them. */
-    show({ glyph: g = '', icon: key = null, title: text = '', lines = [], color = PINK } = {}) {
+    /** Show { glyph | icon (a texture key, iconMul its size factor), title, lines, color }: the parts stacked, the card fitted around them. */
+    show({ glyph: g = '', icon: key = null, iconMul = 1, title: text = '', lines = [], color = PINK } = {}) {
       const useIcon = Boolean(key && scene.textures.exists(key));
       glyph.setText(useIcon ? '' : g);
-      if (useIcon) icon.setTexture(key).setDisplaySize(ICON_PX, ICON_PX);
+      if (useIcon) icon.setTexture(key).setDisplaySize(ICON_PX * iconMul, ICON_PX * iconMul); // iconMul: a December twin's size factor (T12)
       title.setText(text).setColor(color);
       body.setText(lines.filter(Boolean).join('\n'));
       const h = 40 + 70 + 16 + title.height + (body.text ? 14 + body.height : 0) + 36;

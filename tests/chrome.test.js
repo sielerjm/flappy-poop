@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chromeIntent } from '../src/logic.js';
+import { readFileSync } from 'node:fs';
+import { chromeIntent, VERSION_LINE_OVERLAYS } from '../src/logic.js';
+import { OVERLAY_SCENES } from '../src/ui/overlayStack.js';
 
 const STATES = ['ready', 'playing', 'paused', 'respawn', 'dead'];
 
@@ -98,11 +100,15 @@ test('info while Settings is top opens About; info while About is top is ignored
   }
 });
 
-test('changelog (What\'s new) opens from no overlay or over any other overlay without pausing again; close returns to the one underneath without the lockout', () => {
+test('changelog (What\'s new) opens from no overlay or over About, How to play and Settings (the three with a version line, T15) without pausing again; close returns to the one underneath without the lockout', () => {
   for (const state of STATES) {
     assert.deepEqual(intent({ state, input: 'changelog' }), { do: 'openChangelog', pause: state === 'playing' || state === 'respawn' });
-    for (const overlay of ['about', 'settings', 'howto', 'language', 'feedback', 'leaderboard']) {
+    for (const overlay of ['about', 'settings', 'howto']) {
       assert.deepEqual(intent({ state, overlay, input: 'changelog' }), { do: 'openChangelog', pause: false }, overlay);
+    }
+    // Plan 17, 1c.7, T15 (Michael, 27 Nov): "the other windows don't need it because it's redundant".
+    for (const overlay of ['language', 'feedback', 'leaderboard', 'daily', 'stats', 'advent', 'santapick']) {
+      assert.deepEqual(intent({ state, overlay, input: 'changelog' }), { do: 'ignore' }, `${overlay}: no version line`);
     }
     assert.deepEqual(intent({ state, overlay: 'changelog', input: 'changelog' }), { do: 'ignore' }, 'its own version links restart it instead');
     assert.deepEqual(intent({ state, overlay: 'changelog', stackedAbout: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
@@ -118,7 +124,19 @@ test('the 🌞 opens the Daily Dump popup from the ready screen only, never over
     assert.deepEqual(intent({ state: 'ready', overlay, input: 'daily' }), { do: 'ignore' }, overlay);
   }
   assert.deepEqual(intent({ state: 'ready', overlay: 'daily', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
-  assert.deepEqual(intent({ state: 'ready', overlay: 'daily', input: 'changelog' }), { do: 'openChangelog', pause: false }, 'its version line');
+  assert.deepEqual(intent({ state: 'ready', overlay: 'daily', input: 'changelog' }), { do: 'ignore' }, 'no version line (T15)');
+});
+
+test('the Advent book (plan 17, 2.15) opens from the ready screen or over the 🌞 popup only; closing goes back to the popup without the lockout', () => {
+  assert.deepEqual(intent({ state: 'ready', input: 'advent' }), { do: 'openAdvent', pause: false });
+  for (const state of STATES.filter((s) => s !== 'ready')) assert.deepEqual(intent({ state, input: 'advent' }), { do: 'ignore' }, state);
+  assert.deepEqual(intent({ state: 'ready', overlay: 'daily', input: 'advent' }), { do: 'openAdvent', pause: false }, 'its 🧩 line');
+  for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'stats', 'advent']) {
+    assert.deepEqual(intent({ state: 'ready', overlay, input: 'advent' }), { do: 'ignore' }, overlay);
+  }
+  assert.deepEqual(intent({ state: 'ready', overlay: 'advent', stackedUnder: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
+  assert.deepEqual(intent({ state: 'ready', overlay: 'advent', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
+  assert.deepEqual(intent({ state: 'ready', overlay: 'advent', input: 'changelog' }), { do: 'ignore' }, 'no version line (T15)');
 });
 
 test('howto while About is top opens HowTo; howto while HowTo is top is ignored', () => {
@@ -217,7 +235,7 @@ test('a profile (stats) opens from no overlay, or over the board or the 🌞 pop
     }
     assert.deepEqual(intent({ state, overlay: 'stats', stackedUnder: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
     assert.deepEqual(intent({ state, overlay: 'stats', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
-    assert.deepEqual(intent({ state, overlay: 'stats', input: 'changelog' }), { do: 'openChangelog', pause: false }, 'its version line');
+    assert.deepEqual(intent({ state, overlay: 'stats', input: 'changelog' }), { do: 'ignore' }, 'no version line (T15)');
     assert.deepEqual(intent({ state, overlay: 'stats', input: 'feedback' }), { do: 'openFeedback', pause: false });
     for (const input of ['pause', 'tap', 'esc', 'settings', 'leaderboard', 'daily']) assert.deepEqual(intent({ state, overlay: 'stats', input }), { do: 'ignore' }, input);
   }
@@ -240,4 +258,26 @@ test('a respawn (a match half, or an education revive): a tap does nothing; the 
   assert.deepEqual(intent({ state: 'respawn', input: 'pause' }), { do: 'pause' });
   assert.deepEqual(intent({ state: 'paused', input: 'tap' }), { do: 'resume' });
   assert.deepEqual(intent({ state: 'respawn', overlay: 'settings', input: 'tap' }), { do: 'ignore' }, 'under an overlay');
+});
+
+test('the 🎅 picker (plan 17, 1b.2e) opens over the 🌞 popup only, from its title 🎅; closing goes back to the popup without the lockout', () => {
+  assert.deepEqual(intent({ state: 'ready', overlay: 'daily', input: 'santapick' }), { do: 'openSantaPicker', pause: false }, 'the title 🎅');
+  for (const state of STATES) assert.deepEqual(intent({ state, input: 'santapick' }), { do: 'ignore' }, `${state}, no overlay`);
+  for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'stats', 'advent', 'santapick']) {
+    assert.deepEqual(intent({ state: 'ready', overlay, input: 'santapick' }), { do: 'ignore' }, overlay);
+  }
+  assert.deepEqual(intent({ state: 'ready', overlay: 'santapick', stackedUnder: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
+  assert.deepEqual(intent({ state: 'ready', overlay: 'santapick', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
+  assert.deepEqual(intent({ state: 'ready', overlay: 'santapick', stackedUnder: true, input: 'changelog' }), { do: 'ignore' }, 'no version line (T15)');
+});
+
+test('the version line (T15, Michael 27 Nov): only About, How to play and Settings draw one; every other overlay has none and no focus item for it', () => {
+  assert.deepEqual([...VERSION_LINE_OVERLAYS].sort(), ['about', 'howto', 'settings']);
+  for (const [overlay, key] of Object.entries(OVERLAY_SCENES)) {
+    if (overlay === 'changelog') continue; // What's new lists the versions themselves
+    const src = readFileSync(new URL(`../src/scenes/${key}.js`, import.meta.url), 'utf8');
+    const draws = /versionText\(/.test(src);
+    assert.equal(draws, VERSION_LINE_OVERLAYS.includes(overlay), `${key}: ${draws ? 'draws' : 'no'} version line`);
+    if (!draws) assert.ok(!/pressable\('changelog'/.test(src), `${key}: no focus item for a line it no longer has`);
+  }
 });

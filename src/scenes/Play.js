@@ -1,5 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE, EDUCATION, LEADERBOARD } from '../config.js';
+import { ADVENT_ART } from '../advent.js';
 import {
   createRng,
   createCourse,
@@ -24,6 +25,17 @@ import {
   levelProgress,
   withLevelPipes,
   utcDayKey,
+  isDayKey,
+  dailyDay,
+  dailyGlyphNow,
+  adventSeason,
+  seasonalSkin,
+  twinKey,
+  seasonIcon,
+  countdownLine,
+  pickSanta,
+  supportedSantas,
+  plainSantas,
   dailySeed,
   dailyLevel,
   dailyRunStart,
@@ -115,6 +127,29 @@ import {
   storedLocale,
   PERF_TAGS,
   createResync,
+  adventBacklog,
+  rollAdventTarget,
+  adventSpawnRoll,
+  adventSpawnHere,
+  adventClockShown,
+  adventClockHidden,
+  adventClockCaught,
+  adventStatus,
+  adventBookSeason,
+  adventBookPieces,
+  adventAward,
+  stormStartsHere,
+  runStorms,
+  stormPhase,
+  stormCovers,
+  stormWind,
+  fartWind,
+  fairyLightsLayout,
+  lightsBulbs,
+  twinkleAlpha,
+  swirlCentres,
+  stormFlapMul,
+  stormScrollMul,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
@@ -126,16 +161,17 @@ import { createResumeStore, pageTab, resumeKey, ONLINE_HOST_KEY } from '../onlin
 import { createOnlineAccount } from '../onlineAccount.js';
 import { createStatusBeat } from '../onlineFriends.js';
 import { countsAsRun, runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
-import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
+import { unlock, attachGame, setMuted, isMuted, sfx, stepLoop } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
 import { activeOverlays, OVERLAY_SCENES } from '../ui/overlayStack.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
+import { createSnowfall, prefersReducedMotion } from '../ui/snowfall.js';
 import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchBoardName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, createDailyStore, createDailyQueue, createAdventStore, createAdventQueue, clearAdventStores, submitAdventPiece, fetchAdventProgress, waitsForDailyRun, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchBoardName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -209,6 +245,21 @@ function withInput(event, kind, fn) {
   }
 }
 
+/**
+ * A width measure for emoji (supportedSantas): one 2D canvas, the ready screen's glyph font. 0 where no canvas
+ * draws (the filter then keeps every variant).
+ */
+function emojiMeasure() {
+  let ctx = null;
+  try {
+    ctx = document.createElement('canvas').getContext('2d');
+    ctx.font = '52px sans-serif';
+  } catch {
+    ctx = null;
+  }
+  return (s) => (ctx ? ctx.measureText(s).width : 0);
+}
+
 export class Play extends Phaser.Scene {
   /** 'Play' is the single-player scene and the left half (P1) of a versus match; 'PlayB' is the right half. */
   constructor(key = 'Play') {
@@ -276,6 +327,8 @@ export class Play extends Phaser.Scene {
     this.racePostQueue = createRacePostQueue(); // split-screen race scores (🏆, plan 39 2.5) the board has not confirmed yet
     this.dailyStore = createDailyStore(); // this device's Daily Dump (🌞) attempt: claimed at the start, final at the crash
     this.dailyQueue = createDailyQueue(); // daily scores the board has not confirmed yet
+    this.adventQueue = createAdventQueue(); // December's Advent pieces the board has not stored yet (plan 17, 2.6)
+    this.adventStores = new Map(); // season → this device's found-day store (adventStoreFor)
     this.careerStore = createCareerStore(); // lifetime counters and achievements (plan 08): counted at endRun, sent by syncLeaderboard
     this.streakStore = createStreakStore(); // the Singleplayer and Daily Dump day streaks (plan 34): this device's only, never sent
     // Education mode (📚, plan 21; for everyone since plan 28): the 📚 switch on the ready screen
@@ -315,6 +368,7 @@ export class Play extends Phaser.Scene {
     this.pipesSpawned = 0;
     this.mysteryPair = null; // picked in start(): the pair the guaranteed first box (early level 3) rides after
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 }; // this run's pickups, for the game-over summary (a box's reward also counts as its own kind)
+    this.advent = null; // a December Daily run's Advent piece (rollAdvent), else null
     this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: levelGap(1, T) };
     // Finish line + break: the line spawns in the slot after a level's last pair
     // and nothing follows it; crossing it pauses the run (levelBreak) until a tap.
@@ -400,7 +454,7 @@ export class Play extends Phaser.Scene {
     this.versusOn = Boolean(this.registry.get('versus'));
     // 📚 is remembered on the device and 👥 only in this tab, so another tab can leave both on here.
     this.reconcileSwitches();
-    // Test mode is session-only too (registry 'testMode', 'testStartLevel', 'testInvincible').
+    // Test mode is session-only too (registry 'testMode', 'testStartLevel', 'testInvincible', 'testPretendDay').
     // runIsTest latches per run: set in start() or when test mode turns on mid-run, and only
     // cleared by the next start(), so a run that ever had test tools can never be recorded.
     this.runIsTest = false;
@@ -409,6 +463,11 @@ export class Play extends Phaser.Scene {
     // until launch() has swapped to the plain frame and slid it to this.poopX.
     // A match's join screen shows the plain face: the prompt there is the Versus scene's, not the bubble's.
     const readyFrame = this.match ? 'poop' : 'poop-speech';
+    // Christmas (plan 17, 1.10): the December twins in force (seasonalSkin), shown by setPoopTexture once loaded.
+    this.skin = seasonalSkin(dailyDay(this.registry), T, ADVENT_ART);
+    this.fartFrame = 0; // which fart twin is up (the fart clock, ensureFartClock)
+    this.fartClock = null;
+    this.poopStockKey = null; // the stock key the poop wears (setPoopTexture): the state, whatever twin shows
     this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, readyFrame).setDepth(10);
     this.poop.setScale(T.spriteDisplayScale * T.readyPoopScale); // bigger on the ready screen; launch() shrinks it back
     this.setPoopTexture(readyFrame);
@@ -425,9 +484,24 @@ export class Play extends Phaser.Scene {
     this.ghost = this.match ? this.add.image(this.poopX, GAME_HEIGHT / 2, 'poop').setScale(T.spriteDisplayScale).setDepth(9.5).setAlpha(0).setVisible(false) : null;
     this.rivalKey = null; // what the rival marker on the level bar was last placed for
     this.barDoneLevel = null; // a match half's crossed level, held on the bar from the line to GO (plan 46)
+    this.ensureFartClock();
+    // The lazy flight (loadLazyAudio) may land in either half's scene: every Play re-applies its skin then.
+    const reapplySkin = () => this.reapplySkin();
+    this.game.events.on('advent-art', reapplySkin);
+    this.events.on('postupdate', this.placeSnowCaps, this); // after the physics step, so the snow never trails its pipe
+    this.events.once('shutdown', () => {
+      this.game.events.off('advent-art', reapplySkin);
+      this.events.off('postupdate', this.placeSnowCaps, this); // the scene's emitter outlives a restart
+      this.setBlizzard(0); // the sound manager is the game's: a storm's loop would outlive the scene (plan 17, 2.7a)
+    });
 
     // HUD
     this.scoreText = this.add.text(W / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
+    // December's storm warning (plan 17, 2.7; Gate A 4b (a), text only): one pair before a Daily run's storm, under the popup rows.
+    this.stormBanner = this.add.text(W / 2, T.advent.storm.bannerY, '', { ...TEXT_STYLE, fontSize: `${T.advent.storm.bannerPx}px` }).setOrigin(0.5).setDepth(20).setVisible(false);
+    this.stormRun = null; // a December Daily run's or match's storms (stormRunFor)
+    this.stormFlap = 1; // the storm's share of the flap and of the scroll (tickAir)
+    this.stormScroll = 1;
     // A split-screen half's player name at the bottom of its half, above the tray row, on a pill so it
     // reads over the pipes and the cave, for the whole match: countdown, run, level breaks (plan 39,
     // 1.6e, Michael's ask with Preview A, item 36; the pill from Preview C, items 41 and 42). Split-screen
@@ -486,6 +560,7 @@ export class Play extends Phaser.Scene {
     // The icon sits in a container so its breathing pulse (setProbioticPulse) scales the container:
     // refreshProbioticHud re-runs setDisplaySize on the icon itself, which would reset a tween on it.
     this.probioticIcon = this.add.image(0, 0, 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize);
+    this.probioticStock = 'probiotic'; // the stock key it shows (probiotic or postbiotic); skinHud draws its December twin
     this.probioticHud = this.add.container(0, 156, [this.probioticIcon]).setDepth(20).setVisible(false);
     this.probioticTween = null;
     this.probioticText = this.add.text(0, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(1, 0.5).setDepth(20).setVisible(false);
@@ -502,9 +577,39 @@ export class Play extends Phaser.Scene {
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: `${T.readyTitlePx}px` })
       .setOrigin(0.5)
       .setDepth(20);
+    // December (plan 17, 1.12): the countdown line under the title and the home snowfall, with the ready UI.
+    {
+      const b = this.readyBoxes.countdown;
+      this.countdownText = this.add.text(b.x, b.y, '', { ...TEXT_STYLE, fontSize: `${T.advent.countdownPx}px`, strokeThickness: 8 }).setOrigin(0.5).setDepth(20);
+    }
+    // The Advent button (plan 17, 2.15a; S14): top left, the piece's wrapped box in a circle (the 🧩 glyph until its
+    // file has landed, or off season) and "N/24" on its corner; it glows while a piece waits to be shown added, and a
+    // tap opens the book (refreshAdventButton, from refreshSeasonHome). It replaced 2.6's "🧩 N/24" chip under the 🎅.
+    {
+      const b = this.readyBoxes.advent;
+      this.adventHalo = createGlow(this, b.x, b.y, { radius: T.beans.glowRadiusPx, fadeFrac: T.beans.glowFadeFrac })
+        .setDepth(19)
+        .setScale((b.width / 2 + T.readyPromptGlowPx) / T.beans.glowRadiusPx)
+        .setAlpha(T.readyPromptMinAlpha)
+        .setVisible(false);
+      this.adventHaloTween = this.tweens.add({ targets: this.adventHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
+      this.adventBtn = createButton(this, b, '', { ...TEXT_STYLE, fontSize: '44px' });
+      this.adventBtn.setVisible(false);
+      this.adventGlyph = this.add.text(b.x, b.y, '\u{1F9E9}', { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(21).setVisible(false);
+      this.adventIcon = null; // the piece's box, made once its texture exists
+      const k = T.advent.button;
+      this.adventCount = this.add.text(b.x + k.countDx, b.y + k.countDy, '', { ...TEXT_STYLE, fontSize: `${k.countPx}px`, color: '#ffd700', strokeThickness: 8 }).setOrigin(0.5).setDepth(22).setVisible(false);
+      this.adventShown = false;
+    }
+    this.snowfall = null;
+    this.fairyLights = null; // December's fairy lights along the ceiling (refreshLights), made once their file is in
+    this.lightGlows = [];
+    this.hudShadows = null; // T14b: the HUD icons' soft white copies while the lights show
+    this.countdownImage = null; // the Bowelidays image (all December), made once its file has landed
     this.readyUiShown = true; // setReadyUiVisible's last word: the switches rebuilt by refreshReadySwitches follow it
     this.toiletToggle = this.versusToggle = this.educationToggle = this.eduDueText = this.eduStreakText = null; // a restart destroyed the last ones
     this.buildReadySwitches();
+    this.refreshSeasonHome();
     // "?" in the top-right corner opens How to play. It pulses under a soft white
     // halo until the player acknowledges this build (opens it, or finishes a run).
     {
@@ -520,7 +625,8 @@ export class Play extends Phaser.Scene {
     this.howToBtn = createButton(this, this.readyBoxes.howto, '?', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8' }, { depth: 30 });
     this.howToBtn.pulse(this.isHowToPromptDue()); // breathes with its halo until this build's How to play is seen
     // 🌞 at the top centre opens the Daily Dump popup. Until this player has used today's attempt
-    // it breathes (dailyPulseScale) under the same soft white halo as the ?.
+    // it breathes (dailyPulseScale) under the same soft white halo as the ?. In December it is this visit's 🎅 (plan 17).
+    if (!this.match) this.pickVisitSanta();
     {
       const b = this.readyBoxes.daily;
       this.dailyHalo = createGlow(this, b.x, b.y, { radius: T.beans.glowRadiusPx, fadeFrac: T.beans.glowFadeFrac })
@@ -529,10 +635,14 @@ export class Play extends Phaser.Scene {
         .setAlpha(T.readyPromptMinAlpha);
       this.dailyHaloTween = this.tweens.add({ targets: this.dailyHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
       this.dailyBtn = createButton(this, b, '', { ...TEXT_STYLE, fontSize: '52px' });
-      this.dailySun = this.add.text(b.x, b.y, '\u{1F31E}', { fontFamily: 'sans-serif', fontSize: '52px' }).setOrigin(0.5).setDepth(21);
+      this.dailySun = this.add.text(b.x, b.y, this.dailyGlyph(), { fontFamily: 'sans-serif', fontSize: '52px' }).setOrigin(0.5).setDepth(21);
       this.dailySunTween = this.tweens.add({ targets: this.dailySun, scale: T.dailyPulseScale, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs, ease: 'Sine.easeInOut' });
       // The Daily Dump streak, a small number at the circle's bottom right (plan 34: refreshStreakMarks).
       this.dailyStreakText = this.streakMark(b.x + T.streakMarkPx.dx, b.y + T.streakMarkPx.dy);
+      // The red dot (plan 17, 1b.2e) on the rim at 45°, top right, clear of the streak number at the bottom right.
+      const dot = T.advent.santaDot;
+      this.santaDot = this.add.circle(b.x + dot.homeDx, b.y + dot.homeDy, dot.radius, dot.color).setStrokeStyle(dot.ring, dot.ringColor).setDepth(22).setVisible(false);
+      this.refreshSantaDot(); // the ready UI may already be up (a December page load)
     }
     this.refreshDailyPrompt();
     this.refreshStreakMarks();
@@ -671,6 +781,7 @@ export class Play extends Phaser.Scene {
             { id: 'education', box: this.switchBoxes.education, visible: () => onReady() && Boolean(this.readyBoxes.education), activate: () => this.toggleEducation() },
             // The 📚 glyph (and its gold count): "Your cards" (toggleEduCard; plan 26, A2).
             { id: 'educationInfo', box: this.switchBoxes.educationInfo, visible: () => onReady() && Boolean(this.readyBoxes.educationInfo), activate: () => this.toggleEduCard() },
+            { id: 'advent', box: this.readyBoxes.advent, visible: () => onReady() && this.adventShown, activate: () => this.handleChrome('advent') },
             { id: 'daily', box: this.readyBoxes.daily, visible: onReady, activate: () => this.handleChrome('daily') },
             { id: 'howto', box: this.readyBoxes.howto, visible: () => onReady() || (this.helpShown && this.state === 'paused'), activate: () => this.handleChrome('howto') },
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
@@ -698,7 +809,9 @@ export class Play extends Phaser.Scene {
       // Container so the pulse scales circle + icon together without touching the icon's own scale.
       this.beanButton = this.add.container(b.x, b.y, [bg, icon]).setDepth(30).setVisible(false);
       this.beanButtonBg = bg; // recoloured by applyRainbow() with three beans held
+      this.beanButtonIcon = icon;
     }
+    this.skinHud(); // December's twins on the HUD icons, if already loaded (the flight's landing re-applies them)
     this.rainbowMs = 0;
     this.rainbowMode = null; // null | 'charged' (superBeans held) | 'super' (super fart running)
 
@@ -860,10 +973,12 @@ export class Play extends Phaser.Scene {
    * Today's Daily Dump (🌞), from the popup's Play (Practice in test mode): the launch slide, then
    * start() builds the day's shared course at the day's level. The 👥 toggle is ignored. `day`
    * pins a date for the smoke; the game never passes one. False when no run can start here.
+   * The day is the decorations' clock (plan 17, 2.2): the real UTC day, or in test mode the Pretend
+   * date, where every Daily is practice and writes nothing; what stores or posts keeps utcDayKey().
    */
   startDaily({ day } = {}) {
     if (this.match || this.launching || this.state !== 'ready') return false;
-    const d = day ?? utcDayKey();
+    const d = day ?? dailyDay(this.registry);
     this.dailyNext = { day: d, level: dailyLevel(d, T) };
     this.launch({ daily: true });
     return this.launching;
@@ -877,7 +992,12 @@ export class Play extends Phaser.Scene {
    */
   startAgain(kind) {
     if (this.match) return false;
-    if (kind === 'daily') return Boolean(this.save?.name && !this.dailyPlayedToday() && this.startDaily());
+    if (kind === 'daily') {
+      // A practice Daily (test mode; Over offers Play again on a December one, plan 17) starts again as the
+      // popup's Practice does: no username or open day needed, since practice writes nothing.
+      if (this.isTestMode()) return Boolean(this.startDaily());
+      return Boolean(this.save?.name && this.dailyOpen() && this.startDaily());
+    }
     this.launch({ solo: true });
     return true;
   }
@@ -904,6 +1024,7 @@ export class Play extends Phaser.Scene {
   setReadyUiVisible(visible) {
     this.readyUiShown = visible;
     this.readyTitle.setVisible(visible);
+    this.refreshSeasonHome();
     this.toiletToggle.setVisible(visible);
     this.versusToggle?.setVisible(visible);
     this.educationToggle?.setVisible(visible);
@@ -927,6 +1048,7 @@ export class Play extends Phaser.Scene {
     this.personalBest = false; // endRun decides
     this.dailyRunDay = daily?.day ?? null; // the day on the result panel (practice too)
     this.dailySync = null;
+    this.dailyResult = null; // endRun's { replay, best, newBest } for Over (plan 17, 2.3)
     this.scaredMs = 0;
     if (daily) {
       this.toilet = false; // this run only: create() reads the toggle again for the next one
@@ -974,6 +1096,10 @@ export class Play extends Phaser.Scene {
     this.beanSpawned = begin.beanSpawned;
     this.refreshTestBadge();
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 };
+    this.advent = this.rollAdvent(daily, begin.pipes); // December: this Daily run's Advent piece, or null (plan 17, 2.6)
+    this.calmAir(); // no storm carries over from the last run
+    // December: a Daily run's or a match's snow storms (plan 17, 2.7; T16), walked from the shared course as its pairs spawn.
+    this.stormRun = this.stormRunFor(daily, begin);
     this.runFarts = 0; // this run's farts and super farts, for the career counters
     this.runSuperFarts = 0;
     this.runFalls = 0; // ‼️ long falls this run (fallStarted)
@@ -1016,7 +1142,7 @@ export class Play extends Phaser.Scene {
     this.applyLevel();
     this.levelBar.setVisible(!daily);
     this.refreshLevelBar();
-    this.dailyHud.setText(daily ? `\u{1F31E} ${levelLabel(this.locale, this.level)}` : '').setVisible(Boolean(daily));
+    this.dailyHud.setText(daily ? `${this.dailyGlyph()} ${levelLabel(this.locale, this.level)}` : '').setVisible(Boolean(daily));
     this.bgFade?.stop();
     this.bgFade = null;
     this.bgColor.setFillStyle(levelColor(this.level, LEVEL_COLORS, T.levels.whiteBlend), 1);
@@ -1445,6 +1571,7 @@ export class Play extends Phaser.Scene {
    */
   startLevelBreak() {
     if (this.state !== 'playing') return;
+    this.calmAir(); // a storm never carries across a level line (plan 17, T16, 1c.S1 (5)): the next level starts calm
     this.levelBreak = true;
     this.breakMissed = []; // each break starts with nothing missed (plan 25)
     this.breakNewAsked = 0; // nor any of its new or due cards asked (plan 28, Stage 3b)
@@ -1563,6 +1690,10 @@ export class Play extends Phaser.Scene {
         }
         if (hit === 'daily') {
           this.handleChrome('daily');
+          return;
+        }
+        if (hit === 'advent' && this.adventShown) {
+          this.handleChrome('advent'); // the Advent book (plan 17, 2.15a); hidden, its corner starts the run as before
           return;
         }
         if (hit === 'toilet') {
@@ -1697,6 +1828,25 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * December (plan 17, 2.3): is `day`'s Daily Dump replayable, with the day's best on the board? On the
+   * real UTC day by default; a run passes its own day (dailyRunDay), so a 31 Dec run that ends on 1 Jan
+   * keeps December's rule, as the server keys on the posted day.
+   */
+  dailyReplay(day = utcDayKey()) {
+    return adventSeason(day, T);
+  }
+
+  /** Can today's Daily Dump start (the popup's Play, Over's Play again)? Off season while the day is unused; all December. */
+  dailyOpen() {
+    return !this.dailyPlayedToday() || this.dailyReplay();
+  }
+
+  /** This player's best of today's Daily Dump on this device (plan 17, 2.3): { score, pipes, collected }, or null. */
+  dailyBest() {
+    return this.save?.id ? this.dailyStore.best(utcDayKey(), this.save.id) : null;
+  }
+
+  /**
    * One play per player per day, across devices: ask the 🌞 board whether this user code already has
    * today's score (from any device). When it does, that becomes this device's attempt, final (so the
    * popup offers today's result and the 🌞 stops glowing). Resolves true when today is played here
@@ -1705,9 +1855,19 @@ export class Play extends Phaser.Scene {
   async checkDailyOnServer() {
     const id = this.save?.id;
     if (!id || !this.save?.name) return false;
+    const day = utcDayKey(); // the real day, never the Pretend date: the device keeps one record (plan 17, 2.2)
+    if (this.dailyReplay(day)) {
+      // December (plan 17, 2.3): Play stays open all day; the board's row (another device's best) raises this one's.
+      const rows = await this.fetchDailyRows(id, day);
+      const me = rows?.find((r) => r.me);
+      if (me && this.save?.id === id) {
+        this.dailyStore.mergeBest(day, id, { level: me.level, score: me.score, pipes: me.pipes });
+        this.refreshDailyPrompt();
+      }
+      return this.dailyPlayedToday();
+    }
     if (this.dailyPlayedToday()) return true;
-    const day = utcDayKey();
-    const rows = await fetchDailyBoard(id, day);
+    const rows = await this.fetchDailyRows(id, day);
     const me = rows?.find((r) => r.me);
     if (this.dailyStore.load(day, id)) return true; // a run here claimed the day while the board answered
     if (!me || this.save?.id !== id) return false;
@@ -1716,11 +1876,332 @@ export class Play extends Phaser.Scene {
     return true;
   }
 
+  // ---- December's air (plan 17, 2.7)
+
+  /**
+   * One frame of December's air in a run: a Daily's storm, eased in and out by its pairs (stormPhase), its banner one
+   * pair ahead, its pull on the flap and the scroll (never during a fart, finding 27: st.level, eased over rampMs both
+   * ways, so the 700 ms grace after a fart that ends in a storm still clears a column, 1c.4); and the snow's look: the
+   * storm's headwind (st.air, by its pairs alone) under a fart's wind, which takes over as the fart eases in and hands
+   * back as it eases out (fartRampMs, Gate A 11d, 1c.6), its flakes streaked (a super fart's softly). Off season, nothing.
+   */
+  tickAir(delta) {
+    const st = this.stormRun;
+    if (!st && !this.snowfall) return;
+    const farting = this.effects.powerActive();
+    const superFart = farting && Boolean(this.effects.powerIsSuper?.());
+    const fw = farting ? fartWind(this.effects.powerElapsed(), this.fartDurationMs, T, superFart) : 0;
+    const fartShare = fw ? -fw / (superFart ? T.advent.storm.superWind : T.advent.storm.fartWind) : 0; // 0 to 1, the fart's ease
+    let level = 0;
+    let look = 0;
+    if (st) {
+      const { phase } = stormPhase(this.pipesPassed, st.starts, T);
+      const step = delta / T.advent.storm.rampMs;
+      if (phase === 'storm') {
+        if (!(st.air > 0)) {
+          st.ms = 0;
+          st.swirls = swirlCentres(Math.random, { x: 0, y: 0, width: this.fieldW, height: GAME_HEIGHT }, T);
+        }
+        st.air = Math.min(1, (st.air ?? 0) + step);
+      } else st.air = Math.max(0, (st.air ?? 0) - step);
+      if (phase === 'storm' && !farting) st.level = Math.min(1, st.level + step);
+      else st.level = Math.max(0, st.level - step);
+      st.ms += delta;
+      level = st.level;
+      look = st.air * (1 - fartShare);
+      this.stormFlap = stormFlapMul(level, T);
+      const scroll = stormScrollMul(level, T);
+      if (scroll !== this.stormScroll) {
+        this.stormScroll = scroll;
+        this.applyScroll();
+      }
+      const banner = phase === 'banner';
+      if (banner !== this.stormBanner.visible) this.stormBanner.setText(t(this.locale, 'stormAhead')).setVisible(banner);
+      // The blizzard's sound (2.7a): fades in from the banner, out as the storm ends (and during a fart).
+      const humStep = delta / T.advent.sound.blizzardFadeMs;
+      st.hum = (phase === 'banner' || phase === 'storm') && !farting ? Math.min(1, (st.hum ?? 0) + humStep) : Math.max(0, (st.hum ?? 0) - humStep);
+      this.setBlizzard(st.hum);
+    }
+    if (!this.snowfall) return;
+    const sw = stormWind(look, (st?.ms ?? 0) / 1000, T);
+    const wind = fw + sw;
+    if (look > 0) for (const s of st.swirls) s.x = ((((s.x + (T.advent.storm.swirlDrift * sw * delta) / 1000) % this.fieldW) + this.fieldW) % this.fieldW); // the whirls drift with a share of the storm's wind
+    const tau = fartShare * (superFart ? T.advent.storm.superTau : T.advent.storm.fartTau);
+    this.snowfall.setAir(wind || look ? { wind, swirls: look > 0 ? st.swirls.map((s) => ({ ...s, S: s.S * look })) : [], tau, soft: superFart } : null);
+    this.snowfall.setStorm(look, T.advent.storm);
+  }
+
+  /**
+   * The storms of the run starting now (plan 17, 2.7; T16), or null for a calm one (runStorms): a December Daily walks
+   * from its level's start and never leaves that level; a December match walks its level table (Play.tune) from the
+   * match's start, so a race rewound to a level (begin.pipes) walks the pairs before it at once and meets the storms it
+   * would have met: both devices, after a reload too.
+   */
+  stormRunFor(daily, begin) {
+    if (!runStorms({ dailyDay: daily?.day ?? null, matchDay: daily || !this.match ? null : (this.match.day ?? null) }, T)) return null;
+    const st = { startN: daily ? begin.pipes : 0, levels: daily ? null : this.tune, starts: [], level: 0, air: 0, ms: 0, swirls: [] };
+    for (let n = st.startN + 1; n <= begin.pipes; n += 1) this.walkStorm(st, n);
+    return st;
+  }
+
+  /** Pair `n` of the course, in spawn order: a storm starts there when stormStartsHere says so (kept in st.starts). */
+  walkStorm(st, n) {
+    if (stormStartsHere(this.course.storm(n), n, st.starts.at(-1) ?? null, st.startN, T, st.levels)) st.starts.push(n);
+  }
+
+  /** Calm air (a run's end and start, a level break): no storm pull, no banner, the snow back to its light fall. */
+  calmAir() {
+    if (this.stormRun) {
+      this.stormRun.level = 0;
+      this.stormRun.air = 0;
+    }
+    this.stormFlap = 1;
+    if ((this.stormScroll ?? 1) !== 1) {
+      this.stormScroll = 1;
+      this.applyScroll();
+    }
+    this.stormBanner?.setVisible(false);
+    this.snowfall?.setAir(null);
+    this.snowfall?.setStorm(0);
+    if (this.stormRun) this.stormRun.hum = 0;
+    this.setBlizzard(0);
+  }
+
+  /**
+   * The blizzard loop at `level` 0 to 1 of advent.sound.blizzardVolume (2.7a): started on the first level above 0 once
+   * its file is in, stopped and dropped at 0 (stepLoop). Phaser's global mute covers it; pause holds it (pauseEffects).
+   * A split-screen half hands its level to the match's host instead (T16, 1c.S1 (6): one loop for both halves, at the
+   * louder one, Versus.mixBlizzard); the online race's one half keeps its own (its host answers false).
+   */
+  setBlizzard(level) {
+    if (this.match && this.versusHost()?.mixBlizzard?.(this.player === 2 ? 1 : 0, level)) return;
+    this.blizzard = stepLoop(this, this.blizzard ?? null, 'advent-blizzard', T.advent.sound.blizzardVolume * level);
+  }
+
+  // ---- December's Advent pieces (plan 17, 2.6)
+
+  /** The Advent season (its year) `day` falls in, or null off season. */
+  adventSeasonOf(day) {
+    return adventSeason(day, T) ? Number(day.slice(0, 4)) : null;
+  }
+
+  /**
+   * The found-day store of `day`'s season (null off season): this device's own record, or with `practice` (a test
+   * run, or test mode on the home screen and its popups: a Pretend date) the session's sandbox in memory, so
+   * practice never adds a real piece and queues nothing (finding 17). The sandbox lives in the registry, so it
+   * outlasts a scene restart.
+   */
+  adventStoreFor(day, practice) {
+    const season = this.adventSeasonOf(day);
+    if (!season) return null;
+    if (practice) {
+      const box = this.registry.get('adventSandbox') ?? new Map();
+      if (!box.has(season)) box.set(season, createAdventStore(null, season));
+      this.registry.set('adventSandbox', box);
+      return box.get(season);
+    }
+    this.adventStores ??= new Map();
+    if (!this.adventStores.has(season)) this.adventStores.set(season, createAdventStore(undefined, season));
+    return this.adventStores.get(season);
+  }
+
+  /**
+   * A Daily run's Advent piece (start): on a December day, one piece from those out that the store lacks (rolled
+   * with a per-attempt RNG, never the shared course, so two runs of a day offer different pieces at different
+   * pairs) and the pair from which it may show (rising odds from pipe 5; the day's misses raise them). Null off season, outside a
+   * Daily, or with nothing left to find (finding 21). `this.adventRng` stands in for Math.random in tests.
+   * For the piece's Quality (1c.Q, recording only) it keeps the roll's `keep` (1 − u), the `misses` it was rolled
+   * with, and `reach`, the last pair the run has spawned (adventPairHere), counted from the run's first.
+   */
+  rollAdvent(daily, startN) {
+    if (!daily || !adventSeason(daily.day, T)) return null;
+    const store = this.adventStoreFor(daily.day, this.runIsTest);
+    const rng = this.adventRng ?? Math.random;
+    const piece = rollAdventTarget(adventBacklog(store.found(), daily.day, T), daily.day, rng, T);
+    if (piece === null) return null;
+    const misses = store.misses(daily.day);
+    const { pair, keep } = adventSpawnRoll(misses, rng, T);
+    return { piece, day: daily.day, season: this.adventSeasonOf(daily.day), startN, pair, keep, misses, reach: 0, spawned: false, found: false };
+  }
+
+  /** Is the run's piece `a` its day's own (piece k on k Dec)? Only that one keeps a Quality score (1c.Q). */
+  adventIsToday(a) {
+    return a.piece === Number(a.day.slice(8, 10));
+  }
+
+  /**
+   * Pair n of a run (spawnPipePair): does the run's piece show here (adventSpawnHere, `slotTaken` by another item or
+   * a storm)? Every pair stretches the run's reach; a showing freezes the day's Quality score if none is held yet and
+   * writes it at once (1c.Q), so a reload after the piece showed cannot roll it again. No piece this run: false.
+   */
+  adventPairHere(n, slotTaken) {
+    const a = this.advent;
+    if (!a) return false;
+    a.reach = Math.max(a.reach ?? 0, n - a.startN);
+    if (!adventSpawnHere(a, n, slotTaken, this.textures.exists(ADVENT_ART.piece))) return false;
+    a.spawned = true;
+    const store = this.adventStoreFor(a.day, this.runIsTest);
+    store?.setClock(a.day, adventClockShown(store.clock(a.day), { keep: a.keep, pair: n - a.startN, today: this.adventIsToday(a) }));
+    return true;
+  }
+
+  /**
+   * The run's piece caught: into the store (once, its first day), and for a real run queued for the board (S12). Its
+   * Quality (1c.Q): the day's own piece keeps the clock's held score; then the clock restarts (adventClockCaught).
+   */
+  takeAdvent() {
+    const a = this.advent;
+    if (!a || a.found) return;
+    a.found = true;
+    const store = this.adventStoreFor(a.day, this.runIsTest);
+    const caught = store ? adventClockCaught(store.clock(a.day), { today: this.adventIsToday(a) }) : null;
+    const added = store?.add(a.piece, a.day, caught?.quality ?? null);
+    if (caught) store.setClock(a.day, caught.clock);
+    if (added && !this.runIsTest && this.daily) this.adventQueue.add({ playerId: this.daily.playerId, season: a.season, piece: a.piece, day: a.day });
+    this.playSample('advent-found', T.advent.sound.foundVolume, sfx.pickup); // the twinkle (2.7a); the pickup blip until it has loaded
+  }
+
+  /**
+   * At a December Daily's end (endRun): a run that offered a piece and ended without it counts a miss for the day
+   * (the window's pity); for Over, { offered, found (the piece, or null), late (not the day's own piece), status }.
+   * A run whose piece never showed also runs the day's Quality clock on (1c.Q: s times the chance it stays hidden
+   * through the run's reach at the misses it was rolled with); one that showed and was let go changes nothing.
+   */
+  adventOutcome() {
+    const day = this.dailyRunDay;
+    const store = this.adventStoreFor(day, this.runIsTest);
+    if (!store) return null;
+    const a = this.advent;
+    if (a && !a.found) {
+      store.addMiss(day);
+      if (!a.spawned) store.setClock(day, adventClockHidden(store.clock(day), { reach: a.reach ?? 0, misses: a.misses ?? 0 }, T));
+    }
+    return { offered: Boolean(a), found: a?.found ? a.piece : null, late: Boolean(a?.found && a.piece !== Number(day.slice(8, 10))), status: adventStatus(store.found(), day, T) };
+  }
+
+  /**
+   * The Daily popup's and Over's December line (plan 17, 2.6): { status (adventStatus), giftToday (the day's own
+   * piece found on its day: the 🎁 beside the day's best) } on the decorations' clock, or null off season.
+   */
+  adventNow(day = dailyDay(this.registry)) {
+    const store = this.adventSeasonOf(day) ? this.adventStoreFor(day, this.isTestMode()) : null;
+    if (!store) return null;
+    const found = store.found();
+    const k = Number(day.slice(8, 10));
+    const giftToday = k <= T.advent.piece.count && found[k] === day;
+    return { status: adventStatus(found, day, T), giftToday, today: k <= T.advent.piece.count ? (giftToday ? 'found' : 'missing') : null };
+  }
+
+  /**
+   * The Advent trees this device's own pieces earn on `day` ({ season: 'decorated' | 'plain' | null }, adventAward),
+   * the facts the 🎄 / 🌲 badges read (2.6b). The real record only, never practice's sandbox; {} off season.
+   */
+  adventTrees(day = utcDayKey()) {
+    const season = this.adventSeasonOf(day);
+    const store = season ? this.adventStoreFor(day, false) : null;
+    return store ? { [season]: adventAward(store.found(), season, T) } : {};
+  }
+
+  /**
+   * What the Advent book shows (2.15): { season, found, unseen, markSeen (S14's seen flag) } for December's season (practice's sandbox in test mode, as
+   * adventNow), or after it last December's real record while it holds a piece (adventBookSeason); null: no book.
+   */
+  adventBook(day = dailyDay(this.registry)) {
+    const season = adventBookSeason(day, T, (y) => createAdventStore(undefined, y).count() > 0);
+    if (season === null) return null;
+    const store = this.adventSeasonOf(day) ? this.adventStoreFor(day, this.isTestMode()) : createAdventStore(undefined, season);
+    return { season, found: store.found(), unseen: store.unseen(), markSeen: (pieces) => store.markSeen(pieces) };
+  }
+
+  /** The tree the book's season has earned on this device ('decorated' | 'plain' | null; adventAward): the save panel's badge (2.16). */
+  adventTree() {
+    const book = this.adventBook();
+    return book ? adventAward(book.found, book.season, T) : null;
+  }
+
+  /** Open the Advent book; `onClose` (the save panel's button) runs when it closes, in place of going home. */
+  openAdvent({ onClose = null } = {}) {
+    this.adventOnClose = onClose;
+    this.handleChrome('advent');
+  }
+
+  /**
+   * The home screen's Advent button on `day` (null hides it: a match): shown with the ready UI while the book has a
+   * season (adventBook), with "N/24" (the count alone: the tree's status stays in the Daily window, Michael 26 Nov),
+   * glowing while a piece waits to be shown added (S14). The piece's box replaces the 🧩 once its file has landed.
+   */
+  refreshAdventButton(day) {
+    if (!this.adventBtn) return;
+    const book = day ? this.adventBook(day) : null;
+    const shown = Boolean(book) && this.readyUiShown;
+    this.adventShown = shown;
+    const b = this.readyBoxes.advent;
+    const icon = this.textures.exists(ADVENT_ART.piece);
+    if (icon && !this.adventIcon?.active) this.adventIcon = this.add.image(b.x, b.y, ADVENT_ART.piece).setDisplaySize(T.advent.button.iconPx, T.advent.button.iconPx).setDepth(21);
+    this.adventBtn.setVisible(shown);
+    this.adventIcon?.setVisible(shown);
+    this.adventGlyph.setVisible(shown && !icon);
+    const n = book ? adventBookPieces(book.found, book.season, T).length : 0;
+    this.adventCount.setText(`${n}/${T.advent.piece.count}`).setVisible(shown);
+    this.adventHalo.setVisible(shown && book.unseen.length > 0);
+  }
+
+  /**
+   * Post the queued pieces (submit_advent_piece): one batch a player a sync; a piece waits while its day's run is
+   * still queued (plan 30, S12; a few syncs at most, postWaits). What the answer does is createAdventQueue's.
+   * Never rejects or throws: the posts after it in syncLeaderboard's chain always run.
+   */
+  drainAdvent() {
+    try {
+      if (!this.adventQueue) return Promise.resolve();
+      const runs = this.runQueue?.load?.() ?? [];
+      const asked = new Map();
+      const waits = (pid, day) => {
+        const key = `a:${pid}:${day}`;
+        if (!asked.has(key)) asked.set(key, this.postWaits(key, !this.runsUnsent?.has(pid) && waitsForDailyRun(runs, pid, day)));
+        return asked.get(key);
+      };
+      return this.adventQueue.drain((pid, list) => submitAdventPiece(pid, list), { today: utcDayKey(), waits }).catch(() => {});
+    } catch {
+      return Promise.resolve();
+    }
+  }
+
+  /**
+   * The pieces this player found on other devices (advent_progress), folded into the store (the earlier day wins):
+   * once a page load, player and season, in season, never for practice. Offline: the next sync asks again.
+   * Never rejects or throws, as drainAdvent.
+   */
+  pullAdventProgress() {
+    try {
+      const id = this.save?.id;
+      const day = utcDayKey();
+      const season = this.adventSeasonOf(day);
+      if (!id || !season || this.registry?.get?.('adventProgressFor') === `${id}:${season}`) return Promise.resolve();
+      return fetchAdventProgress(id, season)
+        .then((list) => {
+          if (!list || this.save?.id !== id) return;
+          this.registry?.set?.('adventProgressFor', `${id}:${season}`);
+          if (this.adventStoreFor(day, false).merge(list)) {
+            this.creditCareer?.(); // a tree finished on another device (2.6b): its claim goes with this sync's drainCareer
+            this.refreshSeasonHome?.();
+            this.refreshDailyPrompt?.();
+          }
+        })
+        .catch(() => {});
+    } catch {
+      return Promise.resolve();
+    }
+  }
+
   /** The 🌞 breathes under its halo on the ready screen until today's attempt is used. */
   refreshDailyPrompt() {
     if (!this.dailySun) return;
     const ready = this.state === 'ready' && !this.launching && !this.match && this.dailyBtn && this.dailySun.visible;
-    const due = Boolean(ready) && !this.dailyPlayedToday();
+    // December (plan 17, 2.6; finding 21): it glows while a piece is still to be found, not while today is unplayed.
+    const day = dailyDay(this.registry);
+    const store = this.adventSeasonOf(day) ? this.adventStoreFor(day, this.isTestMode()) : null;
+    const due = Boolean(ready) && (store ? adventBacklog(store.found(), day, T).length > 0 : !this.dailyPlayedToday());
     this.dailyHalo.setVisible(due);
     if (due) this.dailySunTween.resume();
     else {
@@ -1780,6 +2261,11 @@ export class Play extends Phaser.Scene {
     this.consentStore.clear(); // and stops recording for the pilot: answers already sent stay on the server until the tester withdraws
     this.settings?.set?.({ eduInvited: false }); // the invitation belonged to the player signed out (plan 28, 2.4)
     this.researchQueue.clear();
+    // December's pieces go with the player too (plan 17, 2.11): the next player here starts empty and asks the board for theirs.
+    for (const store of this.adventStores?.values?.() ?? []) store.clear();
+    clearAdventStores();
+    this.adventStores = new Map();
+    this.registry?.remove?.('adventProgressFor');
     this.refreshTestBadge();
     this.refreshEduDue();
     this.best.clear();
@@ -1829,7 +2315,7 @@ export class Play extends Phaser.Scene {
     const research = tournaments.then(() => this.drainResearch());
     // Daily Dump scores carry their own id too; a device with no username sends them under the
     // name they were queued with (a named device sends after the name check below).
-    if (!this.save?.name) return research.then(() => this.drainRuns()).then(() => this.drainDaily()).catch(() => {});
+    if (!this.save?.name) return research.then(() => this.drainRuns()).then(() => this.drainDaily()).then(() => this.drainAdvent()).then(() => this.pullAdventProgress()).catch(() => {});
     if (!this.save.id) this.save = ensureId(this.save);
     const id = this.save.id;
     const renamedHere = () => {
@@ -1845,6 +2331,8 @@ export class Play extends Phaser.Scene {
       .then(() => this.creditCareer()) // bests from other devices earn their score and level badges here
       .then(() => this.drainRuns()) // run summaries first, so the run behind each post below is stored (plan 30)
       .then(() => this.drainDaily())
+      .then(() => this.drainAdvent()) // December's pieces after the Daily's scores and before the career's claims (plan 17, R6)
+      .then(() => this.pullAdventProgress()) // the pieces found on other devices, once a page load
       .then(() => this.pullPlayDays(id)) // the day streaks, with the days played on other devices (34.13)
       .then(() => this.drainCareer(id))
       .then(() => this.drainEduShare(id))
@@ -1931,6 +2419,11 @@ export class Play extends Phaser.Scene {
         return res;
       });
     });
+  }
+
+  /** The 🌞 board for `day` as this player sees it (fetchDailyBoard), or null. A method so tests can stub it. */
+  fetchDailyRows(id, day) {
+    return fetchDailyBoard(id, day);
   }
 
   /** The player's two board rows [off the toilet, on it] (player_rank: aliases resolved), each null when missing or unreachable. A method so the smoke can stub it. */
@@ -2904,19 +3397,138 @@ export class Play extends Phaser.Scene {
     if (this.levelBreak) this.refreshLevelBanner();
   }
 
-  /** Test-mode knobs for Settings: the next run's start level (1..lastLevel) and Invincible. */
+  /**
+   * Test-mode knobs for Settings: the next run's start level (1..lastLevel), Invincible and the Pretend date
+   * (plan 17, 1.6: 'YYYY-MM-DD' or null for the real date; dailyDay reads it from the registry while test mode is on).
+   */
   testSettings() {
     const invincible = this.registry.get('testInvincible');
+    const pretendDay = this.registry.get('testPretendDay');
     return {
       startLevel: testRunStart(this.registry.get('testStartLevel') ?? 1, this.tune).level,
       invincible: typeof invincible === 'boolean' ? invincible : TEST_MODE.defaultInvincible,
+      pretendDay: isDayKey(pretendDay) ? pretendDay : null,
     };
   }
 
-  setTestSettings({ startLevel, invincible } = {}) {
+  setTestSettings({ startLevel, invincible, pretendDay } = {}) {
     if (startLevel !== undefined) this.registry.set('testStartLevel', testRunStart(startLevel, this.tune).level);
     if (invincible !== undefined) this.registry.set('testInvincible', Boolean(invincible));
+    if (pretendDay !== undefined) {
+      this.registry.set('testPretendDay', isDayKey(pretendDay) ? pretendDay : null);
+      this.refreshSeason();
+    }
     return this.testSettings();
+  }
+
+  /**
+   * December's 🎅 for the 🌞 (plan 17, 1.7): a new pick each time the home screen is built (page load, Home, back
+   * from a run), never the one shown last, which is kept in localStorage (LEADERBOARD.santaKey; the registry when
+   * storage is blocked, so a reload there can repeat it). Variants this device cannot draw are dropped once
+   * (supportedSantas, registry 'santas'). Off season nothing is picked. Math.random, never the course RNG.
+   * 1b.2e (D17, Michael 26 Nov): a 🎅 saved in the picker shows every visit while this device draws it; otherwise the
+   * pick is from the plain 🎅 🤶 🧑‍🎄 only (plainSantas), the picker keeping every variant.
+   */
+  pickVisitSanta() {
+    if (!adventSeason(dailyDay(this.registry), T)) return;
+    const santas = this.offeredSantas();
+    const chosen = this.santaChoice();
+    if (chosen && santas.includes(chosen)) {
+      this.registry.set('santa', chosen);
+      return;
+    }
+    const store = browserStorage();
+    let last = this.registry.get('santa') ?? null;
+    try {
+      last = store?.getItem(LEADERBOARD.santaKey) ?? last;
+    } catch {
+      // storage blocked: the registry's pick stands in
+    }
+    const santa = pickSanta(Math.random, last, plainSantas(santas));
+    this.registry.set('santa', santa);
+    try {
+      store?.setItem(LEADERBOARD.santaKey, santa);
+    } catch {
+      // storage blocked: kept for this page only
+    }
+  }
+
+  /** Every 🎅 this device draws as one glyph (supportedSantas, measured once a page): the picker's list. */
+  offeredSantas() {
+    let santas = this.registry.get('santas');
+    if (!santas) {
+      santas = supportedSantas(T.advent.santas, emojiMeasure());
+      this.registry.set('santas', santas);
+    }
+    return santas;
+  }
+
+  /** The picker's two one-value stores (1b.2e), this device's: the saved 🎅 and the red dot's seen flag. Clear user keeps both. */
+  santaStores() {
+    this.santaStoresRef ??= {
+      choice: createJsonStore(browserStorage(), LEADERBOARD.santaChoiceKey, (v) => (typeof v === 'string' && v ? v : null)),
+      seen: createJsonStore(browserStorage(), LEADERBOARD.santaDotKey, (v) => v === true),
+    };
+    return this.santaStoresRef;
+  }
+
+  /** The 🎅 saved in the picker, or null (the changing 🎅). */
+  santaChoice() {
+    return this.santaStores().choice.read();
+  }
+
+  /** Save `glyph` (one this device offers) as the player's 🎅 and show it at once on the home button and the 🌞 popup. */
+  saveSantaChoice(glyph) {
+    if (!this.offeredSantas().includes(glyph)) return;
+    this.santaStores().choice.write(glyph);
+    this.registry.set('santa', glyph);
+    this.applySanta();
+  }
+
+  /** The title 🎅 opens the picker: in season, when this device draws two or more variants (else there is nothing to choose). */
+  santaTappable() {
+    return adventSeason(dailyDay(this.registry), T) && this.offeredSantas().length > 1;
+  }
+
+  /** The red dot (Michael, 26 Nov): on the home 🎅 and the popup's title 🎅 until the picker has been opened once. */
+  santaDotShown() {
+    return this.santaTappable() && !this.santaStores().seen.read();
+  }
+
+  /** The picker opened: the red dots go, for good on this device. */
+  markSantaSeen() {
+    this.santaStores().seen.write(true);
+    this.refreshSantaDot();
+    this.scene?.get?.('Daily')?.refreshSantaDot?.();
+  }
+
+  /** One redraw for a new 🎅 (M1): the home button, then every line the 🌞 popup drew with it. No restart: verify() would run again. */
+  applySanta() {
+    const glyph = this.dailyGlyph();
+    if (this.dailySun?.active) this.dailySun.setText(glyph);
+    if (this.scene?.isActive?.('Daily')) this.scene.get('Daily')?.setGlyph?.(glyph);
+    this.refreshSantaDot();
+  }
+
+  /** The home 🎅's red dot: with the ready UI, never in a match. */
+  refreshSantaDot() {
+    this.santaDot?.setVisible?.(Boolean(this.readyUiShown) && !this.match && this.santaDotShown());
+  }
+
+  /** The Daily Dump's glyph now: the 🌞, or this visit's 🎅 in December (the decorations' clock, dailyDay). */
+  dailyGlyph() {
+    return dailyGlyphNow(this.registry, T);
+  }
+
+  /** A Pretend date stepped in Settings (test mode): pick a 🎅 if it entered the season and redraw the button now. */
+  refreshSeason() {
+    this.skin = seasonalSkin(dailyDay(this.registry), T, ADVENT_ART);
+    this.ensureFartClock();
+    this.loadLazyAudio(); // the twins, if the season just began; nothing to do otherwise
+    this.reapplySkin();
+    this.refreshSeasonHome();
+    if (!this.match) this.pickVisitSanta();
+    if (this.dailySun?.active) this.dailySun.setText(this.dailyGlyph());
   }
 
   /** Collisions (pipes, ceiling, floor) do not end a test run while Invincible is on. */
@@ -2957,6 +3569,7 @@ export class Play extends Phaser.Scene {
     if (!isLocale(next)) return;
     this.locale = next;
     this.readyTitle?.setText(t(next, 'readyTitle'));
+    this.refreshSeasonHome();
     this.refreshProfile(); // loadUserButton is localised too
     const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
     this.pauseText?.setText(pauseTitle);
@@ -2966,7 +3579,7 @@ export class Play extends Phaser.Scene {
     if (this.shopOpen) this.refreshShop();
     this.showEscapedBanner(); // a finished match half keeps its banner in the new language
     this.refreshLevelBar();
-    if (this.runIsDaily) this.dailyHud.setText(`\u{1F31E} ${levelLabel(this.locale, this.level)}`);
+    if (this.runIsDaily) this.dailyHud.setText(`${this.dailyGlyph()} ${levelLabel(this.locale, this.level)}`);
     this.refreshTestBadge();
   }
 
@@ -3100,6 +3713,15 @@ export class Play extends Phaser.Scene {
         if (!this.scene.isActive('Daily')) this.scene.launch('Daily');
         this.scene.bringToTop('Daily');
         break;
+      case 'openAdvent': // the Advent book (plan 17, 2.15)
+        if (!this.scene.isActive('Advent')) this.scene.launch('Advent');
+        this.scene.bringToTop('Advent');
+        break;
+      case 'openSantaPicker': // the 🎅 picker over the 🌞 popup (plan 17, 1b.2e); opening it takes the red dots away
+        this.markSantaSeen();
+        if (!this.scene.isActive('SantaPicker')) this.scene.launch('SantaPicker');
+        this.scene.bringToTop('SantaPicker');
+        break;
       case 'openStats': {
         if (this.overlayPause(result)) this.pauseRun();
         // Always with its player: a launch without data would reuse the last profile's.
@@ -3150,7 +3772,7 @@ export class Play extends Phaser.Scene {
     // No lockout, and no fart (it carries the poop through the middle).
     const applied = !(this.time.now < this.flapLockedUntil) && !this.effects.powerActive();
     if (applied) {
-      this.poop.setVelocityY(T.flapVelocity);
+      this.poop.setVelocityY(T.flapVelocity * (this.stormFlap ?? 1)); // a little weaker in a December storm (plan 17, 2.7)
       sfx.flap();
       if (this.match) this.flapCount = (this.flapCount ?? 0) + 1; // the online race sends each one (raceSnapshot)
     }
@@ -3311,7 +3933,7 @@ export class Play extends Phaser.Scene {
    */
   versusHost() {
     const key = matchHostKey(this.match);
-    return key ? this.scene.get(key) : null;
+    return key ? (this.scene?.get?.(key) ?? null) : null; // calmAir asks it at every start and break (plan 17, T16): never throw for a half with no scene manager
   }
 
   /** Pause the run: a match's shared pause (both halves under one banner), else this scene's own. */
@@ -3458,7 +4080,9 @@ export class Play extends Phaser.Scene {
   /** Freeze the run's timers, tweens, clip and box spin (pausePlay; grantTest while paused). Safe to repeat. */
   pauseEffects() {
     if (this.stinkTimer) this.stinkTimer.paused = true;
+    if (this.fartClock) this.fartClock.paused = true;
     this.fartSound?.pause();
+    this.blizzard?.pause(); // December's storm sound (plan 17, 2.7a)
     this.fartTween?.pause();
     this.popupTween?.pause();
     this.pipePopupTween?.pause();
@@ -3474,7 +4098,9 @@ export class Play extends Phaser.Scene {
   /** Undo pauseEffects (resumePlay). */
   resumeEffects() {
     if (this.stinkTimer) this.stinkTimer.paused = false;
+    if (this.fartClock) this.fartClock.paused = false;
     this.fartSound?.resume();
+    this.blizzard?.resume();
     this.fartTween?.resume();
     this.popupTween?.resume();
     this.pipePopupTween?.resume();
@@ -3686,6 +4312,7 @@ export class Play extends Phaser.Scene {
     const bottom = this.pipes.create(x, gapBot, 'pipe', '__BASE');
     bottom.setOrigin(0.5, 0);
     bottom.setDisplaySize(T.pipeWidth, Math.max(bottom.frame.height, GAME_HEIGHT - gapBot + 4));
+    this.addSnowCap(bottom); // December (plan 17, 1.11)
 
     for (const p of [top, bottom]) {
       // Body uses unscaled frame units; scale comes from setDisplaySize.
@@ -3754,6 +4381,15 @@ export class Play extends Phaser.Scene {
     // costs a fiber, a box, a bean or the guaranteed kernel its place.
     const slotTaken = boxHere || beanHere || band || kernelBand || kernelPast || superHere;
     if (!slotTaken && scripted === undefined && this.level >= 2 && !this.runIsDaily && this.course.coin(n)) this.spawnBandItem('coin', still ? stillY() : null, shift);
+    // December's Advent piece (plan 17, 2.6; finding 5): once a Daily run, only in a band slot nothing else took
+    // (a Daily rolls no extra coin), from its pair on, once its texture has landed. No pair spawns in a fart's
+    // held stretch (spawnHeldByFart), so it never shows there.
+    // December's storms (plan 17, 2.7): pair n starts one when its course draw says so; no Advent piece on a storm's pairs.
+    const st = this.stormRun;
+    if (st) this.walkStorm(st, n);
+    // Pair n's slot is flown inside a storm that starts at pair n + 1 too: look one pair ahead (2.11).
+    const stormy = Boolean(st && (stormCovers(st.starts, n, T) || stormStartsHere(this.course.storm(n + 1), n + 1, st.starts.at(-1) ?? null, st.startN, T, st.levels)));
+    if (this.adventPairHere(n, slotTaken || stormy)) this.spawnBandItem(ADVENT_ART.piece, still ? stillY() : null, shift);
     if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH, move ? top : null);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
@@ -3761,13 +4397,13 @@ export class Play extends Phaser.Scene {
       this.beanSpawned = true;
       const phase = this.course.phase(n, 'bean');
       const y = still ? stillY() : beanY(0, phase, this.beanBounds, T);
-      const bean = this.beans.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, 'bean');
+      const bean = this.beans.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, this.itemTexture('bean'));
       bean.setDepth(8);
       bean.setScale(T.spriteDisplayScale);
       const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
       bean.body.setCircle(beanBody.radius, beanBody.offset, beanBody.offset);
       bean.setVelocityX(-this.scrollSpeed());
-      bean.setData({ phase, still, baseScale: T.spriteDisplayScale, radius: T.beans.beanRadius });
+      bean.setData({ kind: 'bean', phase, still, baseScale: T.spriteDisplayScale, radius: T.beans.beanRadius });
       bean.clockMs = 0; // its bob / pulse clock (update())
     }
   }
@@ -3782,7 +4418,7 @@ export class Play extends Phaser.Scene {
     const phase = this.course.phase(this.pipesSpawned, 'band');
     const period = kind === 'mystery' ? T.mystery.periodMs : T.items.fiberPeriodMs;
     const y = stillY ?? bobY(0, phase, this.beanBounds, period);
-    const item = this.items.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, kind);
+    const item = this.items.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, this.itemTexture(kind));
     item.setDepth(8);
     this.finishItem(item, kind);
     if (stillY == null) {
@@ -3888,7 +4524,7 @@ export class Play extends Phaser.Scene {
    */
   spawnGapItem(kind, x, gapY, gapH, pair = null) {
     const y = this.course.itemY(this.pipesSpawned, gapY, gapH, kind);
-    const item = this.items.create(x, y, kind);
+    const item = this.items.create(x, y, this.itemTexture(kind));
     item.setDepth(-1); // under the pipes (0), over the background layers
     this.finishItem(item, kind);
     if (pair) {
@@ -3935,7 +4571,22 @@ export class Play extends Phaser.Scene {
    */
   scrollSpeed() {
     if (this.respawning()) return 0;
-    return this.diff.pipeSpeed * this.scrollMul;
+    return this.diff.pipeSpeed * this.scrollMul * (this.stormScroll ?? 1); // a December storm's drag (plan 17, 2.7, 1c.4)
+  }
+
+  /**
+   * One frame of a moving pair: the gap centre follows its sine, the mate stays gapH below (Arcade reads the
+   * sprites' positions each step, so the bodies follow). Its clock runs at a December storm's share of the scroll
+   * (plan 17, 1c.4: the drag slows the drift as much as the world), so a gap shifts no more during a crossing than
+   * in calm air (tests/tuning.test.js); a fart's faster scroll leaves the drift at real time.
+   */
+  stepPipeMove(pipe, move, delta) {
+    pipe.clockMs += delta * (this.stormScroll ?? 1);
+    const gapY = gapBobY(pipe.clockMs, move.baseY, move.amp, move.periodMs, move.phase, move.holdMs); // rests at each end (pipeMove.holdMs)
+    const gapH = pipe.getData('gapH');
+    pipe.y = gapY - gapH / 2;
+    const mate = pipe.getData('mate');
+    if (mate?.active) mate.y = gapY + gapH / 2;
   }
 
   /** In a respawn, or paused in the middle of one (pausePlay keeps respawnPaused). */
@@ -4008,9 +4659,14 @@ export class Play extends Phaser.Scene {
     this.scaredMs = near ? T.scaredHoldMs : Math.max(0, this.scaredMs - delta);
   }
 
-  /** Swap the player texture and rebuild the circle body for that frame size. */
+  /**
+   * Swap the player texture and rebuild the circle body for that frame size. `key` is the stock key, kept as
+   * poopStockKey; the texture shown is its December twin once loaded (twinKey; plan 17, 1.10), which is cut on
+   * the stock body centre, so the circle at the canvas centre is the stock one.
+   */
   setPoopTexture(key) {
-    this.poop.setTexture(key);
+    this.poopStockKey = key;
+    this.poop.setTexture(twinKey(key, this.skin, this.fartFrame, (k) => this.textures.exists(k)));
     const body = scaledCircleBody(this.poop.frame.width, T.spriteDisplayScale, T.poopRadius);
     this.poop.body.setCircle(body.radius, body.offset, body.offset);
   }
@@ -4025,14 +4681,235 @@ export class Play extends Phaser.Scene {
   refreshPoopLook() {
     // A start boost wears the fart face.
     const key = this.boost ? 'poop-fart' : poopFrame({ charged: this.charged, stinkFrame: this.stinkFrame, vy: this.poop.body.velocity.y, scared: this.scaredMs > 0 }, T);
-    if (this.poop.texture.key !== key) this.setPoopTexture(key);
+    if (this.poopStockKey !== key) this.setPoopTexture(key);
+  }
+
+  /**
+   * In season, one loop clock alternates the two fart twins (the hat in the wind) while the poop wears
+   * 'poop-fart' (a fart or a start boost), at the stink frames' rate. Paused with the run (pauseEffects).
+   */
+  ensureFartClock() {
+    if (this.fartClock || !this.skin.fartFrames.length) return;
+    this.fartClock = this.time.addEvent({
+      delay: T.beans.stinkFrameMs,
+      loop: true,
+      callback: () => {
+        this.fartFrame ^= 1;
+        if (this.poopStockKey === 'poop-fart') this.setPoopTexture('poop-fart');
+      },
+    });
+  }
+
+  /** The lazy flight landed or the season changed (plan 17, 1.10): show the current stock key's twin now, or the stock face. */
+  reapplySkin() {
+    if (this.poop?.active && this.poopStockKey) this.setPoopTexture(this.poopStockKey);
+    this.skinHud();
+    for (const item of this.items?.getChildren() ?? []) this.skinItem(item);
+    for (const bean of this.beans?.getChildren() ?? []) this.skinItem(bean); // the world bean's holly twin (same circle)
+    this.refreshSeasonHome(); // the Bowelidays image, once its file is in
+    for (const pipe of this.pipes?.getChildren() ?? []) {
+      if (pipe.originY !== 0) continue; // a bottom pipe stands up from its gap (origin at its top)
+      if (this.skin.snowCap) this.addSnowCap(pipe);
+      else pipe.getData('snow')?.destroy();
+    }
+  }
+
+  /**
+   * December (plan 17, 1.12 and 1.14): the snowfall in every mode, on the home screen and in runs, a match's halves
+   * included (Michael, 26 Nov); the countdown line and Happy Bowelidays! on the home screen only (with the ready UI,
+   * never in a match's halves: the Versus scene draws their join screen). Nothing off season.
+   */
+  refreshSeasonHome() {
+    const day = dailyDay(this.registry);
+    const season = adventSeason(day, T);
+    const home = season && !this.match;
+    const line = home ? countdownLine(day, this.locale, T) : null;
+    this.countdownText?.setText(line?.text ?? '').setVisible(Boolean(line?.text) && this.readyUiShown);
+    const img = line?.image && this.textures.exists(line.image) ? line.image : null; // until the flight lands, nothing
+    if (img && !this.countdownImage?.active) {
+      const b = this.readyBoxes.bowelidays;
+      this.countdownImage = this.add.image(b.x, b.y, img).setDisplaySize(b.width, b.height).setDepth(20);
+    }
+    this.countdownImage?.setVisible(Boolean(img) && this.readyUiShown);
+    this.refreshAdventButton(this.match ? null : day); // also after December, while last season's book holds a piece
+    this.refreshSantaDot();
+    if (season && !this.snowfall) this.snowfall = createSnowfall(this, { x: 0, y: 0, width: this.fieldW, height: GAME_HEIGHT }, T.advent.snow);
+    if (!season && this.snowfall) {
+      this.snowfall.destroy();
+      this.snowfall = null;
+    }
+    this.snowfall?.setVisible(true);
+    this.refreshLights();
+  }
+
+  // ---- December's fairy lights (plan 17, 1c.9, T14)
+
+  /** Whether December's look holds today (the season, on the pretend date in test mode). */
+  lightsSeason() {
+    return adventSeason(dailyDay(this.registry), T);
+  }
+
+  /**
+   * The fairy lights along the ceiling villi (Gate A sheet 11, L1): in December, once their file is in, a tile sprite
+   * the field's width at TUNING.advent.lights' depth (over the pipes and the ceiling, under the snow, the HUD and the
+   * home buttons) and a glow per bulb; every mode with a ceiling has them (runs, the Daily, both match halves, the
+   * online race, education, the home screen). Decoration only: no body. Off season they go. T14b: while they show,
+   * the HUD wears its white drop shadow (setHudShadow).
+   */
+  refreshLights() {
+    const want = this.lightsSeason() && this.textures.exists(ADVENT_ART.lights);
+    if (want && !this.fairyLights) {
+      const L = T.advent.lights;
+      const lay = fairyLightsLayout(this.fieldW, T);
+      this.fairyLights = this.add.tileSprite(0, lay.y, this.fieldW, lay.height, ADVENT_ART.lights).setOrigin(0, 0).setTileScale(lay.tileScale).setDepth(L.depth);
+      const n = lightsBulbs(0, this.fieldW, T).length + L.bulbs.length; // room for one more tile's worth as they scroll
+      this.lightGlows = Array.from({ length: n }, () =>
+        createGlow(this, 0, 0, { key: 'light-glow', radius: L.glowPx, fadeFrac: 0.5 }).setBlendMode('ADD').setDepth(L.depth + 0.1).setVisible(false),
+      );
+      this.setHudShadow(true);
+      this.syncLights(this.time?.now ?? 0);
+    } else if (!want && this.fairyLights) {
+      this.fairyLights.destroy();
+      this.fairyLights = null;
+      for (const g of this.lightGlows) g.destroy();
+      this.lightGlows = [];
+      this.setHudShadow(false);
+    }
+  }
+
+  /**
+   * One frame of the lights: the strip scrolled as far as the ceiling (its tilePositionX in display px over the tile
+   * scale, so the lights ride the villi and never jump), each bulb's glow on its bulb, twinkling (none under reduced
+   * motion: a still frame), and the HUD icons' white copies on their icons.
+   */
+  syncLights(now) {
+    const strip = this.fairyLights;
+    if (!strip) return;
+    const scroll = (this.ceiling?.tilePositionX ?? 0) * (this.ceiling?.tileScaleX ?? 1);
+    strip.tilePositionX = scroll / T.advent.lights.scale;
+    const still = this.lightsReduced ?? prefersReducedMotion();
+    const bulbs = still ? [] : lightsBulbs(scroll, this.fieldW, T);
+    this.lightGlows.forEach((g, k) => {
+      const b = bulbs[k];
+      if (!b) {
+        g.setVisible(false);
+        return;
+      }
+      g.setPosition(b.x, b.y).setTint(b.color).setAlpha(twinkleAlpha(b.i, now, T)).setVisible(true);
+    });
+    const sh = T.advent.lights.shadow;
+    for (const { icon, copy, local } of this.hudShadows ?? []) {
+      if (!icon.active || !copy.active) continue;
+      copy.setTexture(icon.texture.key, icon.frame?.name).setDisplaySize(icon.displayWidth * sh.iconGrow, icon.displayHeight * sh.iconGrow);
+      if (local) copy.setPosition(icon.x + sh.dx, icon.y + sh.dy);
+      else copy.setPosition(icon.x + sh.dx, icon.y + sh.dy).setVisible(icon.visible);
+    }
+  }
+
+  /**
+   * T14b (Michael's idea at Gate A sheet 11): a faint white drop shadow on the HUD so it stands apart from the lights:
+   * the score, the level line and the pickup counts by setShadow (no WebGL need), their icons by a soft white copy
+   * behind each. Off: no shadow, the copies gone.
+   */
+  setHudShadow(on) {
+    const sh = T.advent.lights.shadow;
+    for (const k of ['scoreText', 'dailyHud', 'probioticText', 'coinText', 'beanText']) {
+      const txt = this[k];
+      if (!txt?.setShadow) continue;
+      if (on) txt.setShadow(sh.dx, sh.dy, sh.color, sh.blur, true, false);
+      else txt.setShadow(0, 0, 'rgba(0, 0, 0, 0)', 0, false, false);
+    }
+    for (const { copy } of this.hudShadows ?? []) copy.destroy();
+    this.hudShadows = null;
+    if (!on) return;
+    // A white silhouette: Phaser 4's fill tint (setTintFill is gone); without TintModes, no copy.
+    const fill = globalThis.Phaser?.TintModes?.FILL;
+    const white = (icon) => (fill === undefined ? null : this.add.image(icon.x, icon.y, icon.texture.key, icon.frame?.name).setTint(0xffffff).setTintMode(fill).setAlpha(sh.iconAlpha));
+    const out = [];
+    for (const icon of [this.coinIcon, this.beanIcon]) {
+      if (!icon?.texture) continue;
+      const copy = white(icon);
+      if (!copy) continue;
+      copy.setDepth((icon.depth ?? 20) - 0.05);
+      out.push({ icon, copy, local: false });
+    }
+    if (this.probioticHud?.list && this.probioticIcon?.texture) {
+      const copy = white(this.probioticIcon);
+      if (copy) {
+        this.probioticHud.addAt(copy, 0); // inside the pulsing container, behind the icon
+        out.push({ icon: this.probioticIcon, copy, local: true });
+      }
+    }
+    this.hudShadows = out;
+  }
+
+  /** A world pickup's texture (plan 17, 1.11; D2): its December twin once loaded, else the stock one. The kind stays the item's data. */
+  itemTexture(kind) {
+    return twinKey(kind, this.skin, 0, (k) => this.textures.exists(k));
+  }
+
+  /** A stock icon's December texture and size factor (plan 17, T12; seasonIcon): the stock off season or before its file lands. */
+  seasonIcon(stock) {
+    return seasonIcon(stock, this.skin ?? { twins: {}, fartFrames: [] }, (k) => this.textures.exists(k), (k) => this.textures.get(k).getSourceImage().width);
+  }
+
+  /** Show `stock`'s icon on Image `img` in a px x px box, as its December twin when it has one (the twin at the stock's scale). */
+  setSeasonIcon(img, stock, px) {
+    const { key, mul } = this.seasonIcon(stock);
+    if (img.texture.key !== key) img.setTexture(key);
+    return img.setDisplaySize(px * mul, px * mul);
+  }
+
+  /** The HUD's probiotic and bean icons and the bean button's, in the current skin (T12: December everywhere, Michael, 27 Nov). */
+  skinHud() {
+    if (this.probioticIcon) this.setSeasonIcon(this.probioticIcon, this.probioticStock ?? 'probiotic', T.hudProbioticSize);
+    if (this.beanIcon) this.setSeasonIcon(this.beanIcon, 'bean', T.hudInventory.iconPx);
+    if (this.beanButtonIcon) this.setSeasonIcon(this.beanButtonIcon, 'bean', 56);
+  }
+
+  /** Re-skin a pickup already in the field (the flight landed, or the season changed): the texture, then its circle for that frame. */
+  skinItem(item) {
+    const kind = item.getData('kind');
+    if (!item.active || !kind || item.getData('baseScale') === undefined) return;
+    const key = this.itemTexture(kind);
+    if (item.texture.key === key || item.anims?.isPlaying) return;
+    item.setTexture(key);
+    const body = scaledCircleBody(item.frame.width, item.getData('baseScale'), item.getData('radius'));
+    item.body?.setCircle(body.radius, body.offset, body.offset);
+  }
+
+  /**
+   * December's snow on a bottom pipe's cap (plan 17, 1.11): one Image per bottom pipe, at the cap's top-left plus
+   * TUNING.advent.snowCap, drawn at spriteDisplayScale over the pipe (moving or still) and under the ground and
+   * ceiling strips; it goes when its pipe does. Nothing off season or before the file has landed.
+   */
+  addSnowCap(pipe) {
+    const key = this.skin.snowCap;
+    if (!key || !this.textures.exists(key) || pipe.getData('snow')) return;
+    const snow = this.add.image(0, 0, key).setOrigin(0, 0).setScale(T.spriteDisplayScale).setDepth(0.5);
+    pipe.setData('snow', snow);
+    pipe.once('destroy', () => snow.destroy());
+    snow.once('destroy', () => pipe.active && pipe.setData('snow', null));
+    this.placeSnowCap(pipe, snow);
+  }
+
+  placeSnowCap(pipe, snow) {
+    snow.setPosition(pipe.x - T.pipeWidth / 2 + T.advent.snowCap.ox, pipe.y + T.advent.snowCap.oy);
+  }
+
+  /** Each frame after the physics step: every snow layer onto its pipe (the pipes scroll and some bob). */
+  placeSnowCaps() {
+    for (const pipe of this.pipes?.getChildren() ?? []) {
+      const snow = pipe.getData('snow');
+      if (snow?.active) this.placeSnowCap(pipe, snow);
+    }
   }
 
   collectBean(bean) {
     if (this.state !== 'playing' || !bean.active) return;
     if (this.effects.holdingBean()) return; // already carrying one: let it float past
     perfMark(PERF_TAGS.pickup);
-    const ghost = this.add.image(bean.x, bean.y, 'bean').setScale(T.spriteDisplayScale).setDepth(12);
+    const ghost = this.add.image(bean.x, bean.y, bean.texture.key).setScale(T.spriteDisplayScale).setDepth(12);
     this.tweens.add({
       targets: ghost,
       scale: T.spriteDisplayScale * 1.4,
@@ -4205,8 +5082,8 @@ export class Play extends Phaser.Scene {
     this.setMultiplierBadge(this.effects.hasPostbiotic());
     this.setProbioticPulse(show);
     if (!show) return;
-    const icon = this.effects.hasPostbiotic() ? 'postbiotic' : 'probiotic';
-    if (this.probioticIcon.texture.key !== icon) this.probioticIcon.setTexture(icon).setDisplaySize(T.hudProbioticSize, T.hudProbioticSize);
+    this.probioticStock = this.effects.hasPostbiotic() ? 'postbiotic' : 'probiotic';
+    this.setSeasonIcon(this.probioticIcon, this.probioticStock, T.hudProbioticSize); // the gingerbread in December (T12)
     this.probioticText.setText(`×${n}`);
     const { textX, iconX } = hudRightLayout(this.col.x + this.col.width, this.probioticText.width, { iconSize: T.hudProbioticSize });
     this.probioticText.setX(textX);
@@ -4320,8 +5197,10 @@ export class Play extends Phaser.Scene {
   collectItem(item) {
     if (this.state !== 'playing' || !item.active) return;
     perfMark(PERF_TAGS.pickup);
-    if (this.effects.powerActive()) return; // farting: fiber, probiotic, bacteria and boxes scroll straight through
     const kind = item.getData('kind');
+    // Farting: fiber, probiotic, bacteria and boxes scroll straight through. The Advent piece is caught all the
+    // same (plan 17, finding 7): a fart would otherwise cost the run its only piece.
+    if (this.effects.powerActive() && kind !== ADVENT_ART.piece) return;
     const kernel = Boolean(item.getData('kernel')); // read before destroy() takes the item's data with it
     const itemPair = item.getData('pair'); // a box's pair (spawnBandItem)
     const { x, y } = item;
@@ -4335,7 +5214,9 @@ export class Play extends Phaser.Scene {
       onComplete: () => ghost.destroy(),
     });
     item.destroy();
-    if (kind === 'mystery') {
+    if (kind === ADVENT_ART.piece) {
+      this.takeAdvent();
+    } else if (kind === 'mystery') {
       this.collected.mystery += 1;
       // A draw that cannot do anything (a bean with a full bag) becomes fiber; pairsLeft matters only to test mode's
       // skip now (no box holds one since plan 28, 4.6). A match
@@ -4454,6 +5335,15 @@ export class Play extends Phaser.Scene {
     if (!has('sparkle')) this.load.audio('sparkle', 'assets/sfx/Sparkle_Restore.mp3' + V); // a revive's streak wins everything back
     if (!has('bubble-pop')) this.load.audio('bubble-pop', 'assets/sfx/Bubble_Pop.mp3' + V); // the challenge question's bubble touched (plan 34)
     if (!has('flush')) this.load.audio('flush', 'assets/sfx/ToiletFlush_Win.mp3' + V); // a two-player GO
+    // In December the twins too (plan 17, 1.10; D8, D15), never in Boot: the stock frame shows until they land.
+    for (const [key, file] of Object.entries(this.skin.files)) if (!this.textures.exists(key)) this.load.image(key, file + V);
+    // And December's sounds (2.7a, 2.15a), in season only (the season's skin has files).
+    if (Object.keys(this.skin.files).length) {
+      if (!has('advent-found')) this.load.audio('advent-found', 'assets/sfx/Advent_PieceFound.mp3' + V); // a piece caught
+      if (!has('advent-blizzard')) this.load.audio('advent-blizzard', 'assets/sfx/Advent_Blizzard.mp3' + V); // under a storm (looped)
+      if (!has('advent-add')) this.load.audio('advent-add', 'assets/sfx/Advent_PieceAdd.mp3' + V); // a piece flies into the book (2.15a)
+      if (!has('advent-lock')) this.load.audio('advent-lock', 'assets/sfx/Advent_PieceLock.mp3' + V); // it lands in its cell
+    }
     if (!this.load.list.size) {
       registerWorker();
       return; // all in already
@@ -4464,6 +5354,7 @@ export class Play extends Phaser.Scene {
       this.load.off('complete', complete);
       this.events.off('shutdown', cut);
       if (arrived) registerWorker();
+      if (arrived) this.game.events.emit('advent-art'); // every Play shows the twins that just landed (reapplySkin)
     };
     const complete = () => done(true);
     const cut = () => done(false);
@@ -4857,7 +5748,7 @@ export class Play extends Phaser.Scene {
     const rows = {};
     for (const row of L.rows) {
       const button = createButton(this, row, '', nameStyle, { depth: 28 });
-      const icon = this.add.image(row.iconX, row.y, icons[row.id]).setDisplaySize(row.icon, row.icon).setDepth(29);
+      const icon = this.setSeasonIcon(this.add.image(row.iconX, row.y, icons[row.id]), icons[row.id], row.icon).setDepth(29); // December's twins (T12)
       const extra = row.id === 'superBean' ? this.add.text(row.iconX + row.icon / 2 - 4, row.y + 18, `×${T.beans.superBeans}`, { ...TEXT_STYLE, fontSize: '28px' }).setOrigin(0.5).setDepth(29) : null;
       const name = this.add.text(row.nameX, row.y, '', nameStyle).setOrigin(0, 0.5).setDepth(29);
       const price = createCoinText(this, row.priceX, row.y, nameStyle, { align: 'right', depth: 29, px: 40 }); // the kernel and the price, or "Bag full"
@@ -4941,7 +5832,7 @@ export class Play extends Phaser.Scene {
     marker.strokeRoundedRect(L.x - R.pitchPx / 2 + 6, L.y - L.height / 2 + 14, R.pitchPx - 12, L.height - 28, 16);
     const strip = faces.map((f) => {
       const face = mysteryFace(f);
-      const parts = [this.add.image(0, 0, face.key).setDisplaySize(R.iconPx, R.iconPx)];
+      const parts = [this.setSeasonIcon(this.add.image(0, 0, face.key), face.key, R.iconPx)];
       if (face.count) parts.push(this.add.text(R.iconPx / 2 - 6, R.iconPx / 2 - 8, `×${face.count}`, { ...TEXT_STYLE, fontSize: '28px' }).setOrigin(0.5));
       return this.add.container(L.x, L.y, parts).setDepth(31);
     });
@@ -5035,7 +5926,7 @@ export class Play extends Phaser.Scene {
     if (face.emoji) {
       parts.push(this.add.text(0, 0, face.emoji, { fontFamily: 'sans-serif', fontSize: '72px' }).setOrigin(0.5));
     } else {
-      parts.push(this.add.image(0, 0, face.key).setDisplaySize(2 * T.items.itemRadius, 2 * T.items.itemRadius)); // the pickup's size, whatever the texture's
+      parts.push(this.setSeasonIcon(this.add.image(0, 0, face.key), face.key, 2 * T.items.itemRadius)); // the pickup's size, whatever the texture's (its December twin, T12)
       if (face.count) parts.push(this.add.text(T.items.itemRadius, 0, `×${face.count}`, { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5));
     }
     const reveal = this.add.container(x, y, parts).setDepth(depth);
@@ -5106,6 +5997,7 @@ export class Play extends Phaser.Scene {
     this.endBoost();
     this.endSweep(); // a death mid-sweep leaves the pairs in place, opaque
     this.state = 'dead';
+    this.calmAir(); // a storm ends with the run (plan 17, 2.7)
     this.markHowToSeen(); // a finished run counts as having seen this build
     this.setCharged(false);
     this.setMultiplierBadge(false); // no pulsing ×2 under the game-over panel
@@ -5126,8 +6018,12 @@ export class Play extends Phaser.Scene {
       if (report) this.versusHost()?.onRunEnded?.(this.player, { score: this.score, level: this.level, pipesPassed: this.pipesPassed, won: this.won });
       return;
     }
-    // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync.
-    if (this.runIsTest) return;
+    // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync. A practice December
+    // Daily (a Pretend date) still tells Over what its Advent piece did, from the session's sandbox (plan 17, 2.6).
+    if (this.runIsTest) {
+      if (this.runIsDaily) this.dailyResult = { replay: this.dailyReplay(this.dailyRunDay), best: null, newBest: false, advent: this.adventOutcome() };
+      return;
+    }
     // Nor, before its public release, does an education run (plan 21): its cards were saved answer by
     // answer; no best, top list, career counters or career badges. Its own badges and average grade
     // (plan 22) stay on this device with the cards (recordEducation). A won run waits (plan 26): its
@@ -5157,8 +6053,13 @@ export class Play extends Phaser.Scene {
         // streak day was never counted (it waits for the first pipe), so nothing is taken back.
         if (this.daily) this.dailyStore.release(this.daily.day, this.daily.playerId);
       } else {
+        // December (plan 17, 2.3): every final goes to the board, which keeps the day's best (the queue
+        // swaps in a better one not yet sent); off season the day's one attempt, queued once.
+        const replay = this.dailyReplay(this.daily?.day);
+        const before = this.daily ? this.dailyStore.best(this.daily.day, this.daily.playerId) : null;
         const rec = this.saveDailyAttempt(true);
-        if (rec) this.dailyQueue.add({ ...rec, name: this.save?.name ?? null });
+        if (rec) this.queueDaily(rec, this.save?.name ?? null, replay);
+        this.dailyResult = { replay, best: rec?.best?.score ?? rec?.score ?? null, newBest: Boolean(rec && (!before || rec.score > before.score)), advent: this.adventOutcome() };
         this.recordCareer('daily');
       }
       this.dailySync = this.syncLeaderboard();
@@ -5252,7 +6153,9 @@ export class Play extends Phaser.Scene {
    * Over (this.runBadges), their claims queued. A run that crossed no pipe adds nothing (plan 47).
    */
   recordCareer(mode) {
-    const day = utcDayKey();
+    // A Daily run's own day (plan 17, 2.11): a 31 Dec run that ends after midnight still earns its tree, as the server's
+    // grace takes its claim; every other run, the real day.
+    const day = mode === 'daily' && isDayKey(this.dailyRunDay) ? this.dailyRunDay : utcDayKey();
     // Pipes passed: fart and skipped pairs included (as for levels); a Daily Dump counts only the pairs flown that day.
     const pipes = mode === 'daily' && this.daily ? Math.max(0, this.pipesPassed - this.daily.startPipes) : this.pipesPassed;
     // Not a run (plan 47, call A): no counter, no run time (🧱 / 🏃), no streak day, no badge.
@@ -5265,6 +6168,7 @@ export class Play extends Phaser.Scene {
     facts.boxesBought = this.runBoxesBought ?? 0;
     facts.closeShave = mode === 'single' && levelCloseShave(this.closeCallsByLevel, (lv) => levelPipes(lv, this.tune));
     facts.fourOfAKind = Boolean(this.fourOfAKind);
+    facts.adventTrees = this.adventTrees(day); // the 🎄 / 🌲 badges (plan 17, 2.6b)
     const now = Date.now();
     const { prevRunAt, winTimes } = this.careerStore.markRun(now, mode === 'single' && Boolean(this.won));
     facts.daysSinceLastRun = daysBetween(prevRunAt, now); // 🧱 null on this device's first run
@@ -5280,9 +6184,9 @@ export class Play extends Phaser.Scene {
    * already reaches (a veteran's, or bests pulled from the board) and lifetime badges on the
    * current totals. Unlocked quietly, their claims queued.
    */
-  creditCareer() {
-    const day = utcDayKey();
-    const earned = evaluate({ totals: this.careerStore.totals(this.save?.id ?? null), facts: bestFacts(this.save?.top), unlocked: this.careerStore.unlocked(), day });
+  creditCareer(day = utcDayKey()) {
+    // The Advent trees too (plan 17, 2.6b): a set finished on another device (advent_progress) is credited here.
+    const earned = evaluate({ totals: this.careerStore.totals(this.save?.id ?? null), facts: { ...bestFacts(this.save?.top), adventTrees: this.adventTrees(day) }, unlocked: this.careerStore.unlocked(), day });
     this.careerStore.unlock(earned, day);
   }
 
@@ -5628,7 +6532,8 @@ export class Play extends Phaser.Scene {
     this.ghost.setAlpha(alpha).setVisible(g.visible && alpha > 0);
     if (!g.visible) return;
     this.ghost.setPosition(g.x, g.y).setAngle(g.angle);
-    if (this.ghost.texture.key !== g.frame && this.textures.exists(g.frame)) this.ghost.setTexture(g.frame);
+    const frame = twinKey(g.frame, this.skin, 0, (k) => this.textures.exists(k)); // the rival's stock key, in this side's skin
+    if (this.ghost.texture.key !== frame && this.textures.exists(frame)) this.ghost.setTexture(frame);
   }
 
   /**
@@ -5655,7 +6560,7 @@ export class Play extends Phaser.Scene {
     return {
       state: this.state, levelBreak: Boolean(this.levelBreak), ended: Boolean(slot.ended), won: Boolean(this.won), flaps: this.flapCount ?? 0,
       distance: this.distance, speed: this.state === 'playing' ? this.scrollSpeed() : 0, y: this.poop.y, vy, angle: this.poop.angle,
-      frame: this.poop.texture.key, alpha: this.poop.alpha, level: this.level, pipesPassed: this.pipesPassed, score: this.score,
+      frame: this.poopStockKey, alpha: this.poop.alpha, level: this.level, pipesPassed: this.pipesPassed, score: this.score,
       deaths: slot.deaths ?? 0, levelWins: slot.levelWins ?? 0, finalFirst: Boolean(slot.finalFirst),
     };
   }
@@ -5735,7 +6640,7 @@ export class Play extends Phaser.Scene {
     slot.distance = this.distance;
     slot.y = this.poop.y;
     slot.angle = this.poop.angle;
-    slot.frame = this.poop.texture.key;
+    slot.frame = this.poopStockKey; // the stock key: the other side maps it through its own skin
     slot.alpha = this.poop.alpha; // the respawn blink, so the ghost blinks too
   }
 
@@ -5751,8 +6656,8 @@ export class Play extends Phaser.Scene {
       this.dailyStore.release(rec.day, rec.playerId);
       return;
     }
-    const done = this.dailyStore.save({ ...rec, final: true });
-    if (done) this.dailyQueue.add({ ...done, name: done.playerId === this.save?.id ? (this.save?.name ?? null) : null });
+    const done = this.dailyStore.save({ ...rec, final: true }); // the day's best is kept (plan 17, 2.3)
+    if (done) this.queueDaily(done, done.playerId === this.save?.id ? (this.save?.name ?? null) : null, this.dailyReplay(done.day));
     // Its summary was lost with the page: a short row stands behind the score (plan 30).
     if (done && done.playerId) {
       try {
@@ -5763,12 +6668,19 @@ export class Play extends Phaser.Scene {
     }
   }
 
+  /** Queue a final Daily Dump score: in December (`replay`) in place of a lower one not yet sent, else once a day (plan 17, 2.3). */
+  queueDaily(rec, name, replay) {
+    const entry = { ...rec, name };
+    return replay ? this.dailyQueue.addBetter(entry) : this.dailyQueue.add(entry);
+  }
+
   /** The game-over panel after deathToOverMs; `won` swaps its headline, `test` hides Share. A match has no Over: the Versus scene shows the result. */
   showOver(won = false) {
     if (this.match) return;
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      const daily = this.runIsDaily ? { day: this.dailyRunDay ?? null, level: this.level, playerId: this.save?.id ?? null, practice: this.runIsTest, sync: this.dailySync ?? null } : null;
+      // replay (plan 17, 2.3): a December Daily, open again; best / newBest: the day's best after this run (none for practice).
+      const daily = this.runIsDaily ? { day: this.dailyRunDay ?? null, level: this.level, playerId: this.save?.id ?? null, practice: this.runIsTest, sync: this.dailySync ?? null, replay: this.dailyReplay(this.dailyRunDay), best: this.dailyResult?.best ?? null, newBest: Boolean(this.dailyResult?.newBest), advent: this.dailyResult?.advent ?? null } : null;
       const pipes = this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed;
       const personalBest = Boolean(this.personalBest && !this.runIsTest && !this.runIsDaily);
       const badges = this.runIsTest ? [] : [...(this.runBadges ?? [])];
@@ -6118,6 +7030,7 @@ export class Play extends Phaser.Scene {
       this.ground.tilePositionX += this.scrollSpeed() * dt;
       this.ceiling.tilePositionX += this.scrollSpeed() * dt;
     }
+    this.syncLights(this.time?.now ?? 0); // December's fairy lights ride the ceiling and twinkle (1c.9)
 
     if (this.state === 'playing') {
       // A Daily Dump attempt is rewritten whenever the score or pipe count moved, so a reload loses nothing.
@@ -6143,6 +7056,7 @@ export class Play extends Phaser.Scene {
           this.applyScroll();
         }
       }
+      this.tickAir(delta); // December: a Daily's storm and the wind on the snow (plan 17, 2.7)
       if (this.effects.endedPower()) this.endPower();
       if (this.graceLeftMs > 0) this.graceLeftMs = Math.max(0, this.graceLeftMs - delta);
       this.distance += this.scrollSpeed() * dt;
@@ -6225,18 +7139,9 @@ export class Play extends Phaser.Scene {
     // Each walk is over a copy (eachChild, plan 35, 1.3): destroy() takes a child out of the group's live
     // array, and the one after it (a pair's mate leaves on the same frame) would miss this frame.
     eachChild(this.pipes.getChildren(), (pipe) => {
-      // A moving pair: the gap centre follows its sine (frozen while paused, like the items); the
-      // mate stays gapH below. Arcade reads the sprites' positions each step, so the bodies follow.
+      // A moving pair (frozen while paused, like the items): stepPipeMove.
       const move = pipe.getData('move');
-      if (move && this.state === 'playing') {
-        const elapsed = pipe.clockMs + delta;
-        pipe.clockMs = elapsed;
-        const gapY = gapBobY(elapsed, move.baseY, move.amp, move.periodMs, move.phase, move.holdMs); // rests at each end (pipeMove.holdMs)
-        const gapH = pipe.getData('gapH');
-        pipe.y = gapY - gapH / 2;
-        const mate = pipe.getData('mate');
-        if (mate?.active) mate.y = gapY + gapH / 2;
-      }
+      if (move && this.state === 'playing') this.stepPipeMove(pipe, move, delta);
       if (this.state === 'playing' && pipe.getData('scoring') && !pipe.getData('passed') && hasPassed(pipe.x, T.pipeWidth, this.poop.x)) {
         pipe.setData('passed', true);
         perfMark(PERF_TAGS.pipe);

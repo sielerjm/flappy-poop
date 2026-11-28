@@ -82,8 +82,9 @@ lighter pink (`pipe-moving`, painted once by `createLightTexture` in `ui/pipeSha
 `pipeMove.lightenFrac`): `rollPipeMove` at spawn (after the item and bean
 draws; never for the centred pair after a fart; amplitude clamped into `gapBounds`), `gapBobY` in
 `update()` moving both columns, a probiotic / bacteria in that pair riding the gap centre (`bob: 'pair'`).
-`pipeMoveShiftPx` is the gap's shift during one column crossing; `tests/tuning.test.js` keeps every
-row under three quarters of the poop's clearance (and every period ≥ 4 s) so the motion alone can
+`pipeMoveShiftPx` is the gap's shift during one column crossing (its `driftShare`: a December storm slows the
+drift with the scroll, `Play.stepPipeMove`); `tests/tuning.test.js` keeps every
+row, in calm air and at every storm level, under three quarters of the poop's clearance (and every period ≥ 4 s) so the motion alone can
 never clip a centred poop. One spacing after a level's last pair a checkered finish
 line (generated texture, plain Image) scrolls in and no pair follows it outside a
 fart; crossing it (any level but the last) bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
@@ -147,7 +148,9 @@ never relabel the player's leaderboard row). Settings then grows a test section:
 start level for the next run (`testRunStart`: the pairs before it passed, a par score), Invincible (on by
 default; pipes, ceiling and floor cannot kill), power-up buttons (`grantTest` → `openMystery`) and Exit.
 A test run (`runIsTest`, latched for the whole run) records nothing: no legacy best, top list or
-leaderboard sync, and Over says so. A 🧪 badge shows while it is on.
+leaderboard sync, and Over says so. A 🧪 badge shows while it is on. Settings' **Date** row (plan 17, 1.6;
+`registry.testPretendDay`, session-only, counted only while `testMode` is on) steps the *decorations'* clock a day at a time
+(`nextPretendDay`; back on today it is the real date again), so December can be seen in November. It moves only the *practice* Daily's day (plan 17, 2.2: `dailyDay`; see the Daily Dump's December exception); every stored or posted day stays on `utcDayKey()`.
 
 It is a side project by Michael Sieler (gut-microbiome researcher), hence the
 theme. The logical field is 1280 px tall and as wide as the window's aspect asks,
@@ -266,7 +269,7 @@ seeds and rebuilds (pure; the bye pattern holds, so the server's bracket check s
 (pointer events followed on the window, `setPointerCapture` in a try, the row under the pointer marked
 `.drop`) swaps the dragged seed with the one it lands on, 🎲 is `reshuffle`. After the first race the
 view is the match list with the next match. **Play** restarts Versus (`restartWith`) on
-`createMatch(seed, { levelPipes: tournament.levelPipes, names, tournament: { round, matchId } })`: the
+`createMatch(seed, { day: dailyDay(registry), levelPipes: tournament.levelPipes, names, tournament: { round, matchId } })`: the
 halves run on the shorter table (`Play.tune` = `withLevelPipes(T, match.levelPipes)`, 10 / 25 / 35 / 35 /
 35 / 35 / 50 = 225 pairs, two players too; every level-length helper in Play takes `this.tune`, never bare
 `T`, guarded by `tests/scenes.test.js`), the join title is the round, `versusName` puts the competitors'
@@ -352,7 +355,7 @@ centre on the ?'s row; it breathes under a halo until today is played, `Play.ref
 opens the `Daily` overlay, whose one button follows the player: Create user (the save panel opens
 over it; `Play.setSaveState` redraws it), Play (`Play.startDaily`), See today's result
 (`Play.showDailyResult`), or Practice in test mode (a test run: never claimed or posted). One play
-per player, not per device: before offering Play (and once per page load and day for the glow),
+per player, not per device (off season; in December the Daily is open all day, see below): before offering Play (and once per page load and day for the glow),
 `Play.checkDailyOnServer` reads the caller's own row off `daily_board`; a score posted from another
 device becomes this device's final attempt ("Checking…" meanwhile; offline it falls back to Play,
 and the server still keeps only the first post). A daily
@@ -380,6 +383,144 @@ blank (no board lookup) and shows `dailyNotCounted` in the countdown's place.
 The server (`submit_daily_score`) takes today or yesterday (UTC), checks the day's level with its
 own FNV-1a (`daily_level` = the client's `dailyLevel`), keeps the first post per player and day
 ('duplicate' after), and follows the score board's name claim.
+**December exception** (plan 17, Stage 2a, v0.36.0): when `adventSeason` holds for the run's own day, the Daily stays open
+all day, every final is posted and the board keeps each player's best of the day (`submit_daily_score`'s December branch
+raises the row; `dailyQueue.addBetter` replaces a queued entry only with a higher score; `dailyStore.best(day, playerId)`
+is the best on this device, an optional `best` on the one `flappyPoop.daily` record that old builds ignore). Off season it
+is one attempt as before. `dailyPlayedToday` keeps its meaning (flown today: the halo, the board footer);
+`Play.dailyOpen()` is what lets the popup and Over start another December Daily. The practice Daily follows Pretend date
+(`dailyDay`: course, level, the popup's day); a test run still posts and stores nothing.
+
+**Christmas** (December, plan 17, Stage 1, v0.32.0): decoration only. No SQL, no new server call, no change to a hitbox,
+a rule or a score. (Stage 2a and 2b, v0.36.0, add the Advent pieces, the trees, the open December Daily and the storms,
+below; storms change a run's feel, on the Daily and, since T16, in every match.) The season is all of December UTC (`TUNING.advent`: `seasonMonth` 12, `seasonLastDay` 31;
+`adventSeason(day, T)`). **The clock** is `dailyNow(reg)` / `dailyDay(reg)` (`src/logic.js`): the real time, or in test mode the
+Pretend date at the real time of day. Decorations and the practice Daily read it; the Daily Dump's store, queue and posts keep
+`utcDayKey()`, so a test run on a pretend date posts nothing and the real course never moves. Every scene reads the same
+day through the game registry.
+- **🎅 for the 🌞.** `Play.pickVisitSanta` picks a new 🎅 each time the home screen is built, never the last one
+  (`pickSanta(Math.random, last, plainSantas(santas))`, never the course RNG). The changing 🎅 draws only from the plain pool `plainSantas`
+  (`src/logic.js`: 🎅 🤶 🧑‍🎄). `TUNING.advent.santas` has 18 variants (Santa, Mrs. Claus, Mx Claus, plain and five skin tones);
+  `supportedSantas` drops, once per page, any variant this device draws as two glyphs (`registry.santas`, which keeps every supported
+  variant: the picker's list, and what makes a saved choice valid). The last pick lives in `flappyPoop.santa` (`LEADERBOARD.santaKey`; the
+  registry when storage is blocked). Old builds never read that key; the new build treats a missing or unknown value as no last pick.
+  **Choose your 🎅** (`src/scenes/SantaPicker.js`, overlay id `santapick`): it opens only over the Daily popup, from the title 🎅, which is
+  tappable only when this device draws 2 or more variants. A saved choice (`flappyPoop.santaChoice`, `LEADERBOARD.santaChoiceKey`) shows on
+  every visit; there is no way back to the changing 🎅 once one is saved. A red dot (`TUNING.advent.santaDot`; seen flag
+  `flappyPoop.santaDot`, `LEADERBOARD.santaDotKey`) sits on the home 🎅 and the Daily title's 🎅 until the picker is first opened. Both keys
+  survive Clear user and Sign out; `Play` owns both stores. `Play.applySanta()` redraws the home button and `Daily.setGlyph()` (title,
+  body, pictures line, note) with no restart. In December the Daily popup has a (?) at its top left that opens a help card (i18n
+  `dailyHelp`; not an overlay; `Daily.close()` takes the card down first). The glyph is `dailyGlyph(day, santa, T)` / `dailyGlyphNow`. The seven strings that
+  named the 🌞 (`itemDailyDetail`, `itemLeaderboardDetail`, `dailyTitle`, `dailyBody`, `dailyNeedName`, `dailyBoardJoin`, `statsDaily`)
+  carry `{daily}`, filled by `fillDaily(text, glyph)` (`src/i18n.js`; `howToItems(locale, { daily })`); the loading splash keeps its literal 🌞. The splash's bouncing poop wears its Santa hat in December: `index.html` holds a second, hidden `img.splash-poop-xmas` (`assets/advent/poop-santa.png`) and its own small guarded script swaps which image shows when the real UTC month is 12 or the URL has `?xmas=1` (a December class on the box; `tests/html.test.js`).
+- **Twins** (`src/advent.js`, `ADVENT_ART`: `twins`, `fartFrames`, `snowCap`, `files`). The map is data in its own module, not in
+  `config.js`, because `tests/push.test.js` stamps a copy of `config.js` alone and `config.js` names no asset file. `seasonalSkin(day, T, art)`
+  gives the twins in season and nothing off season; `twinKey(stock, skin, fartFrame, has)` gives the twin once it has loaded, else the stock key.
+  **The stock key stays the state:** `Play.poopStockKey` (set by `setPoopTexture`) is what the race snapshot, the match slot and the ghost
+  send, and each side maps it through its own skin, so a December player and an off-season rival see each other correctly.
+  The twins are cut on the stock body's centre and scale (`tools/process_art.py`, same-body-scale mode), so the hitbox circle is the stock one.
+  The fart (and a start boost) alternates `fartFrames` on one loop clock (`Play.ensureFartClock`, the stink frames' rate, paused with the run).
+  The crash shows `poop-dead-santa` too (the stock key `poop-dead` stays the state). Pickups swap on the world only (`itemTexture`, `skinItem`: candy cane, gingerbread
+  drawn 5 % taller than the probiotic at 185 px ink height, hatted bacterium, and the bean with holly: a 346 px canvas on the stock bean's centre, set with `kind: 'bean'` in the bean's data, so
+  the 48 px hitbox circle stays on the bean and the leaves add nothing). Since T12 (1c.8, Michael, 27 Nov: December art everywhere) the twins also show at the HUD's probiotic and bean icons and the bean button
+  (`skinHud`), the shop's rows, mystery reel and reveal, Over's cells and card, the share card and How to play: `seasonIcon(stock, skin, has, width)` in `src/logic.js`
+  gives the twin's key and `mul` (its frame width over the stock's, so a box sized for the stock draws the item at its usual size), and `Play.seasonIcon` / `Play.setSeasonIcon(img, stock, px)`
+  serve the scenes. The emoji sites, Settings' test powers and the loading cards stay stock. Each bottom pipe
+  gets a snow layer on its cap (`addSnowCap`, `placeSnowCaps` on `postupdate`; offset `TUNING.advent.snowCap`).
+- **Loading.** In season the twins join `loadLazyAudio`'s one flight (never Boot; art under new names needs no `?v=` bump). When it lands, the game
+  emits `advent-art` and every Play instance re-applies its skin (`reapplySkin`), so the stock frame shows until then. The new PNG
+  literals reach `sw.js`'s `FILES` through the push's stamp.
+- **Home and every mode.** `refreshSeasonHome`: the Happy Bowelidays! image above the title on every December day, English for every locale
+  (`countdownLine(day, locale, T)` returns `{ text, image }`; text "N sleeps till Christmas" 1 to 24 Dec, "Merry Christmas!" on the 25th, none
+  after; `readyLayout`'s `countdown` and `bowelidays` boxes, drawn only), and the snowfall. The line and the image stay on the home screen
+  (never a match half's); the snow falls in every mode: runs, the Daily, both match halves, the online race and 📚 runs
+  (`src/ui/snowfall.js`: `createSnowfall`, `makeFlakes`, `stepFlakes`, one renderer for later storms; nothing under `prefers-reduced-motion`).
+- **Smoke.** `tools/headless_check.mjs` pins the page's and its own clock (`SMOKE_PIN_DAY` 2026-11-15, `pinOffset`, `clockStubSource`; `--date=YYYY-MM-DD`
+  overrides every pin), because every older check expects stock art and the 🌞; the `christmas` section runs on a 5 Dec pin and back (it also checks the holly bean: world `bean-holly`, the stock hitbox circle, the HUD bean wearing its twin; the plain-pool rotation; and the 🎅 choice: both red dots and their reload, the (?) card, the picker by a real tap and the pad, Save, B keeping the saved one, both keys removed at the end),
+  and the `advent` section runs each of its parts on its own pin (5 Dec a real Daily, 7 Dec a storm, test mode on a Pretend 5 Dec). Its
+  book checks (plan 17, 2.18): the glowing button opens the book, the piece flies into its cell, the flight asks for its chimes and
+  the landing for its click, the glow is off after closing, a book closed mid-flight does not land the piece twice on the next open,
+  the Daily window's 🧩 line opens the book and closing goes back to the Daily window, and the 🧩 board tab reads a stubbed
+  `advent_board` with the trees beside the names. Stage 1c's checks (1c.11): the stored Quality score (a catch of the day's own piece keeps it, a catch-up piece none),
+  the odds (no piece before pipe 5), the day's clock, the December twins at Over, the share card and How to play, and the fairy lights in both halves of a race.
+  Checked by `tests/advent.test.js`, `tests/adventScene.test.js`, `tests/assets.test.js` and `tests/tools.test.js`.
+- **Advent pieces** (Stage 2b, v0.36.0; `TUNING.advent.piece`: `count` 24, `minPair` 5, `startChance` 0.05, `stepChance` 0.01,
+  `missChance` 0.01, `todayWeight` 3). Piece k comes out on k Dec. A December Daily run (`runIsDaily` and `adventSeason`) offers one: `rollAdvent` in
+  `start()` picks the target from the backlog (`adventBacklog`, `rollAdventTarget`; today's piece weighs `todayWeight`) and the spawn pair
+  with a per-attempt RNG, never `course.*`. Odds model (1c.5, Michael, 27 Nov): from pipe 5 on (`minPair`, the slot after pipe 5) a free band slot offers
+  the piece with a chance of `startChance` at that pair, rising `stepChance` a pair and `missChance` for each of the day's runs that ended without it
+  (`adventPairChance`, capped at 1); one draw at the run's start (`adventSpawnRoll`, one `rng()` call) fixes the first pair it may show, so no pair is
+  guaranteed. The piece is caught even mid-fart (`takeAdvent`) and never sits in a
+  storm's band slots (`stormCovers`). No piece when nothing is left to find. **Found-day store** `flappyPoop.advent.<season>`
+  (`createAdventStore`, `{ found: { piece: day }, miss, seen, quality }`, `miss` holding the day's misses and its Quality clock; the device's own record, so a test run or a Pretend date uses a
+  session sandbox, and Sign out clears it, `clearAdventStores`). **Piece Quality clock** (1c.Q): private and recording only (nothing drawn, sent or in What's new; plan 54 shows it later): `adventClock*` and `adventHidden` in `src/logic.js` keep the day's chance of still being hidden, `Play.adventPairHere` records a showing and `adventQualityScore` stores the score (an integer 0 to 10000) of a day's own piece (`tests/adventQuality.test.js`). **Queue** `flappyPoop.adventQueue` (`createAdventQueue`, max 48): one
+  batch a player a sync, drained after `drainDaily` and before `drainCareer`, each piece waiting for its run's post (`waitsForDailyRun`);
+  `submit_advent_piece` answers `{ stored, kept, refused }` (`kept` stays in the queue while its day is today or yesterday, `refused`
+  leaves it and stays in the book, `too soon` keeps the batch). `advent_progress` is merged once a page load (a union, the earlier day
+  per piece). The look: the home Advent button (S14, 0.36.0; see **The Advent book** below; it replaced the home chip), the Daily window's two lines
+  ("🧩 N of 24 found · M left", today's piece found or not), Over's found line, a 🎁 after the name on 🌞 rows
+  (`normalizeDailyRow`'s `gift`). Old builds ignore both new keys and the new `best` field.
+  Tests: `tests/adventPieces.test.js`, `tests/adventDaily.test.js`.
+- **The Advent book** (Stage 2c, v0.36.0; `src/scenes/Advent.js`, overlay id `advent`). A 4 x 6 picture that assembles as pieces are found
+  (`TUNING.advent.puzzle`: `cols`, `rows`, `cellPx` 332, `order`, one shuffle shared by every player: piece k fills cell `order[k - 1]`).
+  Locked cells are flat silhouettes (`TUNING.advent.book`: panel size, `lockFill`, a gold star on a piece found on its own day); its
+  only text is "N of 24 found" (`adventBookCount`) and, after a piece lands, "N of 24 to go!" (`adventToGo`, `bookAnim.toGo`; T7). A (?) at the top left (`adventBookLayout.help`, mirroring the ✕) opens the book's card (`adventBookHelp`, `src/ui/helpCard.js`, shared with the Daily window's). The book shows no version line. The pure parts are in `src/logic.js`: `adventBookLayout` (the panel, the ✕, the 24
+  slots), `adventBookPieces(found, season, t)` (which pieces fill which cells) and `adventBookSeason(day, t, hasPieces)` (December's own
+  season; after December, last season **read-only** while this device owns a piece, else no book). The sheet
+  `assets/advent/advent-puzzle.png` (4 x 6 cells of 332 px, 256 colours, cut by `tools/advent_puzzle.py`) loads in the Advent scene's
+  own `preload`, never in Boot, so the picture costs nothing until the book opens.
+  **Doors:** the home **Advent button** (top left, "N/24" on its corner, `TUNING.advent.button`; `chromeIntent`'s `advent` input, ready
+  screen or over the Daily window; it glows while a piece is unseen), the **Daily window's 🧩 line** (closing the book goes back to the
+  Daily window), and the **save panel's "🧩 Advent" button** (wears 🎄 or 🌲 once this device's pieces earn it, `adventTreeGlyph`; closing
+  goes back to the panel). **Seen flag:** the found-day store keeps `seen` (`unseen()` lists pieces the book has not shown, by day found;
+  `markSeen(pieces)` records them; a piece merged from another device arrives unseen), and that drives the glow.
+  **Add-piece animation** (`TUNING.advent.bookAnim`: `appearMs`, `flyMs`, `fadeMs`, `flights` 3): on open, the latest `flights` unseen
+  pieces fly from the grid's centre to their cell (chimes, then the lock click on landing, `lockDelayMs` 120 after it); older ones land at once; under reduced motion
+  none flies; a tap inside the book skips the flight. A book closed mid-flight leaves nothing for its next open (the flight and its timer
+  reset in `create` and on shutdown). **Sounds** `Advent_PieceAdd.mp3` and `Advent_PieceLock.mp3` (`TUNING.advent.sound`: `addVolume`,
+  `lockVolume`), lazy-loaded in December like the other two. **The 🧩 board** is the Leaderboard's fifth tab (after 📚), shown while the
+  book has a season: `fetchAdventBoard` (RPC `advent_board`; rows `{ rank, name, pieces, onDay, award, me, total }`, null on junk) and
+  `Leaderboard.showAdvent` (rank, name with the server's tree, pieces found; the footer is your place, or how to join).
+  Tests: `tests/adventBook.test.js`, plus the smoke's `advent` section.
+- **Fairy lights** (Stage 1c, 1c.9, T14; the HUD shadow T14b). `assets/advent/fairy-lights.png` (`ADVENT_ART.lights`, `TUNING.advent.lights`) tiles along the ceiling villi all
+  December: `Play.refreshLights` makes a tile sprite (`fairyLightsLayout`) and a glow per bulb (`lightsBulbs`, `twinkleAlpha`), `syncLights` scrolls them with the ceiling each frame.
+  Decoration only, no body; under reduced motion the strip stays and the bulbs neither glow nor twinkle; every mode with a ceiling has them (runs, the Daily, both
+  match halves, the online race, education, home). While they show, `setHudShadow` gives the HUD texts a faint white shadow and its icons a soft white copy.
+  `tests/fairyLights.test.js` (with `tests/support/png.js`: the strip's seam), plus the smoke's lights checks.
+- **The trees** (v0.36.0). `advent_tree_2026` (🎄, all 24 by 24 Dec) and `advent_pine_2026` (🌲, by 31 Dec) are `seasonal`
+  `ACHIEVEMENTS`, quest rows in `achievement_defs` (1 to 31 Dec, claims close 2 Jan), claimed by the game from the found-day store
+  (`adventAward`, mirrored by the server's `advent_award`; `claim_achievements` has no award check) and judged on a Daily run's own
+  day. The Profile's quests drop the other tree once one is earned (`hiddenBy`). `tests/adventTrees.test.js`.
+- **Storms.** `course.storm(n)` (salt 17) on the shared course, so every run of a day meets the same storms
+  (`TUNING.advent.storm`; `stormStartsHere`, `stormPhase`). **Where** (`runStorms`; T16, Michael 27 Nov): a December Daily,
+  and every match (Versus, a tournament race, the online race) whose `match.day` is in December while `storm.matches` is on;
+  Singleplayer waits for 2027, education and test mode's plain runs stay calm. A match's day is fixed when it is made
+  (`createMatch(seed, { day })`, kept by `resetMatch`): Versus's lobby and the tournament's races take `dailyDay(registry)`,
+  the online race the UTC day of the server GO (`plan.startAt`), the same on both devices and after a reload.
+  `Play.stormRunFor` walks a Daily from its level's start; a match walks its level table (`Play.tune`) from the match's start
+  (a rewound race pre-walks the pairs before its level, `walkStorm`), from level `fromLevel` 3 (`firstPair` counted from its
+  start; levels 1 and 2 stay calm), each storm and its banner inside one level (none on a level's first pair, none in its last
+  `linePairs` 3), and `startLevelBreak` calls `calmAir`. Each split-screen half is its own Play, so the banner, the pull and
+  the drift are per half; both halves meet the storms at the same pairs. The switch, the schedule and pull knobs, the season and
+  the course's storm draws are in `protocolVersion` while the switch is on (off, it is the pre-T16 `82aaad2b`). The banner "Snowstorm ahead!" shows one pair ahead; while it blows
+  `stormFlapMul` (`flapMul` 0.92) and `stormScrollMul` (`scrollMul` 0.7, a drag of 30 % on every level: Michael, 27 Nov, plan 17 1c.4)
+  pull on the flap and the scroll (`doFlap`, `scrollSpeed`), and the moving pairs' drift clock runs at the same share
+  (`stepPipeMove`), so a gap shifts no more during a crossing than in calm air; eased in and out over `rampMs`, lifted
+  during a fart and back after it (the 700 ms grace after a fart that ends in a storm still clears a column).
+  The snow gets one wind input (`setAir`, `setStorm` in `src/ui/snowfall.js`; `tickAir` in Play). The storm's look (H2, 1c.6) is a headwind right to left
+  at about 20 degrees (`angleDeg`), 200 extra flakes (`extra`) and 4 swirls that pull flakes in (`swirlPull`); in every December run a fart blows the snow
+  right to left (`fartWind`, a super fart `superWind`) and draws each fast flake as a streak (`fartTau`, `superTau`, `snow.streak`; a super fart's softly).
+  The look (`st.air`, by the storm's pairs alone) is split from the pull on the flap and scroll (`st.level`, lifted during a fart). `tests/adventStorm.test.js`.
+- **Sounds.** `Advent_PieceFound.mp3` (a piece caught, `foundVolume` 0.54) and `Advent_Blizzard.mp3` (`blizzardVolume` 0.7; a loop faded in from the banner and out as the storm
+  ends; `setBlizzard` on `stepLoop` in `src/sound.js`, stopped in `calmAir`, paused in `pauseEffects`; in split screen one loop
+  for both halves on the Versus host, `mixBlizzard`, at the louder half's hum, held by the shared pause, stopped when both are
+  calm; the online race's host answers false, so its one half keeps its own), both in `loadLazyAudio`, in season only
+  (`TUNING.advent.sound`); credits in CREDITS.md.
+- **Server** (`db/schema.sql`, one migration with 2b's trees): `utc_today()` and `advent_season(date)` (internal), the table
+  `advent_pieces`, the anon `submit_advent_piece(text, jsonb)`, `advent_progress(text, int)`, `advent_board(text, int, int, int)` and the
+  internal `advent_award(text, int)`; `submit_daily_score` (December branch), `daily_board` (now with `gift`), `release_run` and
+  `fold_player` (the December max; the pieces' union) changed; `claim_achievements` reads today from `utc_today()`.
+  `tests/adventSchema.test.js` (PGlite).
 
 **Player profiles and achievements** (👤, 2026-11-11, v0.14.0, plan `.claude/plans/Archive/08-user-stats.plan.md`):
 every player has a **public** profile (`scenes/Stats.js`, chromeIntent `'stats'`), opened by the save
@@ -467,7 +608,7 @@ and Esc: Play's `onlineRepeat(event)`, plan 39 5.2b, AUD-149 / AUD-144), tests/r
 **Service worker** (plan 35, Stage 3, 0.29.0): `sw.js` at the root, scope the game's folder
 (`registration.scope`). It gives an offline launch, and a launch more than 10 minutes after the last
 (GitHub Pages' `max-age=600`) no longer revalidates every module and asset one by one; only index.html
-goes to the network. About 4.7 MB per build in Cache Storage. Its page side is `src/swClient.js`.
+goes to the network. About 6.2 MB per build in Cache Storage (149 files; December's 0.4 MB picture, the 57 KB fairy lights and sounds are in it, and `tests/swStamp.test.js` caps a build at 6.5 MB, raised from 6 MB in 0.36.0; Michael kept that cap at the push, 27 Nov). Its page side is `src/swClient.js`.
 - **Stamp.** `npm run push` writes `BUILD` and `FILES` into `sw.js` (`tools/sw_stamp.mjs`): `FILES` pairs
   every URL exactly as the page asks for it with the SHA-256 of its bytes: index.html, every module
   (`?h=<content hash>`, through the import map `index.html` also gets), art and sounds (`?v=<VERSION>`),
@@ -1156,7 +1297,10 @@ src/
                             levelSyncDelayMs (the beat after both
                             reach a line before a tap can start the next level),
                             respawn (crashMs, glideMs,
-                            blinkMs, blinkCycles, blinkAlpha).
+                            blinkMs, blinkCycles, blinkAlpha). TUNING.advent = Christmas (plan 17):
+                            seasonMonth / seasonLastDay, bowelidays (widthFrac, y, aspect),
+                            countdownPx, snow, snowCap, santas; LEADERBOARD.santaKey
+                            ('flappyPoop.santa', the last 🎅 shown).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: createResync (plan 35, 1.4: send(),
                             one at a time; online() sends, hidden() / shown() send after a hide
@@ -1204,7 +1348,7 @@ src/
                             glowStops, sprite angle, VERSION (bump it when art
                             under an existing file name changes: Boot's ?v=; every
                             bump needs a CHANGELOG entry), versionText(locale,
-                            version) = the "v0.5.16 beta" line every overlay shows, retry
+                            version) = the "v0.5.16 beta" line About, How to play and Settings show (`VERSION_LINE_OVERLAYS`), retry
                             lockout, levels (levelPipes, levelEnd, levelFor, isFinalLevel,
                             levelSpeed, levelColor, levelProgress,
                             levelBarLayout, lerpColor),
@@ -1251,11 +1395,25 @@ src/
                             shop / breaking args and 'shop' input; test mode:
                             isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
                             settingsLayout (Settings panel 1010 px + rows, taller with the
-                            test section, 1240). Fully unit-tested.
+                            test section, 1240; its Pretend date row, plan 17: dayDown / dayUp),
+                            Christmas (plan 17): isDayKey, shiftDayKey, dailyNow / dailyDay / nextPretendDay
+                            (the decorations' clock), SUN, adventSeason, seasonalSkin / twinKey,
+                            countdownLine, dailyGlyph / dailyGlyphNow, pickSanta, supportedSantas,
+                            readyLayout's countdown and bowelidays boxes; Stage 1c: seasonIcon, adventToGo,
+                            VERSION_LINE_OVERLAYS, the odds (adventPairChance, adventSpawnRoll), the Quality clock
+                            (adventClock*, adventHidden, adventQualityScore), the lights (fairyLightsLayout,
+                            lightsBulbs, twinkleAlpha). Fully unit-tested.
   changelog.js              What's new data, NO Phaser/DOM: CHANGELOG (one entry per
                             version, newest first: version, date like LAST_UPDATED's
                             day, notes per locale), changelogEntry, changelogNotes
                             (bulleted block for a locale, English fallback).
+  advent.js                 Christmas art data (plan 17), NO Phaser/DOM: ADVENT_ART (`twins`: stock key →
+                            December key for the poop poses, fiber, probiotic and bacteria; `fartFrames`;
+                            `snowCap`; `files`: every key's full 'assets/advent/….png' literal, so the service
+                            worker precaches it, plus the Bowelidays image). Outside config.js on purpose:
+                            tests/push.test.js stamps a copy of config.js alone. tests/advent.test.js.
+                            (Stage 2 adds the piece, storm and sound logic to logic.js, TUNING.advent.piece /
+                            storm / sound / puzzle / book / bookAnim / button, and LEADERBOARD.adventKey / adventQueueKey; see "Christmas".)
   achievements.js           Achievements and lifetime counters (plan 08), NO
                             Phaser/DOM: ACHIEVEMENTS (id, kind 'run' / 'lifetime' /
                             'seasonal', glyph, title / desc i18n keys, n, counters,
@@ -1445,7 +1603,7 @@ src/
                             course; what a half's distance reads with a pair a given
                             lead ahead), matchHostKey (the scene key that hosts a
                             match: match.hostKey, else 'Versus'), VERSUS_EMOJI;
-                            createMatch's options (levelPipes, names, tournament)
+                            createMatch's options (levelPipes, names, tournament, day)
                             ride a rematch. Fully unit-tested
                             (tests/versus.test.js).
   online.js                 Online race (🌐, plan 39) pure parts, NO Phaser/DOM/network:
@@ -1455,7 +1613,9 @@ src/
                             typed and bounded, extras dropped) and createInbox (state
                             only newer, other events once in any order, a reload's new
                             sid retires the old); protocolVersion (fnv1a32 of the
-                            events, the race tuning and a shared-course probe; derived)
+                            events, the race tuning and a shared-course probe, and
+                            December's storm knobs, season and draws while
+                            advent.storm.matches is on; derived)
                             and compareVersions (the older app updates);
                             presencePayload / parsePresence (join-time only);
                             agreedWidth (the smaller field, item 14); formatCode /
@@ -1519,7 +1679,16 @@ src/
                             dev host (debugHandleAllowed) the test project `?onlinetest=
                             <code>` stored in this browser (encodeDevProject /
                             devProjectFrom; `=off` forgets it) under its own session and
-                            trust keys (DEV_PROJECT_KEY). ONLINE_RPCS includes finish_match
+                            trust keys (DEV_PROJECT_KEY). devBoardProject / applyDevBoard
+                            (src/main.js, before the boot): on a dev host the page has no
+                            board at all (LEADERBOARD.dataApi emptied; the public key stays,
+                            so the board, the posts, career, 📚 sharing and online play
+                            send nothing), unless this browser holds a test project (the
+                            board uses it too) or the address says `?board=live` (kept for
+                            the tab in sessionStorage, BOARD_LIVE_KEY; `?board=off`
+                            forgets it; stripped from the address); globalThis.__flappyBoard
+                            says 'off' / 'test' / 'live'. A public host keeps the live board.
+                            ONLINE_RPCS includes finish_match
                             and online_history, plus friend_list, send_friend_request,
                             respond_friend_request, remove_friend, block_user and
                             unblock_user (3.1), online_beat and friend_statuses (3.2), send_invite, invite_list,
@@ -1744,7 +1913,12 @@ src/
                             release drops an unfinished 0-pipe record, spent is
                             final or pipes above 0; plan 48),
                             createDailyQueue (flappyPoop.dailyQueue, one entry per
-                            player and day, outcome 'nameTaken' kept),
+                            player and day, outcome 'nameTaken' kept; addBetter, plan 17),
+                            createAdventStore / createAdventQueue (flappyPoop.advent.<season>,
+                            flappyPoop.adventQueue; the store's `seen` list with unseen() /
+                            markSeen(), S14), submitAdventPiece, fetchAdventProgress,
+                            fetchAdventBoard (RPC advent_board, the 🧩 tab),
+                            clearAdventStores (plan 17, Stage 2),
                             submitDailyScore ('ok' / 'keep' / 'rejected' /
                             'nameTaken'), fetchDailyBoard (rows with me and total).
                             Profiles (plan 08): createCareerStore (flappyPoop.career:
@@ -1876,7 +2050,8 @@ src/
                             eduProfileRows (your own profile's learning streaks and
                             highest level unlocked, plan 26 A2),
                             countText (a coin count beside the corn kernel: "12", or
-                            ∞ for a test run's purse; locale-free).
+                            ∞ for a test run's purse; locale-free), fillDaily (the {daily}
+                            placeholder: the 🌞, or December's 🎅; plan 17), the countdown strings.
                             Player copy lives here (not in logic.js). See
                             TRANSLATION_NOTES.md.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
@@ -1953,6 +2128,13 @@ src/
                             the rainbow, alpha / scale tweened by Play.
                             createRectGlow(): rounded-rect halo (canvas shadow
                             with the box cut out) for the home user button's "Sign in" prompt.
+    helpCard.js             The (?) button and its card (plan 17, 1b.2e, 1c.7): helpButton(scene, x, y, onTap),
+                            helpCard(scene, text, onClose), a rounded panel over a dimmed window with its own ✕;
+                            used by the Daily window and the Advent book.
+    snowfall.js             Snow (plan 17): createSnowfall(scene, area, snow, rng) (36 white dots drifting down,
+                            `TUNING.advent.snow`; { setVisible, destroy }; null under prefers-reduced-motion,
+                            prefersReducedMotion), makeFlakes, stepFlakes (pure). One renderer for the home screen and
+                            every run in December, and for the storms (setAir, setStorm: a denser second pool, wind, swirls, a fart's streaks).
     tray.js                 Phaser wrapper around trayLayout: leaderboard (🏆) /
                             mute / settings bottom-right, pause directly above the
                             cog, plus bottom-left info, language (🌐), feedback (💬).
@@ -2263,6 +2445,11 @@ src/
                             the scene's shutdown; every use checks cache.audio.exists, so
                             playSample falls back to its synth and the flush is guarded in
                             Versus and OnlineRace; tests/lazyAudio.test.js)
+                            (December, plan 17: this.skin = seasonalSkin(dailyDay(registry)), poopStockKey
+                            (the state; setPoopTexture shows its twin), the fart clock, itemTexture / skinItem,
+                            addSnowCap / placeSnowCaps, reapplySkin on the game's 'advent-art' event,
+                            refreshSeasonHome (countdown, Bowelidays image, snowfall), pickVisitSanta,
+                            dailyGlyph, refreshSeason (a Pretend date stepped); see "Christmas")
                             (+ 'respawn' in a match, between a crash and its restart,
                             and in an education run, from a crash through its revive
                             quiz).
@@ -2823,7 +3010,7 @@ src/
                             first removes this scope's service worker and our caches,
                             else keeps both: see "Service worker"), About link, version. Tap outside the panel
                             closes (overlayOutsideHit), same as X. The panel is 1010
-                            px (plan 35, 4.2: the "Skip to home when loaded" row and its hint, the label fitted by fitScale); in test mode 1240 px with the test section (start level ◀ ▶,
+                            px (plan 35, 4.2: the "Skip to home when loaded" row and its hint, the label fitted by fitScale); in test mode 1240 px with the test section (start level ◀ ▶, the Pretend date ◀ ▶ (plan 17, 1.6; gold while set),
                             Invincible, TEST_POWERS buttons live only while a test run
                             is paused, Exit → setTestMode(false) + scene.restart()).
     About.js                Overlay: How to play + feedback links, then the
@@ -2849,7 +3036,7 @@ src/
                             after a link's scene.restart), then a link per other
                             version ("Latest · " on the newest), inside
                             createScrollView(). Opened from About's Updated line or
-                            any overlay's version line (chromeIntent 'changelog',
+                            the version line of About, How to play or Settings (chromeIntent 'changelog',
                             ui/overlayStack.js openChangelog); ✕ / Esc / B / tap
                             outside return to the overlay underneath.
     Language.js             Overlay: English / 简体中文 picker (🌐 or L).
@@ -2864,6 +3051,22 @@ src/
                             the version line; streakLine ("🔥 Current streak = n",
                             Play.streakNow('daily'); plan 34, round 2) in the note's
                             place unless a note shows. refresh() redraws it after a save.
+                            In December its 🧩 line opens the Advent book (chromeIntent
+                            'advent'); closing the book comes back here.
+    SantaPicker.js          Overlay (plan 17, Stage 1b; overlay id 'santapick'): choose your
+                            🎅 from every supported variant. Opens only over the Daily popup
+                            (its title 🎅); Save stores LEADERBOARD.santaChoiceKey, B keeps the
+                            saved one. chromeIntent rows; in OVERLAY_SCENES and smoke OVERLAYS.
+    Advent.js               Overlay (plan 17, Stage 2c; overlay id 'advent'): the Advent
+                            book, a 4 x 6 picture filled as pieces are found. Opens from the
+                            home Advent button, the Daily window's 🧩 line and the save
+                            panel's 🧩 Advent button (onClose returns to the opener). Loads
+                            assets/advent/advent-puzzle.png in its own preload (never Boot).
+                            Layout adventBookLayout, pieces adventBookPieces, season
+                            adventBookSeason (src/logic.js); TUNING.advent.puzzle / book /
+                            bookAnim / button / sound. Flies the latest 3 unseen pieces in
+                            (a tap skips, none under reduced motion), then markSeen().
+                            tests/adventBook.test.js.
     (every overlay builds this.focus from pressable() items, ✕ first then its
                             rows (the Quiz is the exception: the challenge offer's Try it and
                             Decline lead, the ✕ last; AUD-068), and calls focus.show(), which only shows under a
@@ -2895,6 +3098,9 @@ src/
                             name on the three boards opens that player's profile
                             over the board (sv.link: a tap, not a drag; only while
                             the board is on top); the – rows are not names.
+                            A fifth tab, 🧩 ('advent'), after 📚, only while the Advent book
+                            has a season (showAdvent: rank, name + tree, pieces from
+                            fetchAdventBoard; adventBoardTitle / Header / You / Empty / Join).
                             A fourth tab, 📚 ('education'), only when
                             Play.educationAvailable() (tabList; leaderboardLayout takes
                             the tab count): showEducation draws rank, name, grade
@@ -3014,6 +3220,10 @@ assets/                     Contract PNGs + README.md (the art contract).
   poop-stink-falling1.png poop-stink-falling2.png poop-scared.png
   poop-stink-scared1.png poop-stink-scared2.png poop-fart.png
   poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png coin.png
+                            (advent/: the 17 December files (plan 17), listed in src/advent.js, plus
+                            advent-puzzle.png, the Advent book's 4 x 6 sheet, 332 px cells, 256 colours,
+                            loaded by scenes/Advent.js only; each README row
+                            names its stock frame and body rule; tests/assets.test.js checks them)
                             (coin.png: the golden corn kernel's spin, 12 frames of
                             106x106 side by side (1272x106), loaded as a spritesheet;
                             the rest are 2x their drawn size (plan 35, 2.1): the poop
@@ -3051,6 +3261,10 @@ assets/                     Contract PNGs + README.md (the art contract).
   sfx/Book_Close.mp3        (lazy) An education quiz being left.
   sfx/Sparkle_Restore.mp3   (lazy) A revive's full streak winning everything back.
   sfx/Bubble_Pop.mp3        (lazy) The poop touching a challenge question's ❓ bubble (the offer opens on it, with no book sound).
+  sfx/Advent_PieceFound.mp3 (lazy, in season, plan 17) A December piece caught (a twinkle).
+  sfx/Advent_Blizzard.mp3   (lazy, in season, plan 17) A storm's loop, faded in from the banner and out as it ends.
+  sfx/Advent_PieceAdd.mp3   (lazy, in season, plan 17) The Advent book's chimes as a piece flies in.
+  sfx/Advent_PieceLock.mp3  (lazy, in season, plan 17) The lock click as it lands in its cell.
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant
@@ -3546,6 +3760,28 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             v2 migration, merge, name rules, wrapped paste, empty
                             scores, throwing storage) + helper coverage, best 6,
                             the optional h (hand) key
+  advent.test.js            Christmas (plan 17): isDayKey / shiftDayKey, dailyNow / dailyDay / nextPretendDay
+                            (the Pretend date only in test mode), adventSeason, dailyGlyph, fillDaily and the seven
+                            {daily} strings, pickSanta / supportedSantas, the twin map and its files, the dead
+                            frame's twin, Settings' Date row layout.
+  adventDaily.test.js       Plan 17, 2.2 and 2.3: the practice Daily on the Pretend date, the open December Daily, the
+                            store's best, addBetter, drain removing only what it sent.
+  adventPieces.test.js      Advent pieces: one a run, free slot only, target from the backlog, the odds model (no piece before pipe 5), the found-day
+                            store and queue, the 'kept' / 'refused' / too-soon rules, the merge, Over's lines, the chip.
+  adventStorm.test.js       Storms: course.storm, phase, no piece in a storm, the pull per pair, the drag lifted by a fart and
+                            the grace after one, the drift clock (stepPipeMove), the fart wind, the blizzard; T16: the
+                            gate by mode (runStorms), a match's level rules and schedule, stormRunFor, the break's calm.
+  adventQuality.test.js     The piece Quality clock (1c.Q): adventSpawnRoll's keep, the clock's hidden / shown / caught steps,
+                            the stored score; recording only.
+  fairyLights.test.js       The fairy lights (1c.9): layout, bulbs, twinkleAlpha, the strip's seamless ends (tests/support/png.js).
+  adventTrees.test.js       The 🎄 / 🌲 entries on found-day stores (adventAward).
+  adventSchema.test.js      The 2a + 2b SQL in PGlite: utc_today, advent_season, pieces, progress, board, award, the
+                            December branch of submit_daily_score, daily_board's gift, fold_player, the tree claims.
+  adventBook.test.js        The Advent book (plan 17, 2.15 to 2.16): adventBookLayout / Pieces / Season, chromeIntent's advent
+                            input, the overlay on the stack, the sheet in its own preload, the found-day store's seen flag,
+                            fetchAdventBoard, the 🧩 tab, adventTreeGlyph, the save panel's button.
+  adventScene.test.js       The countdown line, and the December skin on the real Play prototype: the stock key
+                            as state, the fart and boost alternation, the one lazy flight and its re-apply.
   ready.test.js             readyLayout boxes inside the field, non-overlapping,
                             clear of the bobbing poop; readyHit centre / gap / profile;
                             the 📚 glyph's box (educationInfo: thumb-sized, clear of
@@ -3726,7 +3962,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             the look finding it free), a relaunch's stale record, Create
                             beside a live race
   onlineDevProject.test.js  onlineProjectConfig and ?onlinetest: dev hosts only, own keys,
-                            off, blocked storage
+                            off, blocked storage; devBoardProject / applyDevBoard: no board
+                            on a dev host unless a test project or ?board=live (per tab)
   onlineSignOut.test.js     Sign out and a Sign in as another player leave online play only on
                             a device holding a session (Play.onlineSessionHeld /
                             onlineLeave); otherwise no client load
@@ -3941,7 +4178,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             claim, the race's own level table, tournamentPayload
   tournamentNames.test.js   guest names: the word lists, every name fits a username,
                             rollGuestName (seeded, rerolled in the lobby)
-  support/                  not test files (the glob is tests/**/*.test.js): bootTrap.js
+  support/                  not test files (the glob is tests/**/*.test.js): png.js (a small PNG reader for
+                            the asset tests), bootTrap.js
                             (index.html's inline trap on a fake window and document, its one
                             import() a call to `importSplash`), scenes.js
                             (a scene in Node: Object.create(Scene.prototype), sinks,
@@ -4004,7 +4242,10 @@ tools/
                             their lumen-side tips undulate (BACK_WAVE on the
                             fringes, FRONT_WAVE in the strips' TIP_ZONE). Must
                             not overwrite poop.png. Run only when you intend to.
-  process_art.py            Crops assets/src/ drawings into 192x192 contract PNGs (SIZE 192;
+  advent_preview.py         Gate A mock-up sheets for the December art (plan 17): draft art on the real game art at
+                            in-game size, with checks that every twin keeps its stock body edges; writes outside the tree.
+  process_art.py            Crops assets/src/ drawings into 192x192 contract PNGs (SIZE 192; plan 17 adds the santa twins:
+                            same-body-scale mode for the poop set, --body-like for the bacterium, --anchor for the snow;
                             drawn at spriteDisplayScale 0.5 → 96 logical px, art at 2x);
                             runs oxipng -o 4 --strip safe after Pillow's optimized save
                             when oxipng is installed;
@@ -4065,10 +4306,10 @@ tools/
                             --no-verify bypasses (AUD-156).
   sw-off.js                 The kill switch: copy it over sw.js and push (see "Service worker").
                             Deletes flappy-poop-* caches, unregisters itself, reloads its pages.
-  sw_check.mjs              node tools/sw_check.mjs: the worker in a real browser, 50 checks. It
+  sw_check.mjs              node tools/sw_check.mjs: the worker in a real browser, 51 checks. It
                             stamps its own temp copy of the tree, serves it on 127.0.0.1:8036 (open
                             with ?sw) and starts its own headless Chrome with the jsDelivr CDN and
-                            *.supabase.co unresolvable. Covers registration after the lazy sounds,
+                            *.supabase.co unresolvable. Check 1's probe aims at the shipped Supabase URL, read in Node, and a check confirms the page booted with no board on a dev host (763a8ce). Covers registration after the lazy sounds,
                             an offline launch, a same-VERSION push, a VERSION bump, Reload online
                             and offline, ?nosw, the kill switch, and that no cross-origin request
                             passes through the worker. Run it, like the smoke, through smoke-runner
@@ -4111,13 +4352,18 @@ tools/
                             sessions, fourteen PASS/FAIL lines (line 12: friends and status; line 13:
                             invites; line 14: teardown; a test project expects 13 of 14, live 14 of 14); each session unlinks itself; never a
                             secret key. tests/onlineLiveCheck.test.js covers it.
-  headless_check.mjs        npm run smoke [url] [--list] [--only=a,b]: the checks run in
+  headless_check.mjs        npm run smoke [url] [--list] [--only=a,b] [--date=YYYY-MM-DD]: the checks run in
                             named sections (SECTIONS, in run order, each printing its check
                             count); --list shows them; --only runs those plus what they
                             need (needs omitted = every earlier section; [] = passes alone,
                             set only once shown), skipping and never reordering; the
                             hermetic stubs, the boot wait and the leaderboard muzzle sit
-                            outside every section, and so does startEducationRun (plan 26
+                            outside every section (the live guard too: *supabase.co* blocked
+                            before the first load, the page booted with no board, and a
+                            last check that no request or socket reached LIVE_HOST), and so does the clock pin (plan 17: SMOKE_PIN_DAY,
+                            pinOffset, clockStubSource; the page's Date and this process's Date.now run
+                            from the pinned noon UTC, a section may pin its own day, --date overrides all;
+                            the `christmas` section checks December on a 5 Dec pin), and so does startEducationRun (plan 26
                             A2): every education section starts its runs through it (a
                             settled ready screen, a start, the 📚 popup's Play once its
                             click lockout is over; a check fails when the run is not an
@@ -4271,7 +4517,8 @@ tools/
                             board's and the pilot's calls are stubbed at boot
                             (globalThis.__edu / __eduAnswer), like the career's.
                             OVERLAYS lists Quiz; NEEDS_RUN keeps the ready-screen
-                            overlay loops off it. Plan 35's skip-splash (4.2: the setting off then on, Continue pressed by itself, the failed splash not) and its other sections: phaser-fallback
+                            overlay loops off it. NEEDS_DAILY does the same for
+                            santapick, which opens only over the Daily popup. Plan 35's skip-splash (4.2: the setting off then on, Continue pressed by itself, the failed splash not) and its other sections: phaser-fallback
                             (the page reloaded with the CDN blocked, then stalled, boots from
                             assets/vendor/; both blocked, the splash reads Couldn't load and a
                             tap reloads; then back on the CDN) and error-card (an error thrown
@@ -4311,7 +4558,7 @@ tools/
                             the wait, a no and Resend in the same room. Plan 39's online-join-link (4.3): the
                             real page opened at ?join= takes the code out of the address, opens 🌐, keeps it
                             through a failed sign-in, joins on Retry; a gone room says the link expired.
-                            Full smoke: 44 sections, 1002 checks.
+                            Full smoke: 46 sections, 1113 checks.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -4510,7 +4757,8 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
 - New scene → `src/scenes/`, register in the `scene:` array in `src/main.js`.
   An overlay also needs an entry in `OVERLAY_SCENES` (`src/ui/overlayStack.js`,
   which `Play.chromeArgs` and `Play.padTop` read), an `isTopOverlay(this)` guard
-  in its `close()`, a version line that calls `openChangelog(this)`, a `case` in
+  in its `close()`, no version line (only About, How to play and Settings draw
+  one, `VERSION_LINE_OVERLAYS` in `src/logic.js`; plan 17, T15), a `case` in
   `Play.applyChrome`, rows in `tests/chrome.test.js`, an entry in `OVERLAYS` in
   `tools/headless_check.mjs` (the smoke opens every overlay), and a `this.focus`
   ring built from `pressable()` items (✕ first) with `focus.show()` so a
@@ -4612,13 +4860,20 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `?onlinetest=<code>` (`onlineProjectConfig`) works on dev hosts only, keeps its own session
   and trust keys, and the repo never holds a test project's URL or key
   (`tools/online_test_link.mjs` builds the link from an env file).
+- Nothing run on a dev host writes to the live project (24 Nov 2026: a test score from a local
+  page reached the live board). A page on this machine, the LAN or under a driver boots with no board
+  (`devBoardProject`); only `?board=live` in the address turns live on, for that tab, and smoke,
+  previews and agents never use it. The smoke also blocks `*supabase.co*` before its first load and
+  fails if any request or socket reaches the live host (`LIVE_HOST`, `liveHits`); a section may add
+  to that block list, never drop `*supabase.co*` from it (tests/tools.test.js). A preview driver
+  blocks it too.
 - Backend change → edit `db/schema.sql`, `npm run schema:stamp`, list a new anon
   function and its undo line in the file's header (a new argument on an existing function: add it
   last with a default, `drop function if exists` the old signature just before `create`, and move its
   grants, so a call never finds two; plan 28 5.2's board pages did this), run it by hand in the Supabase
   SQL editor before `npm run push` (which checks), keep `LEADERBOARD.maxScore` and
   the schema's score cap in step, and `TUNING.levels.lastLevel` and the 🏆 level cap
-  (1 to 7) too (tests/leaderboard.test.js checks both). An **online** function (plan 39) is
+  (1 to 7) too (tests/leaderboard.test.js checks both), and `run_limits()` (a run row's hard limits: pairs per level, points a pair and a shop buy, a race's line bonus, the fastest pace) with `TUNING` (tests/runLimits.test.js). An **online** function (plan 39) is
   granted to `authenticated` and revoked from `public, anon` (one `revoke … from public, anon;` plus
   `grant  execute … to authenticated;` pair), is `security definer` with `set search_path = ''` and
   qualified names, checks `auth.uid()` first, and is listed in the header's `--   * online name(...)`

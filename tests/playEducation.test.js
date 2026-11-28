@@ -984,7 +984,7 @@ test('AUD-031: a language change mid-break redraws the break row in the new lang
     levelTitle: text(), levelHint: text(), levelSubHint: text(), eduBreakBoxes: null, pauseText: text(), pauseHint: text(), readyTitle: text(), ...NO_NEW_LEFT,
     breakQuitArmedAt: null, time: { now: 0 }, levelBar: { setLabel() {}, setProgress() {}, setColor() {} }, eduDueText: null, bracketButton: null,
     shopButton: text(), effects: { coins: () => 3 },
-    fadeBackground() {}, refreshProfile() {}, refreshTestBadge() {}, runIsDaily: false,
+    fadeBackground() {}, refreshProfile() {}, refreshTestBadge() {}, refreshSeasonHome() {}, runIsDaily: false, // December's home lines: not this test's (plan 17)
   });
   s.refreshLevelBanner();
   s.refreshShopButton();

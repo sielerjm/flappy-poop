@@ -47,7 +47,7 @@ test('LEADERBOARD config is complete and points at a Supabase Data API over http
   assert.equal(typeof LEADERBOARD.mergesKey, 'string');
   assert.notEqual(LEADERBOARD.mergesKey, LEADERBOARD.storageKey);
   assert.equal(typeof LEADERBOARD.renameKey, 'string');
-  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey, LEADERBOARD.tournamentsKey, LEADERBOARD.dailyKey, LEADERBOARD.dailyQueueKey, LEADERBOARD.careerKey, LEADERBOARD.streaksKey, LEADERBOARD.eduKey, LEADERBOARD.eduShareKey, LEADERBOARD.eduConsentKey, LEADERBOARD.researchQueueKey]).size, 12);
+  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey, LEADERBOARD.tournamentsKey, LEADERBOARD.dailyKey, LEADERBOARD.dailyQueueKey, LEADERBOARD.careerKey, LEADERBOARD.streaksKey, LEADERBOARD.eduKey, LEADERBOARD.eduShareKey, LEADERBOARD.eduConsentKey, LEADERBOARD.researchQueueKey, LEADERBOARD.adventKey, LEADERBOARD.adventQueueKey]).size, 14);
   assert.ok(Number.isInteger(LEADERBOARD.tournamentQueueMax) && LEADERBOARD.tournamentQueueMax >= 1);
   assert.ok(Number.isInteger(LEADERBOARD.dailyQueueMax) && LEADERBOARD.dailyQueueMax >= 1);
   assert.ok(Number.isInteger(LEADERBOARD.dailyMaxScore) && LEADERBOARD.dailyMaxScore > LEADERBOARD.maxScore, 'an endless run gets more headroom than the 🏆 cap');

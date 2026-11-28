@@ -1,7 +1,7 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS, LEVELS } from '../config.js';
-import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overBandLayout, overEduLines, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
-import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle, tallyLines } from '../i18n.js';
+import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overBandLayout, overEduLines, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale, dailyGlyphNow } from '../logic.js';
+import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle, tallyLines, adventFoundText, adventLineText } from '../i18n.js';
 import { achievementById, EDU_ACHIEVEMENTS } from '../achievements.js';
 import { EDUCATION_EMOJI } from '../education.js';
 import { fetchDailyBoard, dailyEntryId } from '../leaderboard.js';
@@ -66,7 +66,10 @@ export class Over extends Phaser.Scene {
     // countdown's place.
     const notCounted = Boolean(data?.notCounted) && !testRun && !education;
     const freeDaily = Boolean(daily && notCounted);
-    this.freeDaily = freeDaily;
+    // December (plan 17, 2.3): a counted Daily Dump is open again too: Play again starts today's again,
+    // while its rank shows and its score was posted as usual (freeDaily alone blanks the rank).
+    const replayDaily = Boolean(daily?.replay && !notCounted);
+    this.freeDaily = freeDaily || replayDaily;
     // The game loop's time, not this.time.now: a relaunched scene's clock still holds the time it
     // last ran (Phaser syncs it on boot only), which made the retry lockout a no-op.
     this.openedAt = this.game.loop.time;
@@ -80,7 +83,7 @@ export class Over extends Phaser.Scene {
     const cx = W / 2;
     // A normal or test run offers Play again under Share | Home: the panel sits over.againLiftPx higher
     // and grows downward, so its bottom stays clear of the ⏸ button above the cog.
-    const again = !this.daily || freeDaily;
+    const again = !this.daily || freeDaily || replayDaily;
     const cy = GAME_HEIGHT / 2 - (again ? T.over.againLiftPx : 0);
     // The top of the input stack: Phaser's top-only input stops at the first scene with an interactive
     // object under the pointer, and this panel's taps are scene-level events. Without this zone every
@@ -90,7 +93,7 @@ export class Over extends Phaser.Scene {
     const panel = this.add.rectangle(cx, cy + grow / 2, T.over.panelWidth, 720 + grow, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
     const headline = daily ? t(locale, 'dailyOverTitle').replace('{day}', dailyDayText(locale, daily.day)) : t(locale, won ? 'runWon' : 'gameOver');
-    const scoreLine = `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${daily ? '\u{1F31E} ' : ''}${levelLabel(locale, level)}`;
+    const scoreLine = `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${daily ? `${dailyGlyphNow(this.registry, T)} ` : ''}${levelLabel(locale, level)}`;
     this.add.text(cx, cy - 270, headline, { ...style, fontSize: daily ? '48px' : won ? '48px' : '64px', color: won ? '#ffd700' : '#f8a0c8' }).setOrigin(0.5);
     // A Daily Dump's score is pink: it is the link to the 🌞 board (overHit 'score').
     this.add.text(cx, cy + T.over.scoreOffsetY, scoreLine, { ...style, fontSize: '48px', color: linked ? '#f8a0c8' : '#ffffff' }).setOrigin(0.5);
@@ -178,7 +181,8 @@ export class Over extends Phaser.Scene {
       } else if (CELL_GLYPH[cell.id]) {
         inBand(this.add.text(cell.iconX, cell.y, CELL_GLYPH[cell.id], { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5));
       } else {
-        inBand(this.add.image(cell.iconX, cell.y, CELL_ICON[cell.id] ?? cell.id).setDisplaySize(48, 48));
+        const ic = this.seasonIcon(CELL_ICON[cell.id] ?? cell.id); // December's twin (T12)
+        inBand(this.add.image(cell.iconX, cell.y, ic.key).setDisplaySize(48 * ic.mul, 48 * ic.mul));
       }
       inBand(this.add.text(cell.textX, cell.y, `×${n ?? '–'}`, { ...style, fontSize: big ? '40px' : '32px', color: '#c9b8dc' }).setOrigin(0, 0.5));
       inBand(this.add.zone(cell.x, cell.y, cell.width, cell.height).setInteractive({ useHandCursor: true })); // the hand cursor; Over's own handlers route the tap
@@ -196,6 +200,17 @@ export class Over extends Phaser.Scene {
       // On this screen only: the share card never carries it.
       line(this.add.text(cx, cy + 150, t(locale, 'newPersonalBest'), { ...style, fontSize: '34px', color: '#ffd700' }).setOrigin(0.5));
     }
+    // December's Advent piece (plan 17, 2.6): what this run found ("Found today's gift!", a catch-up gift, or "No gift
+    // this run, play again") and the 🧩 count, under the day's best (or the test note); with nothing left to find, the
+    // count alone. The badge line moves down a row under it.
+    const advent = daily?.advent?.status ? daily.advent : null;
+    if (advent) {
+      const count = adventLineText(locale, advent.status, T.advent.piece.count);
+      const text = advent.offered ? `${adventFoundText(locale, advent)}  ${count}` : count;
+      const obj = this.add.text(cx, cy + 186, text, { ...style, fontSize: '26px', color: advent.found ? '#ffd700' : '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5);
+      obj.setScale(fitScale(obj.width, 520, 0));
+      line(obj);
+    }
     // Achievements this run unlocked (plan 08): the first two by glyph and name, then "+n". Under the
     // personal-best or countdown line when there is one, else in its place; above the buttons.
     this.badgeLine = null; // the scene instance outlives a restart: never keep the last panel's line
@@ -203,7 +218,7 @@ export class Over extends Phaser.Scene {
       const named = badges.slice(0, 2).map((e) => `${e.glyph} ${badgeTitle(locale, e)}`).join(' · ');
       const more = badges.length > 2 ? ` ${t(locale, 'overBadgesMore').replace('{n}', String(badges.length - 2))}` : '';
       // An education panel: under the coins row, with the ❔ ✅ ❌ row and the note below it (overEduLines).
-      const lineY = cy + (education ? eduLines.badge : data?.personalBest || daily ? 186 : 150);
+      const lineY = cy + (education ? eduLines.badge : advent ? 222 : data?.personalBest || daily ? 186 : 150);
       const text = this.add.text(cx, lineY, t(locale, 'overBadges').replace('{badges}', named + more), { ...style, fontSize: '28px', color: '#ffd700' }).setOrigin(0.5);
       text.setScale(fitScale(text.width, 500, 0));
       this.badgeLine = line(text);
@@ -223,6 +238,10 @@ export class Over extends Phaser.Scene {
       // Hung from its top just under the pipes | coins row (rankBox.dy), so a second line grows toward
       // the buttons, never over the cells: two lines fit above them.
       line(this.add.text(cx, cy + 130, t(locale, freeDaily ? 'dailyNotCounted' : 'runNotCounted'), { ...style, fontSize: '26px', color: '#c9b8dc', fontStyle: 'normal', align: 'center', wordWrap: { width: 500, useAdvancedWrap: true } }).setOrigin(0.5, 0));
+    } else if (replayDaily && Number.isInteger(daily.best)) {
+      // December (plan 17, 2.3): the day's best in the countdown's place, the day still open.
+      const text = daily.newBest ? t(locale, 'dailyNewBest') : t(locale, 'dailyTodaysBest').replace('{n}', String(daily.best));
+      line(this.add.text(cx, cy + 150, text, { ...style, fontSize: '28px', color: daily.newBest ? '#ffd700' : '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5));
     } else if (daily) {
       // The countdown to the next course, on the wall clock (this scene's clock is stale after a relaunch).
       this.countdown = line(this.add.text(cx, cy + 150, '', { ...style, fontSize: '28px', color: '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5));
@@ -407,7 +426,7 @@ export class Over extends Phaser.Scene {
     const n = this.cellCounts?.[id];
     this.card.show({
       glyph: CELL_GLYPH[id] ?? '',
-      icon: CELL_GLYPH[id] ? null : (CELL_ICON[id] ?? id),
+      ...(CELL_GLYPH[id] ? { icon: null } : (({ key, mul }) => ({ icon: key, iconMul: mul }))(this.seasonIcon(CELL_ICON[id] ?? id))),
       title: t(locale, CELL_NOTE[id]),
       lines: [t(locale, 'overCardRun').replace('{n}', n === null || n === undefined ? '–' : String(n))],
     });
@@ -449,12 +468,21 @@ export class Over extends Phaser.Scene {
    * loaded textures, encode it off the main thread, keep it as this.shareFile,
    * then show Share. A failure leaves Share hidden.
    */
+  /** A stock icon's December twin and size factor from Play's skin (plan 17, T12); the stock when there is no Play. */
+  seasonIcon(stock) {
+    return this.scene.get('Play')?.seasonIcon?.(stock) ?? { key: stock, mul: 1 };
+  }
+
   makeShareCard({ headline, won, scoreLine, collected, pipes, locale }) {
     const token = {};
     this.cardToken = token;
     const images = {};
+    const scales = {}; // December's twins under the stock keys, each at its size factor (T12)
     for (const key of ['poop', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery-icon', 'pipe']) {
-      if (this.textures.exists(key)) images[key] = this.textures.get(key).getSourceImage();
+      const ic = key === 'pipe' ? { key, mul: 1 } : this.seasonIcon(key);
+      if (!this.textures.exists(ic.key)) continue;
+      images[key] = this.textures.get(ic.key).getSourceImage();
+      if (ic.mul !== 1) scales[key] = ic.mul;
     }
     const tan = levelColor(1, LEVEL_COLORS, T.levels.whiteBlend);
     const data = {
@@ -466,7 +494,7 @@ export class Over extends Phaser.Scene {
       pipes,
       footer: shareCardFooter(locale, SHARE.url),
     };
-    renderShareCard({ layout: shareCardLayout(T), data, images }).then((blob) => {
+    renderShareCard({ layout: shareCardLayout(T), data, images, scales }).then((blob) => {
       if (!blob || this.cardToken !== token || !this.sys.isActive()) return; // failed, or closed / reopened meanwhile
       let file;
       try {

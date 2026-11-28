@@ -1,9 +1,9 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { createSettingsStore, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
-import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
-import { t, metaFontSize } from '../i18n.js';
+import { isTopOverlay } from '../ui/overlayStack.js';
+import { t } from '../i18n.js';
 import { browserStorage } from '../store.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -46,21 +46,10 @@ export class Language extends Phaser.Scene {
       rowItems.push(pressable(row.id, label));
     }
 
-    const version = this.add
-      .text(cx, cy + 210, versionText(locale), {
-        ...STYLE,
-        fontSize: metaFontSize(locale),
-        color: '#f8a0c8',
-        fontStyle: 'normal',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    version.on('pointerdown', () => openChangelog(this)); // What's new, over this panel
-
     const close = this.add.text(cx + 236, cy - 216, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    this.focus = createFocus(this, T, { items: [pressable('close', close), ...rowItems, pressable('changelog', version)] });
+    this.focus = createFocus(this, T, { items: [pressable('close', close), ...rowItems] });
     this.focus.show(); // only under a controller (registry padMode)
   }
 

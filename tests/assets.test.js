@@ -40,8 +40,35 @@ test('every this.load.image() / load.spritesheet() in src/ points at an existing
   }
 });
 
+// Plan 17, 2.13: grid sheets (several rows of square frames) take their frame size and grid from a TUNING
+// constant, not literals, so the strip rule below skips them and this table checks them. `pending` names a sheet
+// whose loader is not built yet (with the step that builds it); a pending entry whose loader exists fails, so the
+// entry is dropped when the loader lands (the orphans test's allowlist rule).
+const gridSheets = {
+  'advent-puzzle': { path: 'assets/advent/advent-puzzle.png', grid: TUNING.advent.puzzle, knob: 'puzzle.cellPx' }, // the Advent book's preload (plan 17, 2.15)
+};
+
+test('every grid sheet is cols x rows frames of its constant, loaded with that constant (plan 17, 2.13)', () => {
+  for (const [key, g] of Object.entries(gridSheets)) {
+    const { cols, rows, cellPx } = g.grid;
+    assert.ok(cols > 0 && rows > 0 && cellPx > 0, `${key}: cols, rows, cellPx`);
+    assert.ok(cols * cellPx <= 4096 && rows * cellPx <= 4096, `${key}: each side at most 4096 px`);
+    const load = loads.find((l) => l.key === key);
+    if (g.pending) assert.equal(load, undefined, `${key}: its loader is in (${load?.file}); drop its \`pending\` entry`);
+    else {
+      assert.equal(load?.type, 'spritesheet', `${key}: loaded as a spritesheet`);
+      assert.equal(load.path, g.path, `${key}: loaded from ${g.path}`);
+      const call = readFileSync(load.file, 'utf8').match(new RegExp(`load\\.spritesheet\\(\\s*['"]${key}['"][^)]*\\)`))[0];
+      for (const side of ['frameWidth', 'frameHeight']) assert.match(call, new RegExp(`${side}:\\s*[\\w.]*${g.knob.replace('.', '\\.')}`), `${key}: ${side} from ${g.knob}`);
+    }
+    const file = join(root, g.path);
+    if (!existsSync(file)) continue; // the placeholder or Michael's cut arrives with its loader
+    assert.deepEqual(pngSize(file), { w: cols * cellPx, h: rows * cellPx }, `${g.path}: ${cols} x ${rows} frames of ${cellPx} px`);
+  }
+});
+
 test('every spritesheet is a whole number of its frames', () => {
-  const sheets = loads.filter((l) => l.type === 'spritesheet');
+  const sheets = loads.filter((l) => l.type === 'spritesheet' && !(l.key in gridSheets));
   assert.ok(sheets.length > 0, 'no load.spritesheet calls found in src/');
   for (const l of sheets) {
     assert.ok(l.frameWidth > 0 && l.frameHeight > 0, `${l.file}: ${l.key} needs literal frameWidth / frameHeight`);
@@ -71,6 +98,40 @@ test('the sprite art is exported at 2x its drawn size (plan 35, 2.1)', () => {
   assert.equal(q.w, 2 * TUNING.education.superQ.displayPx, 'question.png: 2x of superQ.displayPx');
 });
 
+// Plan 17, 1.3: the December art in assets/advent/. Each entry is a square (px) the file must have once it
+// exists: items are 192 (drawn at 96); the poop twins and the hatted bacterium sit at their measured squares
+// because they are drawn at spriteDisplayScale like the stock frames. An entry whose file is not there yet is
+// skipped (the art arrives step by step), so the table never fails an empty or partly filled folder.
+const adventSquares = {
+  'candy-cane.png': 192,
+  'gingerbread.png': 192,
+  'poop-santa.png': 234,
+  'poop-scared-santa.png': 234,
+  'poop-stink1-santa.png': 358,
+  'poop-stink2-santa.png': 358,
+  'poop-stink-scared1-santa.png': 358,
+  'poop-stink-scared2-santa.png': 358,
+  'poop-falling-santa.png': 366,
+  'poop-stink-falling1-santa.png': 366,
+  'poop-stink-falling2-santa.png': 366,
+  'poop-fart-santa1.png': 438,
+  'poop-fart-santa2.png': 446,
+  'poop-dead-santa.png': 272,
+  'poop-speech-santa.png': 510,
+  'bacteria-santa.png': 196, // built at 1.11 (plan 17)
+  'bean-holly.png': 346, // the bean with holly: the bean at the stock size, the canvas grown for the leaves
+  'advent.png': 192, // the Advent piece (plan 17, 2.6)
+};
+
+test('the assets/advent/ art named in the size table has the listed square (plan 17, 1.3)', () => {
+  for (const [name, square] of Object.entries(adventSquares)) {
+    const file = join(root, 'assets/advent', name);
+    if (!existsSync(file)) continue; // not delivered yet
+    const real = pngSize(file);
+    assert.deepEqual({ w: real.w, h: real.h }, { w: square, h: square }, `advent/${name}: ${square}x${square} expected`);
+  }
+});
+
 const readme = readFileSync(join(root, 'assets/README.md'), 'utf8');
 const rows = [...readme.matchAll(/^\|\s*`([^`]+)`\s*\|\s*(\d+)x(\d+)\s*\|/gm)].map((m) => ({
   file: m[1],
@@ -78,8 +139,17 @@ const rows = [...readme.matchAll(/^\|\s*`([^`]+)`\s*\|\s*(\d+)x(\d+)\s*\|/gm)].m
   h: Number(m[3]),
 }));
 
+// Every PNG under assets/, by path relative to assets/ (top-level files are bare names, subfolder files
+// like 'advent/poop-santa.png'). assets/src/ (sources) and assets/vendor/ (libraries) are not game art.
+function assetPngs(dir = join(root, 'assets'), prefix = '') {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    if (e.isDirectory()) return prefix === '' && (e.name === 'src' || e.name === 'vendor') ? [] : assetPngs(join(dir, e.name), `${prefix}${e.name}/`);
+    return e.name.endsWith('.png') ? [`${prefix}${e.name}`] : [];
+  });
+}
+
 test('assets/README.md table lists every PNG in assets/ with its real size', () => {
-  const pngs = readdirSync(join(root, 'assets')).filter((n) => n.endsWith('.png'));
+  const pngs = assetPngs();
   assert.ok(rows.length > 0, 'no size rows parsed from assets/README.md');
   for (const name of pngs) {
     const row = rows.find((r) => r.file === name);

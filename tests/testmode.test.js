@@ -112,7 +112,7 @@ for (const mode of [false, true]) {
 test('settingsLayout test section: buttons inside the panel, trayHitMin, not overlapping', () => {
   const L = settingsLayout(GAME_WIDTH, GAME_HEIGHT, T, { test: true });
   const p = edges(L.panel);
-  const boxes = [L.test.levelDown, L.test.levelUp, ...L.test.powers];
+  const boxes = [L.test.levelDown, L.test.levelUp, L.test.dayDown, L.test.dayUp, ...L.test.powers];
   assert.deepEqual(
     L.test.powers.map((b) => b.id),
     TEST_POWERS,

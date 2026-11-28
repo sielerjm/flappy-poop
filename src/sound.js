@@ -61,6 +61,27 @@ function primeSilent(ac) {
   }
 }
 
+/**
+ * A looped sound on `scene` at `volume` (0: off): added and started on the first volume above 0 once its file `key` is
+ * in the cache, set on every call, stopped and dropped at 0. Returns the loop to keep, or null. December's blizzard
+ * (plan 17, 2.7a) runs on it in a Play run and, for both halves of a split-screen match, in Versus (T16). Phaser's
+ * global mute covers it.
+ */
+export function stepLoop(scene, loop, key, volume) {
+  if (volume > 0 && !loop && scene.cache?.audio?.exists(key)) {
+    loop = scene.sound.add(key, { loop: true, volume: 0 });
+    loop.play();
+  }
+  if (!loop) return null;
+  if (volume > 0) {
+    loop.setVolume(volume);
+    return loop;
+  }
+  loop.stop();
+  loop.destroy();
+  return null;
+}
+
 /** Base64 of a 0.25 s silent 16-bit mono 8 kHz PCM WAV. Node-safe. */
 export function silentWavDataUri(seconds = 0.25, sampleRate = 8000) {
   const frames = Math.max(1, Math.round(seconds * sampleRate));

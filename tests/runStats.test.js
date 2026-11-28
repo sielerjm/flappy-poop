@@ -176,8 +176,10 @@ test('the server stores the rows as made, a full run and a stub alike', async ()
   for (let i = 0; i < 100; i += 1) {
     s.frame(16.7, 3);
     s.flap({ now: T0 + i * 300, pressed: true, trusted: true, fresh: true, lip: i - 50 });
+    if (i % 8 === 0 && i < 96) s.pipe(); // 12 pairs: a run that ended on level 2 (run_limits())
   }
   const row = s.end({ now: T0 + 30_000, wall: W0 + 30_000, score: 12, level: 2 });
+  assert.equal(row.data.pipes, 12);
   const stub = stubRow({ runId: id('S9'), session: 'sessionAB12', day: '2026-11-16', score: 40, level: 3, pipes: 40, version: '0.20.1' });
   await asAnon(db, 'select public.submit_runs($1, $2::bigint, $3::jsonb)', [id('SP'), Date.now(), JSON.stringify([row, stub])]);
   assert.deepEqual((await db.query('select reason from public.run_rejects')).rows, [], 'nothing refused');

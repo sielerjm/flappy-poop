@@ -17,7 +17,8 @@ Tip: on iPhone, turn **Silent mode off** to hear sound.
 | [👆 How to play](#how-to-play) | [🥦 Pickups & power-ups](#pickups--power-ups) |
 | [🏁 Levels & shop](#levels--shop) | [🎮 Controls](#controls) |
 | [👥 Two players](#two-players) | [🌞 Daily Dump](#daily-dump) |
-| [🏆 Save codes & leaderboard](#save-codes--leaderboard) | [🛠️ For developers](#for-developers) |
+| [🏆 Save codes & leaderboard](#save-codes--leaderboard) | [🎅 December](#december) |
+| [🛠️ For developers](#for-developers) | |
 
 ![Finish line](docs/finish-divider.svg)
 
@@ -228,6 +229,22 @@ One try a day, the same course for everyone, Wordle style. Tap the **🌞** at t
 - Daily scores have their own board and never touch the 🏆 board. Offline, the score posts the next time the board can be reached.
 
 The 🌞 board, like the others, is for friends, not prizes: the course comes from your device's clock (someone could set it ahead and practise tomorrow's), scores are reported by the game, and the server keeps only the first score it gets from you each day. If you ran a fart, the pair right after it opens mid-height for you, so two players' courses can differ by a pipe or two.
+
+![Finish line](docs/finish-divider.svg)
+
+## 🎅 December
+
+All of December (UTC) the game dresses up. The look changes everywhere; the Daily Dump gets three extras (below). Every other rule, hitbox and score stays the same.
+
+- The home screen says **Happy Bowelidays!** over the title, with a countdown under it: "20 sleeps till Christmas" on 1 to 24 December, **Merry Christmas!** on the 25th, no line after. (The image is English in every language; the countdown is translated.)
+- A 🎅 stands in for the 🌞, a different one each time the home screen opens (Santa, Mrs. Claus or Mx Claus). The Daily Dump's texts say it too. Tap the 🎅 in the Daily Dump window's title to choose one in any skin tone; it is saved on this device and shows every time. A red dot marks the 🎅 until you first open the choice, and the (?) at the window's top left explains December.
+- On the loading screen, the bouncing poop wears its Santa hat.
+- Your poop wears a Santa hat in every pose, the crash included, and so do the bad bacteria; fiber becomes a candy cane, the bean sprouts holly, the probiotic a gingerbread figure, and snow sits on the bottom pipes. The same December pickups show in the HUD, the shop, the Game Over screen, the share card and How to play. (Emoji, Settings' test powers and the loading cards stay as they are.)
+- Twinkling **fairy lights** hang along the ceiling in every mode. The HUD gets a faint white glow so it stays readable against them. With "reduce motion" on, the lights do not twinkle.
+- Snow falls on the home screen and in every game mode (a run, the Daily Dump, both halves of a match, the online race and 📚 runs). With "reduce motion" on in your device settings, it does not fall.
+- **Advent.** Every December Daily Dump run hides a wrapped gift, from pipe 5 on; each pipe you pass and each run that ended without it makes it a little more likely. Catch the day's gift, or one from a day you missed, and collect all 24: by 24 December for the 🎄 Christmas Tree badge, or by 31 December for the 🌲 Evergreen. A 🎁 beside a name on the 🌞 board means that player found the day's gift. Each piece you find fills a cell of the **Advent book**, a 4 x 6 picture. Open it from the round Advent button at the top left of the home screen (it glows while a new piece waits to be shown), from the Daily Dump window's 🧩 line or from the user panel. A 🧩 tab on the leaderboard ranks players by pieces found. After December, last year's book stays open to look at if you found a piece.
+- **The Daily Dump stays open all day in December.** Play it as often as you like; your best score of the day goes on the board.
+- **Snowstorms** blow through December Daily Dump runs, and from level 3 on through two-player and online races (both players meet the same storms at the same pipes; a level's finish line always comes in calm air). Watch for "Snowstorm ahead!": the snow swirls against you, the wind slows you down and each tap lifts you a little less. A fart blasts through it: the snow streaks past and the wind lets go while it lasts.
 
 ![Finish line](docs/finish-divider.svg)
 

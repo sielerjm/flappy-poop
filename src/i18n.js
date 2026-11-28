@@ -9,6 +9,9 @@ export const LOCALES = ['en', 'zh-Hans'];
 const STRINGS = {
   en: {
     readyTitle: 'FLAPPY POOP',
+    countdownSleeps: '{n} sleeps till Christmas',
+    countdownSleep: '1 sleep till Christmas',
+    countdownChristmas: 'Merry Christmas!',
     howToPlay: 'How to play',
     pauseTitle: 'PAUSED',
     pauseHint: 'tap anywhere to resume game',
@@ -49,6 +52,7 @@ const STRINGS = {
     aboutLink: 'About',
     testTitle: '🧪 TEST MODE',
     testStartLevel: 'Start at',
+    testPretendDate: 'Date',
     invincible: 'Invincible',
     testExit: 'Exit test mode',
     aboutTitle: 'ABOUT',
@@ -96,7 +100,8 @@ Inspired by Flappy Bird`,
     itemTournamentName: 'Tournament',
     itemTournamentDetail: 'Every two-player session is a tournament for 2 to 8 players: two race one Final, more play a knockout bracket you can arrange before the first race. The winners take the podium (🥉 from 3 players); with 3 or more players, those who joined with their user code keep their medals on the 🏅 board.',
     itemDailyName: 'Daily Dump',
-    itemDailyDetail: "Tap the 🌞 at the top of the home screen: one try a day on a course everyone shares, endless at the day's level, with no kernels. Your score goes on the 🌞 board; a new course every day at 00:00 UTC.",
+    itemDailyDetail: "Tap the {daily} at the top of the home screen: one try a day on a course everyone shares, endless at the day's level, with no kernels. Your score goes on the {daily} board; a new course every day at 00:00 UTC.",
+    itemDailyDetailDec: "Tap the {daily} at the top of the home screen: a course everyone shares, endless at the day's level, with no kernels. All December, play it as often as you like: your best score of the day goes on the {daily} board. A new course every day at 00:00 UTC.",
     itemInfoName: 'About',
     itemInfoDetail: "The i button opens About: the credits, this guide and What's new (the update notes). Key: I.",
     itemLanguageName: 'Language',
@@ -104,7 +109,7 @@ Inspired by Flappy Bird`,
     itemFeedbackName: 'Feedback',
     itemFeedbackDetail: 'Report a bug or suggest a feature on GitHub. Key: F.',
     itemLeaderboardName: 'Leaderboard',
-    itemLeaderboardDetail: "The top 25 scores. Its 🌞 tab has today's Daily Dump, its 🏅 tab the tournament medals. Tap a name to see that player's profile. Key: T.",
+    itemLeaderboardDetail: "The top 25 scores. Its {daily} tab has today's Daily Dump, its 🏅 tab the tournament medals. Tap a name to see that player's profile. Key: T.",
     itemSettingsName: 'Settings',
     itemSettingsDetail: "Sound, haptics (Android only), the bean button's side in landscape, skipping to home once the game has loaded, and Reload game to fetch the newest version. Key: S.",
     itemSoundName: 'Sound',
@@ -248,6 +253,7 @@ Inspired by Flappy Bird`,
     reviveFree: "No questions left: you're back in.",
     eduNotSaved: 'Education runs are not on the 🏆 boards',
     saveEduData: '📚 Education data',
+    saveAdvent: '\u{1F9E9} Advent',
     eduIntroTitle: '📚 Education mode',
     eduIntroBeta: 'Beta: the cards are still being checked. If one looks wrong, tap the 🚩 by its code to tell us.',
     eduWordRetired: "📚 Education mode is on the home screen for everyone now.",
@@ -441,15 +447,20 @@ Inspired by Flappy Bird`,
     onlineHowTitle: 'How online races work',
     onlineHowBody:
       'Race one friend on the same course, each on your own phone or computer. Only your username is shared.\nTo invite a friend: tap Create room, then send them the 6-digit code, or tap Share to send a link. When they ask to race, tap Let in. A friend in 🤝 Friends can get an Invite instead: they join straight in.\nTo join a friend: tap Join with code and type their code, or open their link. Then you both tap Ready, and the race starts after 3, 2, 1.\nThe race follows tournament rules: the higher score wins; a tie goes to fewer crashes, then more finish lines crossed first. Saved races go on the 🏅 and 🏆 boards. Rematch races again.\nTournaments: with 🌐 off (wide screens), 2 to 8 players race two at a time on this screen, knockout style, for the podium 🥇 🥈 🥉.',
-    dailyTitle: '🌞 DAILY DUMP',
+    dailyTitle: '{daily} DAILY DUMP',
+    // The 🎅 picker and the 🌞 popup's (?) card, December only (plan 17, 1b.2e; sheet 10, Michael 27 Nov).
+    santaPickTitle: 'Choose your \u{1F385}',
+    santaPickSave: 'Save',
+    dailyHelp: "All December, the \u{1F385} in the Daily Dump changes each time you visit. Tap it to choose your favourite, in any skin tone. It is saved on this device only.\n\nEach day's Daily hides one Advent piece. Find all 24 by 24 December for the \u{1F384}, or by 31 December for the \u{1F332}. Catch-ups count for both.",
     dailyToday: "Today's course: {level}",
-    dailyBody: 'One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the 🌞 leaderboard; a new course starts every day at midnight UTC.',
+    dailyBody: 'One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the {daily} leaderboard; a new course starts every day at midnight UTC.',
+    dailyBodyDec: 'All December, play as often as you like: your best score of the day counts. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the {daily} leaderboard; a new course starts every day at midnight UTC.',
     dailyCreateUser: 'Create user',
     dailyPlay: 'Play',
     dailyChecking: 'Checking…',
     dailySeeResult: "See today's result",
     dailyPractice: 'Practice',
-    dailyNeedName: 'Pick a username first: your score goes on the 🌞 board under it.',
+    dailyNeedName: 'Pick a username first: your score goes on the {daily} board under it.',
     dailyPracticeNote: 'Test mode: practice runs are not saved and do not use up the day.',
     dailyNext: 'Next Daily Dump in {time}',
     dailyOverTitle: 'DAILY DUMP · {day}',
@@ -460,9 +471,36 @@ Inspired by Flappy Bird`,
     dailyRankRejected: 'Not saved',
     dailyRankUnavailable: 'Rank unavailable',
     dailyNotCounted: 'No pipe crossed: not counted.\nYou can start it again today.',
+    dailyTodaysBest: "Today's best: {n}",
+    dailyNewBest: 'New best today!',
+    adventFoundToday: "Found today's gift!",
+    stormAhead: 'Snowstorm ahead!',
+    adventFoundLate: "Found a previous day's puzzle!",
+    adventFoundLeft: '\u{1F9E9} {n} of {total} found \u00b7 {left} left',
+    adventTodayFound: "Today's piece: found",
+    adventTodayMissing: "Today's piece: not found yet",
+    adventTreeOnTrack: '\u{1F384} on track',
+    adventTreePlainOpen: '\u{1F332} by 31 Dec',
+    adventTreeDecorated: '\u{1F384}',
+    adventTreePlain: '\u{1F332}',
+    adventNoGift: 'No gift this run, play again',
+    adventCount: '\u{1F9E9} {n}/{total}',
+    adventBookCount: '{n} of {total} found',
+    adventToGo: '{n} of {total} to go!', // the book's line after a piece lands (plan 17, 1c.7, T7: Michael's words)
+    adventAllFound: 'All {total} found! {tree}',
+    adventBookHelp: 'A puzzle piece hides in every December Daily Dump run, from pipe 5 on. Each pipe you pass makes it a little more likely, and so does each run that day that ended without it.\n\nA new piece comes out each day from 1 to 24 December. Missed a day? Its piece can still turn up in a later run.\n\nFind all 24 by 24 December for the \u{1F384}, or by 31 December for the \u{1F332}.',
+    adventOnTrack: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384} on track',
+    adventPlainOpen: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332} by 31 Dec',
+    adventDecorated: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384}',
+    adventPlain: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332}',
     dailyBoardTitle: 'DAILY DUMP',
+    adventBoardTitle: 'ADVENT',
+    adventBoardHeader: 'Dec {year} \u00b7 pieces found',
+    adventBoardYou: 'You: #{rank} of {total} \u00b7 {pieces}',
+    adventBoardEmpty: 'No one has found a piece yet',
+    adventBoardJoin: 'Find the \u{1F381} in a December {daily} Daily Dump to join',
     dailyBoardEmpty: "No one has played today's Daily Dump yet",
-    dailyBoardJoin: "Play today's Daily Dump from the 🌞 on the home screen",
+    dailyBoardJoin: "Play today's Daily Dump from the {daily} on the home screen",
     dailyBoardYou: 'You: #{rank} of {total} · {score}',
     tournamentSaving: 'Saving medals…',
     tournamentSaveSent: 'Medals saved to the 🏅 board',
@@ -707,7 +745,7 @@ Inspired by Flappy Bird`,
     statsMaxLevel: 'Highest level',
     statsAvgLevel: 'Average level',
     statsAvgScore: 'Average score',
-    statsDaily: 'Daily Dump 🌞',
+    statsDaily: 'Daily Dump {daily}',
     statsDumps: 'Daily Dumps played',
     statsPodiums: 'Podiums',
     statsTournament: 'Tournaments 🏅',
@@ -792,6 +830,10 @@ Inspired by Flappy Bird`,
     achDescCeiling: 'Hit the ceiling {n} times',
     achDescFourOfAKind: 'Open four mystery boxes in a row with the same reward',
     achDescBoxesBought: 'Buy {n} mystery boxes in the shop',
+    achAdventTree: 'Christmas Tree 2026',
+    achDescAdventTree: 'Find all 24 Advent gifts by 24 Dec 2026 (catch-ups count)',
+    achAdventPine: 'Evergreen 2026',
+    achDescAdventPine: 'Find all 24 Advent gifts by 31 Dec 2026',
     achEduNerd: 'Nerd Alert',
     achEduPerfect: 'Full Marks',
     achEduA: 'A Student',
@@ -825,6 +867,9 @@ Inspired by Flappy Bird`,
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
+    countdownSleeps: '离圣诞节还有{n}晚',
+    countdownSleep: '离圣诞节还有1晚',
+    countdownChristmas: '圣诞快乐！',
     howToPlay: '玩法说明',
     pauseTitle: '已暂停',
     pauseHint: '点击任意处继续游戏',
@@ -865,6 +910,7 @@ Inspired by Flappy Bird`,
     aboutLink: '关于',
     testTitle: '🧪 测试模式',
     testStartLevel: '开始于',
+    testPretendDate: '日期',
     invincible: '无敌',
     testExit: '退出测试模式',
     aboutTitle: '关于',
@@ -912,7 +958,8 @@ Inspired by Flappy Bird`,
     itemTournamentName: '锦标赛',
     itemTournamentDetail: '双人模式总是锦标赛，支持2到8名玩家：两人只比一场决赛，更多玩家进行淘汰赛，第一场比赛前可以调整对阵。胜者登上领奖台（3名或以上玩家时才有🥉）；3名或以上玩家时，用用户码加入的玩家奖牌会记到🏅榜上。',
     itemDailyName: '每日一拉',
-    itemDailyDetail: '点首页顶部的🌞：每天一次机会，所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。分数记到🌞榜上；每天UTC 00:00换新赛道。',
+    itemDailyDetail: '点首页顶部的{daily}：每天一次机会，所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。分数记到{daily}榜上；每天UTC 00:00换新赛道。',
+    itemDailyDetailDec: '点首页顶部的{daily}：所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。整个十二月不限次数，当天的最好成绩记到{daily}榜上；每天UTC 00:00换新赛道。',
     itemInfoName: '关于',
     itemInfoDetail: 'i按钮打开“关于”：制作名单、本玩法说明和更新说明。按键：I。',
     itemLanguageName: '语言',
@@ -920,7 +967,7 @@ Inspired by Flappy Bird`,
     itemFeedbackName: '反馈',
     itemFeedbackDetail: '在GitHub上报告问题或提出功能建议。按键：F。',
     itemLeaderboardName: '排行榜',
-    itemLeaderboardDetail: '前25名的成绩。🌞页是今天的每日一拉，🏅页是锦标赛奖牌榜。点名字可查看该玩家的资料。按键：T。',
+    itemLeaderboardDetail: '前25名的成绩。{daily}页是今天的每日一拉，🏅页是锦标赛奖牌榜。点名字可查看该玩家的资料。按键：T。',
     itemSettingsName: '设置',
     itemSettingsDetail: '音效、震动（仅限Android）、横屏时豆子按钮的位置、加载后直接进入主页，以及“刷新游戏”获取最新版本。按键：S。',
     itemSoundName: '声音',
@@ -1061,6 +1108,7 @@ Inspired by Flappy Bird`,
     reviveFree: '没有题了：可以继续飞了。',
     eduNotSaved: '教育模式的成绩不上 🏆 排行榜',
     saveEduData: '📚 教育数据',
+    saveAdvent: '\u{1F9E9} 圣诞拼图',
     eduIntroTitle: '📚 教育模式',
     eduIntroBeta: '测试版：卡片仍在核对中。如果发现有误，请点卡片编号旁的 🚩 告诉我们。',
     eduWordRetired: "📚 教育模式现在对所有人开放，就在主屏幕上。",
@@ -1254,15 +1302,20 @@ Inspired by Flappy Bird`,
     onlineHowTitle: '在线比赛怎么玩',
     onlineHowBody:
       '和一位朋友在同一条赛道上比赛，各用自己的手机或电脑。只会显示你的用户名。\n邀请朋友：点“创建房间”，把 6 位数房间码发给对方，或点“分享”发送链接。对方想和你比赛时，点“让对方进来”。🤝 好友 里的朋友也可以直接点“邀请”：对方会直接加入。\n加入朋友：点“输入房间码加入”并输入对方的房间码，或打开对方的链接。然后两人都点“准备”，倒数 3、2、1 后开始比赛。\n比赛规则和锦标赛一样：得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多。保存的比赛会记到 🏅 和 🏆 榜上。点“再来一局”可以再比一次。\n锦标赛：关掉 🌐（宽屏才有），2 到 8 名玩家在这台设备上两两比赛，淘汰制，争夺领奖台 🥇 🥈 🥉。',
-    dailyTitle: '🌞 每日一拉',
+    dailyTitle: '{daily} 每日一拉',
+    santaPickTitle: '选择你的\u{1F385}',
+    santaPickSave: '保存',
+    // Line breaks by hand, as dailyBodyDec's: Phaser wraps Chinese anywhere, so a line could start with ， or 。.
+    dailyHelp: '整个十二月，每日一拉里的\u{1F385}\n每次来访都会变。\n点它，选你最喜欢的一个，\n任何肤色都行。\n只保存在这台设备上。\n\n每天的每日一拉，\n都藏着一块圣诞拼图。\n12月24日前找齐24块得\u{1F384}，\n12月31日前找齐得\u{1F332}。\n补领的都算。',
     dailyToday: '今日赛道：{level}',
-    dailyBody: '每天只有一次机会。\n今天所有人飞同一条赛道，\n而且没有尽头：能飞多远就飞多远。\n没有玉米粒，也没有商店。\n在🌞排行榜上比分数；\n每天UTC午夜换一条新赛道。',
+    dailyBody: '每天只有一次机会。\n今天所有人飞同一条赛道，\n而且没有尽头：能飞多远就飞多远。\n没有玉米粒，也没有商店。\n在{daily}排行榜上比分数；\n每天UTC午夜换一条新赛道。',
+    dailyBodyDec: '十二月不限次数，只记当天最好成绩。\n今天所有人飞同一条赛道，\n而且没有尽头：能飞多远就飞多远。\n没有玉米粒，也没有商店。\n在{daily}排行榜上比分数；\n每天UTC午夜换一条新赛道。',
     dailyCreateUser: '创建用户',
     dailyPlay: '开始',
     dailyChecking: '检查中…',
     dailySeeResult: '查看今日成绩',
     dailyPractice: '练习',
-    dailyNeedName: '先取一个用户名：你的分数会以这个名字记到🌞榜上。',
+    dailyNeedName: '先取一个用户名：你的分数会以这个名字记到{daily}榜上。',
     dailyPracticeNote: '测试模式：练习不会保存，也不会用掉今天的机会。',
     dailyNext: '下一次每日一拉：{time}后',
     dailyOverTitle: '每日一拉 · {day}',
@@ -1273,9 +1326,36 @@ Inspired by Flappy Bird`,
     dailyRankRejected: '未保存',
     dailyRankUnavailable: '暂无排名',
     dailyNotCounted: '一根管道都没穿过：本局不计入\n今天还可以重新开始',
+    dailyTodaysBest: '今日最佳：{n}',
+    dailyNewBest: '今日新纪录！',
+    adventFoundToday: '找到了今天的礼物！',
+    stormAhead: '前方有暴风雪！',
+    adventFoundLate: '找到了往日的拼图！',
+    adventFoundLeft: '\u{1F9E9} 已找到 {n}/{total} \u00b7 还剩 {left}',
+    adventTodayFound: '今天的拼图：已找到',
+    adventTodayMissing: '今天的拼图：还没找到',
+    adventTreeOnTrack: '\u{1F384} 进度正好',
+    adventTreePlainOpen: '\u{1F332} 12月31日前',
+    adventTreeDecorated: '\u{1F384}',
+    adventTreePlain: '\u{1F332}',
+    adventNoGift: '这局没有礼物，再来一局',
+    adventCount: '\u{1F9E9} {n}/{total}',
+    adventBookCount: '已找到 {n}/{total}',
+    adventToGo: '还剩 {n} 块！',
+    adventAllFound: '{total} 块全部找齐！{tree}',
+    adventBookHelp: '十二月的每一局每日一拉里，\n都藏着一块拼图，\n从第 5 根管道起才会出现。\n每多过一根管道，\n出现的机会就大一点；\n当天每有一局没找到，\n下一局的机会也会大一点。\n\n12 月 1 日到 24 日，\n每天放出一块新拼图。\n错过了某一天？\n那块拼图之后的局里还能找到。\n\n12 月 24 日前集齐 24 块得\u{1F384}，\n12 月 31 日前集齐得\u{1F332}。',
+    adventOnTrack: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384} 进度正好',
+    adventPlainOpen: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332} 12月31日前',
+    adventDecorated: '\u{1F9E9} {n}/{total} \u00b7 \u{1F384}',
+    adventPlain: '\u{1F9E9} {n}/{total} \u00b7 \u{1F332}',
     dailyBoardTitle: '每日一拉',
+    adventBoardTitle: '圣诞拼图',
+    adventBoardHeader: '{year}年12月 \u00b7 已找到的拼图',
+    adventBoardYou: '你：第{rank}名 / 共{total}人 \u00b7 {pieces}',
+    adventBoardEmpty: '还没有人找到拼图',
+    adventBoardJoin: '在12月的{daily}每日一拉里找到\u{1F381}即可上榜',
     dailyBoardEmpty: '今天还没有人玩每日一拉',
-    dailyBoardJoin: '在首页点🌞玩今天的每日一拉',
+    dailyBoardJoin: '在首页点{daily}玩今天的每日一拉',
     dailyBoardYou: '你：第{rank}名 / 共{total}人 · {score}',
     tournamentSaving: '正在保存奖牌…',
     tournamentSaveSent: '奖牌已记到 🏅 榜',
@@ -1520,7 +1600,7 @@ Inspired by Flappy Bird`,
     statsMaxLevel: '最高关卡',
     statsAvgLevel: '平均关卡',
     statsAvgScore: '平均得分',
-    statsDaily: '每日一拉 🌞',
+    statsDaily: '每日一拉 {daily}',
     statsDumps: '参加次数',
     statsPodiums: '领奖台',
     statsTournament: '锦标赛 🏅',
@@ -1604,6 +1684,10 @@ Inspired by Flappy Bird`,
     achDescCeiling: '撞到顶部 {n} 次',
     achDescFourOfAKind: '连续 4 个神秘盒子开出同样的奖励',
     achDescBoxesBought: '在商店买 {n} 个神秘盒子',
+    achAdventTree: '2026 圣诞树',
+    achDescAdventTree: '2026年12月24日前找齐全部24份降临礼物（补领也算）',
+    achAdventPine: '2026 常青树',
+    achDescAdventPine: '2026年12月31日前找齐全部24份降临礼物',
     achEduNerd: '学霸警报',
     achEduPerfect: '满分',
     achEduA: '优等生',
@@ -1654,6 +1738,11 @@ export function initialLocale(navLang, stored) {
 }
 
 /** Look up a catalog key; unknown locale or key falls back to English. */
+/** A string with its {daily} placeholder filled: the 🌞, or this visit's 🎅 in December (plan 17; dailyGlyphNow). */
+export function fillDaily(text, glyph) {
+  return text.replaceAll('{daily}', glyph);
+}
+
 export function t(locale, key) {
   const pack = STRINGS[isLocale(locale) ? locale : DEFAULT_LOCALE] ?? STRINGS[DEFAULT_LOCALE];
   if (Object.prototype.hasOwnProperty.call(pack, key)) return pack[key];
@@ -1663,8 +1752,9 @@ export function t(locale, key) {
 /**
  * How to play rows for a locale: pipe first, the pickups, levels, controls, toilet, two players, tournament, the Daily Dump, then the tray buttons left to right (ⓘ 🌐 💬 🏆 🔊 ⚙). key matches a Boot texture name or an emoji row in HowTo.
  * `education: false` leaves out the 📚 row (the off switch; HowTo passes Play.educationAvailable(): plan 28, AUD-044).
+ * `daily` is the Daily Dump's glyph for the {daily} placeholders (the 🌞, or December's 🎅: plan 17, 1.7).
  */
-export function howToItems(locale, { education = true } = {}) {
+export function howToItems(locale, { education = true, daily = '\u{1F31E}', dailyReplay = false } = {}) {
   const rows = [
     { key: 'pipe', name: t(locale, 'itemPipeName'), detail: t(locale, 'itemPipeDetail') },
     { key: 'fiber', name: t(locale, 'itemFiberName'), detail: t(locale, 'itemFiberDetail') },
@@ -1679,13 +1769,13 @@ export function howToItems(locale, { education = true } = {}) {
     { key: 'toilet', name: t(locale, 'itemToiletName'), detail: t(locale, 'itemToiletDetail') },
     { key: 'twoPlayer', name: t(locale, 'itemTwoPlayerName'), detail: t(locale, 'itemTwoPlayerDetail') },
     { key: 'tournament', name: t(locale, 'itemTournamentName'), detail: t(locale, 'itemTournamentDetail') },
-    { key: 'daily', name: t(locale, 'itemDailyName'), detail: t(locale, 'itemDailyDetail') },
+    { key: 'daily', name: t(locale, 'itemDailyName'), detail: fillDaily(t(locale, dailyReplay ? 'itemDailyDetailDec' : 'itemDailyDetail'), daily) }, // dailyReplay: December's (plan 17, 2.3)
     { key: 'education', name: t(locale, 'itemEducationName'), detail: t(locale, 'itemEducationDetail') },
     { key: 'superQ', name: t(locale, 'itemSuperQName'), detail: t(locale, 'itemSuperQDetail') }, // plan 34: an education row, left out with it
     { key: 'info', name: t(locale, 'itemInfoName'), detail: t(locale, 'itemInfoDetail') },
     { key: 'language', name: t(locale, 'itemLanguageName'), detail: t(locale, 'itemLanguageDetail') },
     { key: 'feedback', name: t(locale, 'itemFeedbackName'), detail: t(locale, 'itemFeedbackDetail') },
-    { key: 'leaderboard', name: t(locale, 'itemLeaderboardName'), detail: t(locale, 'itemLeaderboardDetail') },
+    { key: 'leaderboard', name: t(locale, 'itemLeaderboardName'), detail: fillDaily(t(locale, 'itemLeaderboardDetail'), daily) },
     { key: 'sound', name: t(locale, 'itemSoundName'), detail: t(locale, 'itemSoundDetail') },
     { key: 'settings', name: t(locale, 'itemSettingsName'), detail: t(locale, 'itemSettingsDetail') },
   ];
@@ -1860,6 +1950,32 @@ export function dailyDayText(locale, day) {
 /** The 🌞 board's footer for the player's own row: "You: #3 of 12 · 87". */
 export function dailyYouText(locale, { rank, total, score }) {
   return t(locale, 'dailyBoardYou').replace('{rank}', String(rank)).replace('{total}', String(total)).replace('{score}', String(score));
+}
+
+/**
+ * The Advent line (plan 17, 2.6): "🧩 3/24 · 🎄 on track" and its kin, from adventStatus' { n, tree } and the
+ * piece count (TUNING.advent.piece.count).
+ */
+export function adventLineText(locale, { n, tree }, total) {
+  const key = { onTrack: 'adventOnTrack', plainOpen: 'adventPlainOpen', decorated: 'adventDecorated', plain: 'adventPlain' }[tree] ?? 'adventCount';
+  return t(locale, key).replace('{n}', String(n)).replace('{total}', String(total));
+}
+
+/** The game-over line for a December Daily's piece: today's, a previous day's (Michael, 26 Nov), or none this run. */
+export function adventFoundText(locale, { found, late }) {
+  if (!found) return t(locale, 'adventNoGift');
+  return late ? t(locale, 'adventFoundLate') : t(locale, 'adventFoundToday');
+}
+
+/**
+ * The Daily window's two December lines (S14, Michael 26 Nov): ["🧩 5 of 24 found · 19 left", "Today's piece: found ·
+ * 🎄 on track"]; the second drops today's piece on 25–31 Dec (none comes out) and the tree when there is none to show.
+ */
+export function adventDailyLines(locale, { status, today }, total) {
+  const first = t(locale, 'adventFoundLeft').replace('{n}', String(status.n)).replace('{total}', String(total)).replace('{left}', String(total - status.n));
+  const tree = { onTrack: 'adventTreeOnTrack', plainOpen: 'adventTreePlainOpen', decorated: 'adventTreeDecorated', plain: 'adventTreePlain' }[status.tree];
+  const parts = [today === 'found' ? t(locale, 'adventTodayFound') : today === 'missing' ? t(locale, 'adventTodayMissing') : null, tree ? t(locale, tree) : null].filter(Boolean);
+  return [first, parts.join(' \u00b7 ')];
 }
 
 /** The 📚 board's footer for the player's own row: "You: #3 of 12 · 92.5 %". */

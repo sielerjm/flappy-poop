@@ -1,6 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel, fitScale } from '../logic.js';
+import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel, fitScale, dailyDay, nextPretendDay } from '../logic.js';
 import { t, toggleLabel, metaFontSize, levelLabel } from '../i18n.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
@@ -137,7 +137,8 @@ export class Settings extends Phaser.Scene {
   }
 
   /**
-   * Test mode rows: start level for the next run (◀ / ▶, wrapping), Invincible,
+   * Test mode rows: start level for the next run (◀ / ▶, wrapping), the Pretend date (◀ / ▶ a day; plan 17, 1.6:
+   * the decorations' clock, dailyDay; back on today it follows the real date again), Invincible,
    * the power-up buttons (live only while a test run is paused under this
    * panel; each tap is Play.grantTest), and Exit, which turns test mode off and
    * redraws the plain panel. Play keeps every value (session registry).
@@ -165,6 +166,26 @@ export class Settings extends Phaser.Scene {
           showLevel();
         });
       this.testItems.push(pressable(step < 0 ? 'levelDown' : 'levelUp', zone));
+    }
+
+    // The Pretend date: December decorations in November (plan 17). The Daily Dump's own day never moves.
+    // Gold while a pretend date is set, white on the real date; 36 px so the date clears the ◀ / ▶.
+    const dayText = this.add.text(cx, rows.pretendDate, '', { ...STYLE, fontSize: '36px' }).setOrigin(0.5);
+    const showDay = () => dayText.setText(`${t(locale, 'testPretendDate')}  ${dailyDay(this.registry)}`).setColor(play.testSettings().pretendDay ? '#ffd700' : '#ffffff');
+    showDay();
+    for (const [box, step, glyph] of [
+      [test.dayDown, -1, '◀'],
+      [test.dayUp, 1, '▶'],
+    ]) {
+      this.add.text(box.x, box.y, glyph, { ...STYLE, fontSize: '44px', color: '#f8a0c8' }).setOrigin(0.5);
+      const zone = this.add
+        .zone(box.x, box.y, box.width, box.height)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          play.setTestSettings({ pretendDay: nextPretendDay(this.registry, step) });
+          showDay();
+        });
+      this.testItems.push(pressable(step < 0 ? 'dayDown' : 'dayUp', zone));
     }
 
     this.invincibleLabel = this.addToggle(cx, rows.invincible, toggleLabel(locale, 'invincible', play.testSettings().invincible), () => {

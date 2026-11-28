@@ -30,7 +30,7 @@ import {
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Keys that are intentionally identical in en and zh-Hans. */
-const IDENTICAL_OK = new Set(['readyTitle', 'aboutName', 'langEnglish', 'langChinese']);
+const IDENTICAL_OK = new Set(['readyTitle', 'aboutName', 'langEnglish', 'langChinese', 'adventCount', 'adventDecorated', 'adventPlain', 'adventTreeDecorated', 'adventTreePlain']); // the Advent counts are emoji and numbers (plan 17, 2.6)
 
 /** English UI literals that must not appear hardcoded in scenes / tray. */
 const SCENE_DENYLIST = [

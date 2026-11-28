@@ -6,7 +6,7 @@
 // these; tests/versus.test.js covers them.
 
 import { GAME_HEIGHT } from './config.js';
-import { fieldWidth, levelProgress, levelFor, pipeSpacing, MYSTERY_DRAWS } from './logic.js';
+import { fieldWidth, isDayKey, levelProgress, levelFor, pipeSpacing, MYSTERY_DRAWS } from './logic.js';
 
 /** The ready-screen toggle's emoji (two heads), beside the 🚽 one. */
 export const VERSUS_EMOJI = '👥';
@@ -59,10 +59,11 @@ export function slotTemplate() {
  * A new match on the join screen: slot 0 is the left half (P1), slot 1 the right (P2).
  * Options a tournament race sets: `levelPipes` (its own level lengths, read by each half as
  * Play.tune), `names` ([left, right] shown instead of P1 / P2) and `tournament` ({ round,
- * matchId }: the bracket match it races; truthy).
+ * matchId }: the bracket match it races; truthy). `day` ('YYYY-MM-DD', else null) is the day the
+ * match was made (plan 17, T16): a December one storms in both halves, whatever the clock says later.
  */
-export function createMatch(seed, { levelPipes = null, names = null, tournament = false } = {}) {
-  return { seed: seed >>> 0, status: 'join', slots: [slotTemplate(), slotTemplate()], levelPipes, names, tournament };
+export function createMatch(seed, { levelPipes = null, names = null, tournament = false, day = null } = {}) {
+  return { seed: seed >>> 0, status: 'join', slots: [slotTemplate(), slotTemplate()], levelPipes, names, tournament, day: isDayKey(day) ? day : null };
 }
 
 /**
@@ -75,9 +76,9 @@ export function matchHostKey(match) {
   return match ? (match.hostKey ?? 'Versus') : null;
 }
 
-/** A rematch: the same devices on the same sides and the same options, a fresh seed, everything else reset. */
+/** A rematch: the same devices on the same sides and the same options (its day too), a fresh seed, everything else reset. */
 export function resetMatch(match, seed) {
-  const next = createMatch(seed, { levelPipes: match?.levelPipes ?? null, names: match?.names ?? null, tournament: match?.tournament ?? false });
+  const next = createMatch(seed, { levelPipes: match?.levelPipes ?? null, names: match?.names ?? null, tournament: match?.tournament ?? false, day: match?.day ?? null });
   next.slots.forEach((slot, i) => {
     slot.device = match?.slots?.[i]?.device ?? null;
   });

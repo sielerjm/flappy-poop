@@ -14,7 +14,7 @@ import { createRunQueue, createRacePostQueue } from '../src/leaderboard.js';
 import { createMatch } from '../src/versus.js';
 import { createTournament, nextMatch, matchPlayers, racePosts, claimFromCode } from '../src/tournament.js';
 import { exportCode } from '../src/save.js';
-import { createRng } from '../src/logic.js';
+import { createRng, levelEnd, withLevelPipes } from '../src/logic.js';
 import { fakeStorage, playScene } from './support/scenes.js';
 import { freshDb, installPostgrest, id } from './support/postgrest.js';
 
@@ -29,7 +29,7 @@ const LAST = TUNING.levels.lastLevel;
 /** A summary begun as start() begins a race half's (mode 'race', off the toilet). */
 function raceStats(runId = 'R'.repeat(22)) {
   const s = createRunStats();
-  s.begin({ runId, session: 'sessionAB12', mode: 'race', toilet: false, level: 1, version: '0.26.0', now: performance.now(), wall: Date.now() - 120_000 });
+  s.begin({ runId, session: 'sessionAB12', mode: 'race', toilet: false, level: 1, version: '0.26.0', now: performance.now() - 120_000, wall: Date.now() - 120_000 });
   return s;
 }
 const ended = (s) => s.end({ now: performance.now(), wall: Date.now(), score: 0, level: 1 });
@@ -39,6 +39,7 @@ function raceRow(runId, score, level = LAST) {
   const s = raceStats(runId);
   s.flap({ now: 10, internal: true });
   s.frame(16, 4);
+  for (let i = 0; i < levelEnd(level, withLevelPipes(TUNING, TUNING.tournament.levelPipes)); i += 1) s.pipe(); // a won race flies every pair of its course (run_limits())
   return s.end({ now: performance.now(), wall: Date.now(), score, level, won: true });
 }
 

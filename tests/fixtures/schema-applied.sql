@@ -40,6 +40,9 @@
 --   * call schema_version()        which version of this file the database last ran (a stamp of the file; 2026-11-13)
 --   * call play_days(...)          the days the player played, for their day streaks (plan 34): their own id only, days only;
 --                                  keeps the time zone it is sent (never shown) and the longest Singleplayer streak
+--   * call submit_advent_piece(...) December's Advent pieces a run found (plan 17): today's or yesterday's, one per piece
+--   * call advent_progress(...)    the pieces the player holds for a season: their own id only, pieces and days only
+--   * call advent_board(...)       the 🧩 board for a season: names and piece counts, never ids; a page from p_offset
 -- Online play (plan 39). A device entering online play signs in anonymously (Supabase Auth: no email,
 -- nothing sent at sign-in), so its requests run as `authenticated`, which may call these and nothing
 -- else (anon may call none of them; a session token sent to an anon function is refused):
@@ -95,7 +98,7 @@
 -- or research_responses (nor the research_* views), run_log, run_rejects, held_scores,
 -- score_steps, board_settings, online_profiles, online_players, online_pairings, rooms,
 -- join_attempts, online_secret, matches, online_settings, online_trust, friendships, blocks,
--- friend_asks or online_beats (authenticated has nothing on any table either). Profiles are public
+-- friend_asks, online_beats or advent_pieces (authenticated has nothing on any table either). Profiles are public
 -- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
 -- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
@@ -263,6 +266,15 @@
 --     public.online_random(bigint); restore name_blocked and fold_player from git and run this file;
 --     then drop table public.online_pairings, public.online_players, public.online_profiles.
 --   undo the stamp: drop function public.schema_version();
+--   undo Advent (plan 17, Stage 2): drop function public.submit_advent_piece(text, jsonb),
+--     public.advent_progress(text, int), public.advent_board(text, int, int, int), public.advent_award(text, int);
+--     drop function public.daily_board(text, date, int, int); then restore submit_daily_score,
+--     daily_board, release_run, fold_player, achievement_catalog and claim_achievements from git (before
+--     plan 17) with daily_board's grant, run this file, delete from public.achievement_defs where id in
+--     ('advent_tree_2026', 'advent_pine_2026'), and drop function public.advent_season(date),
+--     public.utc_today(); drop table public.advent_pieces.
+--   undo a run row's limits: restore run_row_problem from git and run this file; then
+--     drop function public.run_limits().
 --   undo the board pages (plan 28, 5.2): drop function public.score_board(text, int, int),
 --     public.daily_board(text, date, int, int), public.tournament_board(text, int, int),
 --     public.education_board(text, int, int); then restore the four from git (without p_offset)
@@ -843,6 +855,45 @@ create index if not exists daily_scores_name_key on public.daily_scores (public.
 alter table public.daily_scores enable row level security;
 revoke all on public.daily_scores from public, anon, authenticated;
 
+-- The server's UTC day (plan 17, 2.4): one function, so a PGlite test can move it (tests/adventSchema.test.js
+-- redefines it). The Daily, its board and the Advent pieces read it. Internal.
+create or replace function public.utc_today()
+returns date
+language sql
+stable
+as $$
+  select (now() at time zone 'utc')::date;
+$$;
+revoke execute on function public.utc_today() from public, anon, authenticated;
+
+-- Christmas (plan 17): is p_day in the season, all of December (adventSeason in src/logic.js with
+-- TUNING.advent's seasonMonth 12 and seasonLastDay 31; tests/adventSchema.test.js keeps the two the same)?
+-- Keyed by the posted day, so a 31 Dec run posted on 1 Jan keeps December's rules. Internal.
+create or replace function public.advent_season(p_day date)
+returns boolean
+language sql
+immutable
+as $$
+  select coalesce(extract(month from p_day) = 12 and extract(day from p_day) <= 31, false);
+$$;
+revoke execute on function public.advent_season(date) from public, anon, authenticated;
+
+-- Advent (plan 17, Stage 2): the pieces of December's puzzle a player found. Piece k releases on k Dec;
+-- `day` is the Daily's day the run that found it started on (today or yesterday when it was posted), so
+-- day = k Dec means found on its own day (the board's 🎁 and the 🧩 board's tiebreak). One row per
+-- piece and season; readable by no role (advent_progress, advent_board and daily_board answer).
+create table if not exists public.advent_pieces (
+  player_id    text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  season       smallint not null check (season between 2026 and 9999),
+  piece        smallint not null check (piece between 1 and 24),
+  day          date not null,
+  submitted_at timestamptz not null default now(),
+  primary key (player_id, season, piece),
+  check (extract(year from day) = season and extract(month from day) = 12 and extract(day from day) >= piece)
+);
+alter table public.advent_pieces enable row level security;
+revoke all on public.advent_pieces from public, anon, authenticated;
+
 -- 32-bit FNV-1a over a text's characters (fnv1a32 in src/logic.js: day keys are
 -- ASCII, so the code points match the client's UTF-16 units). Internal.
 create or replace function public.fnv1a32(p text)
@@ -911,10 +962,13 @@ create table if not exists public.achievement_defs (
 alter table public.achievement_defs enable row level security;
 revoke all on public.achievement_defs from public, anon, authenticated;
 -- Time-boxed quests: one row per catalog entry with from / to (tests/achievements.test.js
--- checks they agree). Re-running the file updates a window. None yet; for example:
---   insert into public.achievement_defs (id, starts, ends) values
---     ('quest_example', '2026-12-01', '2026-12-31')
---   on conflict (id) do update set starts = excluded.starts, ends = excluded.ends;
+-- checks they agree). Re-running the file updates a window. The Advent trees (plan 17, 2.6b; S1,
+-- Michael 26 Nov): one a player for December 2026, 🎄 for all 24 pieces found by 24 Dec, else 🌲 by
+-- 31 Dec; the game claims them from its own pieces (S11 (a)), and claims close on 2 Jan (the grace).
+insert into public.achievement_defs (id, starts, ends) values
+  ('advent_tree_2026', '2026-12-01', '2026-12-31'),
+  ('advent_pine_2026', '2026-12-01', '2026-12-31')
+on conflict (id) do update set starts = excluded.starts, ends = excluded.ends;
 
 create table if not exists public.player_achievements (
   player_id      text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
@@ -1245,8 +1299,17 @@ begin
   insert into public.daily_scores (player_id, day, name, score, level, pipes, submitted_at)
   select v_keep, d.day, d.name, d.score, d.level, d.pipes, d.submitted_at
   from public.daily_scores d where d.player_id = v_merge
-  on conflict (player_id, day) do nothing;
+  on conflict (player_id, day) do update -- a December day keeps the higher (plan 17); else the kept player's row
+    set score = excluded.score, level = excluded.level, pipes = excluded.pipes, submitted_at = excluded.submitted_at
+    where public.advent_season(excluded.day) and excluded.score > public.daily_scores.score;
   delete from public.daily_scores where player_id = v_merge;
+  -- Advent pieces (plan 17): every piece of both, at the earlier day each was found.
+  insert into public.advent_pieces (player_id, season, piece, day, submitted_at)
+  select v_keep, a.season, a.piece, a.day, a.submitted_at from public.advent_pieces a where a.player_id = v_merge
+  on conflict (player_id, season, piece) do update
+    set day = excluded.day, submitted_at = excluded.submitted_at
+    where excluded.day < public.advent_pieces.day;
+  delete from public.advent_pieces where player_id = v_merge;
   insert into public.player_counters (player_id, counters, last_batch, updated_at, recent_batches)
   select v_keep, m.counters, m.last_batch, m.updated_at, m.recent_batches
   from public.player_counters m where m.player_id = v_merge
@@ -1821,12 +1884,14 @@ security definer
 set search_path = public
 as $$
 declare
-  v_today date := (now() at time zone 'utc')::date;
+  v_today date := public.utc_today();
   v_id text;
   v_key text;
   v_rows int;
   v_top_before text;
   v_top_after text;
+  v_cur public.daily_scores%rowtype;
+  v_last timestamptz;
 begin
   if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
     raise exception 'bad player id';
@@ -1855,6 +1920,48 @@ begin
   end if;
 
   perform public.touch_player(v_id);
+
+  -- December (plan 17, 2.4): play as often as you like; the board keeps each player's best of the day.
+  -- Every post that raises the row (or makes the first) is matched to its run (plan 30, as board_post
+  -- does for 🏆): held, it is kept in held_scores and answered 'kept', like a post that raised nothing,
+  -- which writes nothing. A raise within 5 s of the player's last one that day is refused ('too soon';
+  -- not a "bad" message, so the game keeps it and sends it again). A held post never blocks a later one.
+  if public.advent_season(p_day) then
+    perform pg_advisory_xact_lock(hashtext('board:daily:' || p_day::text));
+    select * into v_cur from public.daily_scores ds where ds.player_id = v_id and ds.day = p_day;
+    if v_cur.player_id is not null and p_score <= v_cur.score then
+      return 'kept';
+    end if;
+    select greatest(v_cur.submitted_at, max(h.posted_at)) into v_last
+    from public.held_scores h where h.player_id = v_id and h.board = 'daily' and h.day = p_day;
+    if v_last is not null and v_last > now() - interval '5 seconds' then
+      raise exception 'too soon';
+    end if;
+    if public.post_must_hold(v_id, false, p_score, p_level, p_day) then
+      insert into public.held_scores (player_id, board, day, name, score, level, pipes, run_id)
+      values (v_id, 'daily', p_day, p_name, p_score, p_level, p_pipes,
+              (select r.run_id from public.run_log r where r.player_id = v_id and r.mode = 'daily' and r.held
+                 and r.day = p_day and r.score = p_score order by r.received_at desc limit 1));
+      update public.daily_scores set name = p_name where player_id = v_id and name <> p_name;
+      return 'kept';
+    end if;
+    select ds.player_id into v_top_before from public.daily_scores ds where ds.day = p_day and not public.player_hidden(ds.player_id) order by ds.score desc, ds.submitted_at asc limit 1;
+    insert into public.daily_scores (player_id, day, name, score, level, pipes)
+    values (v_id, p_day, p_name, p_score, p_level, p_pipes)
+    on conflict (player_id, day) do update
+      set name = excluded.name, score = excluded.score, level = excluded.level, pipes = excluded.pipes, submitted_at = now()
+      where excluded.score > public.daily_scores.score;
+    get diagnostics v_rows = row_count;
+    if v_rows = 0 then
+      return 'kept';
+    end if;
+    update public.daily_scores set name = p_name where player_id = v_id and name <> p_name;
+    select ds.player_id into v_top_after from public.daily_scores ds where ds.day = p_day and not public.player_hidden(ds.player_id) order by ds.score desc, ds.submitted_at asc limit 1;
+    if v_top_after = v_id and v_top_before is not null and v_top_before <> v_id then
+      perform public.add_server_counter(v_id, 'dethroned', 1);
+    end if;
+    return 'ok';
+  end if;
 
   -- The day's first post is matched to its run (plan 30): held, it is kept in held_scores and
   -- answered as stored ('ok', then 'duplicate'); the player's earlier days follow the name as usual.
@@ -1899,9 +2006,13 @@ $$;
 -- played that day. No ids leave the server. p_offset (plan 28, 5.2; default 0,
 -- so page 1's call is unchanged): the page of places p_offset + 1 to p_offset +
 -- p_limit. The old three-argument signature is dropped first.
+-- December (plan 17, 2.4): `gift` (🎁) when the player found that day's own piece on that day (advent_pieces;
+-- never 25 to 31 Dec), and the caller's own row is the higher of their stored row and their best held post.
+-- The answer gained `gift`, so the four-argument signature is dropped and made again (its grant below).
 drop function if exists public.daily_board(text, date, int);
+drop function if exists public.daily_board(text, date, int, int);
 create or replace function public.daily_board(p_player_id text default null, p_day date default null, p_limit int default 25, p_offset int default 0)
-returns table (rank int, name text, score int, level int, pipes int, me boolean, total int)
+returns table (rank int, name text, score int, level int, pipes int, me boolean, total int, gift boolean)
 language sql
 stable
 security definer
@@ -1912,24 +2023,177 @@ as $$
   ), page as ( -- places lo + 1 to hi (plan 28, 5.2)
     select least(greatest(coalesce(p_offset, 0), 0), 1000000) as lo, least(greatest(coalesce(p_offset, 0), 0), 1000000) + least(greatest(coalesce(p_limit, 25), 1), 100) as hi
   ), today as (
-    select coalesce(p_day, (now() at time zone 'utc')::date) as d
+    select coalesce(p_day, public.utc_today()) as d
+  ), held as ( -- the caller's best held post of the day (plan 30): one row
+    select h.player_id, h.day, h.name, h.score, h.level, coalesce(h.pipes, 0) as pipes, h.posted_at
+    from public.held_scores h
+    where h.board = 'daily' and h.released_at is null and h.player_id = (select cid from caller) and h.day = (select d from today)
+    order by h.score desc, h.posted_at asc limit 1
   ), ranked as (
     select ds.player_id as pid,
            coalesce((select s.name from public.scores s where s.player_id = ds.player_id order by s.updated_at desc limit 1), ds.name) as pname,
            ds.score as pscore, ds.level as plevel, ds.pipes as ppipes,
            row_number() over (order by ds.score desc, ds.submitted_at asc)::int as prank,
-           (count(*) over ())::int as ptotal
+           (count(*) over ())::int as ptotal,
+           exists (select 1 from public.advent_pieces a -- plan 17: that day's own piece, found that day
+                   where a.player_id = ds.player_id and a.season = extract(year from ds.day) and a.piece = extract(day from ds.day) and a.day = ds.day) as pgift
     from (
       select x.player_id, x.day, x.name, x.score, x.level, x.pipes, x.submitted_at from public.daily_scores x
-      union all -- the caller's own held post of the day (plan 30)
-      select h.player_id, h.day, h.name, h.score, h.level, coalesce(h.pipes, 0), h.posted_at from public.held_scores h
-      where h.board = 'daily' and h.released_at is null and h.player_id = (select cid from caller)
-        and not exists (select 1 from public.daily_scores y where y.player_id = h.player_id and y.day = h.day)
+      where x.day = (select d from today)
+        and not exists (select 1 from held where held.player_id = x.player_id and held.score > x.score and public.advent_season(x.day))
+      union all -- the caller's own held post of the day (plan 30); in December when it is higher than their row
+      select h.player_id, h.day, h.name, h.score, h.level, h.pipes, h.posted_at from held h
+      where not exists (select 1 from public.daily_scores y where y.player_id = h.player_id and y.day = h.day
+                          and (not public.advent_season(y.day) or y.score >= h.score))
     ) ds
     where ds.day = (select d from today)
       and (not public.player_hidden(ds.player_id) or ds.player_id = (select cid from caller)) -- plan 30
   )
   select r.prank, r.pname, r.pscore, r.plevel, r.ppipes,
+         coalesce(r.pid = (select cid from caller), false), r.ptotal, r.pgift
+  from ranked r
+  where (r.prank > (select lo from page) and r.prank <= (select hi from page)) or r.pid = (select cid from caller)
+  order by r.prank;
+$$;
+
+-- Advent (plan 17, 2.4): the pieces a Daily run found, sent as a batch, 1 to 24 { piece, day } entries
+-- (day: the Daily's day the run started on). Each is judged alone: refused when its day is neither today
+-- nor yesterday (utc_today), is outside December, or its piece is not out yet on that day (piece k on k
+-- Dec); kept (not stored; the game keeps it while its day is today or yesterday) when the player's Daily
+-- runs of that day are all held, or with require_run on (plan 30) when there is none; else stored, once
+-- per piece and season (one already stored counts as stored; its earlier day stays). One call per player
+-- per 5 s ('too soon'). Answers { stored, kept, refused } (piece numbers). Errors raise ('bad ...').
+create or replace function public.submit_advent_piece(p_player_id text, p_pieces jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_today date := public.utc_today();
+  v_id text;
+  v_last timestamptz;
+  v_need boolean;
+  v_hold boolean;
+  e jsonb;
+  v_piece int;
+  v_day date;
+  v_stored int[] := '{}';
+  v_kept int[] := '{}';
+  v_refused int[] := '{}';
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_pieces is null or jsonb_typeof(p_pieces) <> 'array' or jsonb_array_length(p_pieces) not between 1 and 24 then
+    raise exception 'bad pieces';
+  end if;
+  for e in select value from jsonb_array_elements(p_pieces) loop
+    if jsonb_typeof(e) is distinct from 'object' or jsonb_typeof(e -> 'piece') is distinct from 'number' or coalesce(e ->> 'piece', '') !~ '^\d{1,2}$'
+       or jsonb_typeof(e -> 'day') is distinct from 'string' or coalesce(e ->> 'day', '') !~ '^\d{4}-\d{2}-\d{2}$' then
+      raise exception 'bad pieces';
+    end if;
+  end loop;
+  v_id := public.resolve_player(p_player_id);
+  perform public.touch_player(v_id);
+  perform pg_advisory_xact_lock(hashtext('advent:' || v_id));
+  select max(a.submitted_at) into v_last from public.advent_pieces a where a.player_id = v_id;
+  if v_last is not null and v_last > now() - interval '5 seconds' then
+    raise exception 'too soon';
+  end if;
+  v_need := coalesce((select b.require_run from public.board_settings b where b.id), false);
+  for e in select value from jsonb_array_elements(p_pieces) loop
+    v_piece := (e ->> 'piece')::int;
+    begin
+      v_day := (e ->> 'day')::date;
+    exception when others then
+      raise exception 'bad pieces';
+    end;
+    if v_day not in (v_today, v_today - 1) or not public.advent_season(v_day) or v_piece < 1 or v_piece > least(24, extract(day from v_day)::int) then
+      v_refused := v_refused || v_piece;
+      continue;
+    end if;
+    -- As post_must_hold judges a post (plan 30): an unheld run that day clears it; only held ones hold it; none, require_run.
+    v_hold := case when exists (select 1 from public.run_log r where r.player_id = v_id and r.mode = 'daily' and r.day = v_day and not r.held) then false
+                   when exists (select 1 from public.run_log r where r.player_id = v_id and r.mode = 'daily' and r.day = v_day) then true
+                   else v_need end;
+    if v_hold then
+      v_kept := v_kept || v_piece;
+      continue;
+    end if;
+    insert into public.advent_pieces (player_id, season, piece, day)
+    values (v_id, extract(year from v_day)::smallint, v_piece, v_day)
+    on conflict (player_id, season, piece) do nothing;
+    v_stored := v_stored || v_piece;
+  end loop;
+  return jsonb_build_object('stored', to_jsonb(v_stored), 'kept', to_jsonb(v_kept), 'refused', to_jsonb(v_refused));
+end;
+$$;
+
+-- The pieces this player holds for p_season, [{ piece, day }] by piece (the game merges them into its
+-- store: the earlier day wins). The player's own id only (aliases resolved); nothing else.
+create or replace function public.advent_progress(p_player_id text, p_season int)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(jsonb_agg(jsonb_build_object('piece', a.piece, 'day', to_char(a.day, 'YYYY-MM-DD')) order by a.piece), '[]'::jsonb)
+  from public.advent_pieces a
+  where p_player_id ~ '^[A-Za-z0-9_-]{22}$' and a.player_id = public.resolve_player(p_player_id) and a.season = p_season;
+$$;
+
+-- A player's tree for p_season (plan 17, S1 as Michael decided 26 Nov): 'decorated' (🎄) for all 24 pieces
+-- found by 24 Dec, late finds included; else 'plain' (🌲) for all 24 by 31 Dec; else null. Internal.
+create or replace function public.advent_award(v_id text, p_season int)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case when count(*) < 24 then null
+              when max(a.day) <= make_date(p_season, 12, 24) then 'decorated'
+              else 'plain' end
+  from public.advent_pieces a where a.player_id = v_id and a.season = p_season;
+$$;
+revoke execute on function public.advent_award(text, int) from public, anon, authenticated;
+
+-- The 🧩 board for p_season (default: this year): players by pieces found (most first), then pieces found
+-- on their own day (most first), then the time the last of them came in (earlier first) (S13), each with
+-- their tree (advent_award). Names as daily_board picks them; no ids. Hidden players (plan 30) are left out
+-- except the caller's own row, which comes with every page (me). A page from p_offset, as daily_board's.
+create or replace function public.advent_board(p_player_id text default null, p_season int default null, p_limit int default 25, p_offset int default 0)
+returns table (rank int, name text, pieces int, on_day int, award text, me boolean, total int)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with caller as (
+    select public.resolve_player(p_player_id) as cid where p_player_id ~ '^[A-Za-z0-9_-]{22}$'
+  ), page as (
+    select least(greatest(coalesce(p_offset, 0), 0), 1000000) as lo, least(greatest(coalesce(p_offset, 0), 0), 1000000) + least(greatest(coalesce(p_limit, 25), 1), 100) as hi
+  ), season as (
+    select coalesce(p_season, extract(year from public.utc_today())::int) as y
+  ), agg as (
+    select a.player_id as pid, count(*)::int as n,
+           (count(*) filter (where a.day = make_date(a.season, 12, a.piece)))::int as onday,
+           max(a.submitted_at) as last_at
+    from public.advent_pieces a
+    where a.season = (select y from season)
+      and (not public.player_hidden(a.player_id) or a.player_id = (select cid from caller))
+    group by a.player_id
+  ), named as (
+    select g.*, coalesce((select s.name from public.scores s where s.player_id = g.pid order by s.updated_at desc limit 1),
+                         (select d.name from public.daily_scores d where d.player_id = g.pid order by d.submitted_at desc limit 1)) as pname
+    from agg g
+  ), ranked as (
+    select n.*, row_number() over (order by n.n desc, n.onday desc, n.last_at asc)::int as prank, (count(*) over ())::int as ptotal
+    from named n where n.pname is not null
+  )
+  select r.prank, r.pname, r.n, r.onday, public.advent_award(r.pid, (select y from season)),
          coalesce(r.pid = (select cid from caller), false), r.ptotal
   from ranked r
   where (r.prank > (select lo from page) and r.prank <= (select hi from page)) or r.pid = (select cid from caller)
@@ -2905,7 +3169,7 @@ as $$
     'level_5', 'level_6', 'level_7', 'win_game', 'toilet_win', 'games_1000', 'deaths_1000', 'fart_100',
     'super_fart_25', 'fiber_1000', 'probiotic_1000', 'postbiotic_100', 'bacteria_1000', 'bean_100',
     'mystery_100', 'coin_1000', 'sky_diver', 'close_shave', 'ibs', 'constipated', 'icarus',
-    'four_of_a_kind', 'lets_go_gambling'
+    'four_of_a_kind', 'lets_go_gambling', 'advent_tree_2026', 'advent_pine_2026'
   ]::text[];
 $$;
 revoke execute on function public.achievement_catalog() from public, anon, authenticated;
@@ -2916,7 +3180,8 @@ revoke execute on function public.achievement_catalog() from public, anon, authe
 -- grace, which the game then forgets. Any other id in achievement_catalog() is an
 -- always-available badge and is kept. An id that is neither (plan 30) is left out
 -- of both lists and changes nothing. 1–50 ids a call, 300 per player. Errors
--- raise ('bad ...': the client drops those claims).
+-- raise ('bad ...': the client drops those claims). The day is utc_today() (plan 17,
+-- 2.6b: a test redefines it, since the Advent trees are the first quests).
 create or replace function public.claim_achievements(p_player_id text, p_ids text[])
 returns jsonb
 language plpgsql
@@ -2925,7 +3190,7 @@ set search_path = public
 as $$
 declare
   v_id text;
-  v_today date := (now() at time zone 'utc')::date;
+  v_today date := public.utc_today();
   v_stored text[] := '{}';
   v_closed text[] := '{}';
   x text;
@@ -2985,8 +3250,32 @@ as $$
 $$;
 revoke execute on function public.run_data_keys() from public, anon, authenticated;
 
+-- A single or race run row's hard limits, the game's own numbers (tests/runLimits.test.js computes each
+-- from TUNING). single_ends / race_ends: the pairs passed by the end of each level (levels.pipes;
+-- tournament.levelPipes for a race). per_pair: a pair and the fiber after it, both at the postbiotic
+-- multiplier; per_buy: a fiber from the shop or a box at the multiplier (and one more found); level_bonus:
+-- a race's points for the first over a line; pair_ms: half the fastest a pair can pass (a super fart).
+-- Internal.
+create or replace function public.run_limits()
+returns jsonb
+language sql
+immutable
+as $$
+  select jsonb_build_object(
+    'single_ends', jsonb_build_array(10, 35, 85, 135, 185, 235, 285),
+    'race_ends', jsonb_build_array(10, 35, 70, 105, 140, 175, 225),
+    'per_pair', 8,
+    'per_buy', 6,
+    'level_bonus', 25,
+    'pair_ms', 100
+  );
+$$;
+revoke execute on function public.run_limits() from public, anon, authenticated;
+
 -- Why a run row cannot be stored, or null when it can. p_sent is the device's clock when the batch
--- was sent (epoch ms). Internal.
+-- was sent (epoch ms). A single or race row also keeps to run_limits(): its pairs a whole number inside
+-- the level it ended on (it flew every pair of the levels before), its score at most what those pairs and
+-- its shop buys carry (+ a race's line bonuses), and its length at least pair_ms a pair. Internal.
 create or replace function public.run_row_problem(e jsonb, p_sent bigint)
 returns text
 language plpgsql
@@ -3000,6 +3289,11 @@ declare
   f record;
   x jsonb;
   v_num text;
+  v_lim jsonb;
+  v_ends jsonb;
+  v_pipes int;
+  v_level int;
+  v_buys int;
 begin
   if jsonb_typeof(e) is distinct from 'object' then
     return 'shape';
@@ -3100,6 +3394,27 @@ begin
         return 'data value';
       end if;
     end loop;
+  end if;
+  if v_mode in ('single', 'race') then
+    v_lim := public.run_limits();
+    if jsonb_typeof(e -> 'data' -> 'pipes') is distinct from 'number' or (e -> 'data' ->> 'pipes') !~ '^\d{1,4}$' then
+      return 'pipes';
+    end if;
+    v_pipes := (e -> 'data' ->> 'pipes')::int;
+    v_level := (e ->> 'level')::int;
+    v_ends := v_lim -> (case when v_mode = 'race' then 'race_ends' else 'single_ends' end);
+    if v_pipes > (v_ends ->> (v_level - 1))::int or (v_level > 1 and v_pipes < (v_ends ->> (v_level - 2))::int) then
+      return 'course';
+    end if;
+    v_buys := case when jsonb_typeof(e -> 'data' -> 'shop_buys') = 'number' and (e -> 'data' ->> 'shop_buys') ~ '^\d{1,6}$'
+                   then (e -> 'data' ->> 'shop_buys')::int else 0 end;
+    if (e ->> 'score')::int > (v_lim ->> 'per_pair')::int * v_pipes + (v_lim ->> 'per_buy')::int * (1 + v_buys)
+                              + (case when v_mode = 'race' then (v_lim ->> 'level_bonus')::int * v_level else 0 end) then
+      return 'points';
+    end if;
+    if (e ->> 'length_ms')::bigint < (v_lim ->> 'pair_ms')::bigint * v_pipes then
+      return 'pace';
+    end if;
   end if;
   return null;
 exception when others then
@@ -3424,7 +3739,7 @@ revoke execute on function public.hold_run(text, text) from public, anon, authen
 
 -- release_run (owner only): undo hold_run. The run counts again, and every held best of that
 -- player with the run's content goes onto the board through the normal rules (the higher score
--- wins; a Daily day keeps the first). True when the run was found and held.
+-- wins; a Daily day keeps the first, a December day the higher, plan 17). True when the run was found and held.
 create or replace function public.release_run(p_player_id text, p_run_id text)
 returns boolean
 language plpgsql
@@ -3460,7 +3775,9 @@ begin
     else
       insert into public.daily_scores (player_id, day, name, score, level, pipes, submitted_at)
       values (v_id, h.day, h.name, h.score, h.level, coalesce(h.pipes, 0), h.posted_at)
-      on conflict (player_id, day) do nothing;
+      on conflict (player_id, day) do update -- December keeps the higher (plan 17); else the first post stays
+        set score = excluded.score, level = excluded.level, pipes = excluded.pipes, submitted_at = excluded.submitted_at
+        where public.advent_season(excluded.day) and excluded.score > public.daily_scores.score;
     end if;
     update public.held_scores set released_at = now() where id = h.id;
   end loop;
@@ -3537,6 +3854,12 @@ revoke execute on function public.play_days(text, text) from public, authenticat
 grant  execute on function public.play_days(text, text) to anon;
 revoke execute on function public.score_board(text, int, int) from public, authenticated;
 grant  execute on function public.score_board(text, int, int) to anon;
+revoke execute on function public.submit_advent_piece(text, jsonb) from public, authenticated;
+grant  execute on function public.submit_advent_piece(text, jsonb) to anon;
+revoke execute on function public.advent_progress(text, int) from public, authenticated;
+grant  execute on function public.advent_progress(text, int) to anon;
+revoke execute on function public.advent_board(text, int, int, int) from public, authenticated;
+grant  execute on function public.advent_board(text, int, int, int) to anon;
 
 -- ===========================================================================
 -- Online play (plan 39): a race by code between two devices, over Supabase Realtime.
@@ -6040,7 +6363,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'df6e05322d54da82'::text; -- schema stamp
+  select '0ba4d9dc950ea93b'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

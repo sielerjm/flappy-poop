@@ -6,14 +6,14 @@ import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 import { createJsonStore } from './store.js';
 import { TUNING, LEADERBOARD } from './config.js';
 
-export const VERSION = '0.31.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
-/** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
+export const VERSION = '0.37.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
+/** The version line (About, How to play and Settings only: VERSION_LINE_OVERLAYS): `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
 export function versionText(locale, version = VERSION) {
   return t(locale, 'versionLine').replace('{version}', version);
 }
 
 /** Player-facing stamp on the About overlay: the time of the last push (written by `npm run push`). */
-export const LAST_UPDATED = '25 Nov 2026, 18:25';
+export const LAST_UPDATED = '28 Nov 2026, 00:06';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -1208,9 +1208,12 @@ export function pipeMoveAmplitude(baseY, bounds, ampPx) {
   return Math.max(0, Math.min(ampPx, baseY - bounds.minY, bounds.maxY - baseY));
 }
 
-/** Worst-case px a moving gap shifts while the poop crosses one column (pipeWidth + its diameter) at `speed` px/s. */
-export function pipeMoveShiftPx(ampPx, periodMs, speed, t) {
-  const peak = (ampPx * 2 * Math.PI) / (periodMs / 1000); // px/s at the sine's steepest
+/**
+ * Worst-case px a moving gap shifts while the poop crosses one column (pipeWidth + its diameter) at `speed` px/s,
+ * its drift clock running at `driftShare` of real time (a December storm slows it with the scroll: plan 17, 1c.4).
+ */
+export function pipeMoveShiftPx(ampPx, periodMs, speed, t, driftShare = 1) {
+  const peak = ((ampPx * 2 * Math.PI) / (periodMs / 1000)) * driftShare; // px/s at the sine's steepest
   return (peak * (t.pipeWidth + 2 * t.poopRadius)) / speed;
 }
 
@@ -1240,7 +1243,7 @@ export function mixSeed(seed, n, salt = 0) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14, reward: 15, superQ: 16 };
+const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14, reward: 15, superQ: 16, storm: 17 };
 
 /**
  * The run's course: the pair the first mystery box rides after, and per pair
@@ -1308,6 +1311,13 @@ export function createCourse(seed, t, { shared = false } = {}) {
      */
     coin(n) {
       return createRng(mixSeed(seed, n, COURSE_SALT.coin))() < t.coin.chance;
+    },
+    /**
+     * Pair `n`'s storm draw in [0, 1) (plan 17, 2.7: stormStartsHere compares it with advent.storm.chance), from its
+     * own stream, so no other roll moves. A shared course only (the Daily Dump's); null on a single run's.
+     */
+    storm(n) {
+      return shared ? createRng(mixSeed(seed, n, COURSE_SALT.storm))() : null;
     },
     kernelPair(level) {
       const lv = Math.max(1, Math.floor(level) || 1);
@@ -1870,7 +1880,16 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   // The user button, its bottom at 1111: above the ground strip (1152) and the tray band (1168).
   // It does not move when the block above shifts.
   const profile = { id: 'profile', x: cx, y: 1111 - boxH / 2, width: 360, height: boxH };
-  return { title, poop, toilet, howto, daily, profile, ...switches };
+  // December's countdown line (plan 17, 1.12): in the gap between the title's ink (to y 414) and the bubble's top
+  // at its highest (481.5), as Gate A's sheet 7 placed it. Drawn only, never hit.
+  const countdown = { id: 'countdown', x: cx, y: 448, width: 460, height: 56 };
+  // The Bowelidays image (plan 17, 1.14; D16 (b)): above the title, under the top row's halos. Drawn only.
+  const bw = width * t.advent.bowelidays.widthFrac;
+  const bowelidays = { id: 'bowelidays', x: cx, y: t.advent.bowelidays.y, width: bw, height: bw * t.advent.bowelidays.aspect };
+  // The Advent button (plan 17, 2.15a; S14, Gate A sheet 5): the same round button in the top-left corner, on the ? row,
+  // mirroring the ? (its halo inside the field), with "N/24" on its lower right. It replaced 2.6's chip under the 🎅.
+  const advent = { id: 'advent', x: x0 + 16 + haloR, y: howto.y, width: boxH, height: boxH, round: true };
+  return { title, poop, toilet, howto, daily, profile, countdown, bowelidays, advent, ...switches };
 }
 
 function inBox(x, y, box) {
@@ -2023,13 +2042,14 @@ export function shareCardLayout(t) {
 
 /**
  * Which ready-screen box contains (x, y): 'toilet' | 'versus' | 'educationInfo' | 'education' |
- * 'howto' | 'daily' | 'profile' | null (null = start the run). A switch not offered has no box, so it is never hit. The profile (user) button is always
+ * 'howto' | 'daily' | 'advent' | 'profile' | null (null = start the run; Play starts it too on 'advent' while the
+ * Advent button is hidden: off season with no piece owned). A switch not offered has no box, so it is never hit. The profile (user) button is always
  * there: it reads "Load user" until a name is set; either way it opens the save panel. The 📚
  * glyph's box (educationInfo) lies inside the 📚 switch's, so it is looked at first.
  */
 export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.versus, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.profile]) {
+  for (const box of [layout.toilet, layout.versus, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.advent, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;
@@ -2082,15 +2102,21 @@ export function chromeShown({ state, launching = false, quizOpen = false, shopOp
 }
 
 /**
+ * The overlays that draw the version line (it opens What's new): About (the ⓘ), How to play (home's ?) and Settings
+ * (plan 17, 1c.7, T15, Michael 27 Nov: "the other windows don't need it because it's redundant").
+ */
+export const VERSION_LINE_OVERLAYS = Object.freeze(['about', 'howto', 'settings']);
+
+/**
  * Decide what a tray / keyboard / overlay event should do. Scenes execute the
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'respawn'|'dead'} state ('respawn': a match half between a crash and its restart; pauses like 'playing', ignores taps)
- * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'|'stats'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'|'stats'|'advent'|'santapick'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
  * @param {boolean} stackedUnder true when Feedback, What's new or a profile sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'shop'|'quiz'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break; 'quiz': the 📚 pill in an education run's level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'advent'|'santapick'|'shop'|'quiz'|'tap'|'esc'|'close'} input ('advent': the Advent book, ready screen or over the 🌞 popup; 'santapick': the 🎅 picker, over the 🌞 popup only; 'shop': the 💰 button in a level break; 'quiz': the 📚 pill in an education run's level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @param {boolean} shop true while this half's level-break shop panel is open
  * @param {boolean} breaking true while this half is in its own level break (the only place the shop opens)
@@ -2125,6 +2151,12 @@ export function chromeIntent({
       if (overlay === 'stats') {
         return { do: 'closeTop', armResumeLockout: !stackedUnder }; // back to the board or the 🌞 popup underneath
       }
+      if (overlay === 'advent') {
+        return { do: 'closeTop', armResumeLockout: !stackedUnder }; // back to the 🌞 popup when it opened from its 🧩 line
+      }
+      if (overlay === 'santapick') {
+        return { do: 'closeTop', armResumeLockout: !stackedUnder }; // back to the 🌞 popup it opened from
+      }
       return { do: 'closeTop', armResumeLockout: !(overlay === 'about' && stackedSettings) };
     }
     if (input === 'feedback') return { do: 'openFeedback', pause: false };
@@ -2132,8 +2164,12 @@ export function chromeIntent({
     if (input === 'howto' && overlay === 'about') return { do: 'openHowTo', pause: false };
     // A profile (plan 08) opens over the board (a tapped name) or the 🌞 popup (the save panel over it).
     if (input === 'stats' && (overlay === 'leaderboard' || overlay === 'daily')) return { do: 'openStats', pause: false };
-    // A version line: What's new opens over any overlay (its own version links restart it instead).
-    if (input === 'changelog' && overlay !== 'changelog') return { do: 'openChangelog', pause: false };
+    // The Advent book (plan 17, 2.15) opens over the 🌞 popup from its 🧩 line.
+    if (input === 'advent' && overlay === 'daily') return { do: 'openAdvent', pause: false };
+    // The 🎅 picker (plan 17, 1b.2e) opens over the 🌞 popup from its title 🎅, and only there.
+    if (input === 'santapick' && overlay === 'daily') return { do: 'openSantaPicker', pause: false };
+    // A version line: What's new opens over About, How to play and Settings, the three that have one (T15).
+    if (input === 'changelog' && VERSION_LINE_OVERLAYS.includes(overlay)) return { do: 'openChangelog', pause: false };
     return { do: 'ignore' };
   }
 
@@ -2162,6 +2198,8 @@ export function chromeIntent({
   if (input === 'howto') return { do: 'openHowTo', pause: live };
   // The 🌞 popup starts a run, so it opens from the ready screen only.
   if (input === 'daily') return state === 'ready' ? { do: 'openDaily', pause: false } : { do: 'ignore' };
+  // The Advent book (plan 17, 2.15): from the home screen's Advent button (or the save panel), never mid-run.
+  if (input === 'advent') return state === 'ready' ? { do: 'openAdvent', pause: false } : { do: 'ignore' };
   if (input === 'changelog') return { do: 'openChangelog', pause: live };
   if (input === 'lang') return { do: 'openLanguage', pause: live };
   if (input === 'feedback') return { do: 'openFeedback', pause: live };
@@ -2365,6 +2403,505 @@ export function utcDayKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
+/** True for a 'YYYY-MM-DD' string that names a real calendar day. */
+export function isDayKey(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && utcDayKey(d) === s;
+}
+
+/** `day` ('YYYY-MM-DD') moved by `step` whole days. */
+export function shiftDayKey(day, step) {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + step);
+  return utcDayKey(d);
+}
+
+/**
+ * The decorations' clock (plan 17, 1.6): the real time, or in test mode the Pretend date at the real
+ * time of day. `reg` is the game registry (anything with get), shared by every scene, so every scene
+ * reads the same day; 'testPretendDay' lives there for the session and counts only while 'testMode' is on.
+ * Only decorations read it in Stage 1: the Daily Dump's day, course, level and posts keep utcDayKey().
+ */
+export function dailyNow(reg, now = new Date()) {
+  const pretend = reg?.get?.('testMode') ? reg.get('testPretendDay') : null;
+  if (!isDayKey(pretend)) return now;
+  return new Date(now.getTime() + Date.parse(`${pretend}T00:00:00Z`) - Date.parse(`${utcDayKey(now)}T00:00:00Z`));
+}
+
+/** The day of dailyNow as 'YYYY-MM-DD'. */
+export function dailyDay(reg, now = new Date()) {
+  return utcDayKey(dailyNow(reg, now));
+}
+
+/** The Pretend date after a ◀ / ▶ step from the day shown: null (the real date again) when it lands on today. */
+export function nextPretendDay(reg, step, now = new Date()) {
+  const next = shiftDayKey(dailyDay(reg, now), step);
+  return next === utcDayKey(now) ? null : next;
+}
+
+/** The Daily Dump's glyph outside the season. */
+export const SUN = '\u{1F31E}';
+
+/** Christmas (plan 17): does `day` ('YYYY-MM-DD', from dailyDay) fall in the season (all of December by default)? */
+export function adventSeason(day, t) {
+  if (!isDayKey(day)) return false;
+  const month = Number(day.slice(5, 7));
+  const date = Number(day.slice(8, 10));
+  return month === t.advent.seasonMonth && date <= t.advent.seasonLastDay;
+}
+
+/**
+ * Christmas skins (plan 17, 1.10) in force on `day`: `art`'s twin map, fart frames and files (src/advent.js ADVENT_ART)
+ * while the season holds, nothing off season. Decoration only: it changes textures, never a hitbox or a rule.
+ */
+export function seasonalSkin(day, t, art) {
+  if (!adventSeason(day, t)) return { twins: {}, fartFrames: [], snowCap: null, files: {} };
+  return { twins: art.twins, fartFrames: art.fartFrames, snowCap: art.snowCap, files: art.files };
+}
+
+/**
+ * The texture to show for a stock key under `skin`: its twin once `has(twin)` (the file has loaded), else the
+ * stock key itself. 'poop-fart' shows fartFrames[fartFrame] in turn (the hat in the wind).
+ */
+export function twinKey(stock, skin, fartFrame = 0, has = () => true) {
+  const frames = skin.fartFrames;
+  const twin = stock === 'poop-fart' && frames.length ? frames[fartFrame % frames.length] : skin.twins[stock];
+  return twin && has(twin) ? twin : stock;
+}
+
+/**
+ * A stock icon's texture under `skin` (Stage 1c, T12: the December art at the HUD, the bean button, Over and the share
+ * card, How to play, the shop): `key` its twin once loaded, else the stock; `mul` the twin's frame width over the
+ * stock's, so a box sized for the stock draws the item itself at its usual size (the holly bean's leaves stick out).
+ */
+export function seasonIcon(stock, skin, has, width) {
+  const key = twinKey(stock, skin, 0, has);
+  return { key, mul: key === stock ? 1 : width(key) / width(stock) };
+}
+
+// Advent pieces (plan 17, 2.6). `found` is the found-day store's map { piece: 'YYYY-MM-DD' } (createAdventStore).
+
+/** The highest piece out on `day` (piece k on k Dec): 0 off season, else the date, at most advent.piece.count. */
+export function adventReleased(day, t) {
+  if (!adventSeason(day, t)) return 0;
+  return Math.min(Number(day.slice(8, 10)), t.advent.piece.count);
+}
+
+/** The pieces out on `day` that `found` lacks, in order (the backlog a run's piece is rolled from). */
+export function adventBacklog(found, day, t) {
+  const out = [];
+  for (let k = 1; k <= adventReleased(day, t); k += 1) if (!found?.[k]) out.push(k);
+  return out;
+}
+
+/**
+ * A run's piece from `backlog`, drawn with `rng` (per attempt, never the shared course): the day's own piece
+ * (piece k on k Dec) weighs advent.piece.todayWeight, every other piece 1. Null for an empty backlog.
+ */
+export function rollAdventTarget(backlog, day, rng, t) {
+  if (!backlog?.length) return null;
+  const today = Number(String(day).slice(8, 10));
+  const weights = backlog.map((k) => (k === today ? t.advent.piece.todayWeight : 1));
+  let r = rng() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < backlog.length; i += 1) {
+    r -= weights[i];
+    if (r < 0) return backlog[i];
+  }
+  return backlog[backlog.length - 1];
+}
+
+/**
+ * The chance the run's piece is offered at pair `pair` (counted from the run's first) if it has not been yet
+ * (Michael, 27 Nov): none before minPair (the slot after pipe 5), then startChance there, stepChance more for each
+ * later pair and missChance more for each of the day's runs that ended without it; capped at 1. No guarantee pair.
+ */
+export function adventPairChance(pair, misses, t) {
+  const p = t.advent.piece;
+  if (pair < p.minPair) return 0;
+  return Math.min(1, p.startChance + Math.max(0, misses) * p.missChance + (pair - p.minPair) * p.stepChance);
+}
+
+/**
+ * The pair from which a run's piece may show: one draw at the run's start from adventPairChance's rising odds
+ * (the first pair whose running chance of an offer passes the draw), so a run makes one rng() call. The chance
+ * reaches 1 within (1 - startChance) / stepChance pairs, so the walk always ends.
+ */
+export function adventSpawnPair(misses, rng, t) {
+  return adventSpawnRoll(misses, rng, t).pair;
+}
+
+/**
+ * adventSpawnPair's draw with its rest kept (1c.Q, plan 54): { pair, keep: 1 − u }. `keep` lies between the chance
+ * the piece stays hidden through `pair` and through the pair before (adventHidden), so it is the piece's Quality
+ * factor for its run: scored from the roll, never from the pair it showed at, a busy slot or a storm cannot move it.
+ */
+export function adventSpawnRoll(misses, rng, t) {
+  const u = rng();
+  let none = 1;
+  for (let pair = t.advent.piece.minPair; ; pair += 1) {
+    const c = adventPairChance(pair, misses, t);
+    none *= 1 - c;
+    if (u < 1 - none || c >= 1) return { pair, keep: 1 - u };
+  }
+}
+
+/** The chance a run's piece stays hidden through pair `reach` (from the run's first) at `misses`: 1 before minPair. */
+export function adventHidden(reach, misses, t) {
+  let none = 1;
+  for (let pair = t.advent.piece.minPair; pair <= reach; pair += 1) none *= 1 - adventPairChance(pair, misses, t);
+  return none;
+}
+
+// Piece Quality, recording only (plan 17, 1c.Q; plan 54 draws it; Michael's Q1: pure odds, no per-run cap). Per device
+// and UTC day a clock: s, the chance the run's piece would still be hidden after the day's runs so far; held, the score
+// frozen the first time a piece shows ({ q, run, pipes, today }), so skipping a piece never improves it; runs and pipes,
+// the hidden runs and the pairs they spawned (for plan 54's card). Lower is rarer. Private: made on the device, unchecked.
+
+/** A fresh clock (a day's first run, or after a catch). */
+export function adventClock() {
+  return { s: 1, held: null, runs: 0, pipes: 0 };
+}
+
+/** A share (0 to 1) as the stored Quality score, an integer 0 to 10000; anything but a number reads as the plainest. */
+export function adventQualityScore(x) {
+  const v = typeof x === 'number' && !Number.isNaN(x) ? x : 1;
+  return Math.round(Math.min(1, Math.max(0, v)) * 10000);
+}
+
+/**
+ * A run's piece showed at `pair` (from the run's first), its roll's `keep` (adventSpawnRoll); `today`: the day's own
+ * piece. The clock's first showing freezes held = s × keep, with this run's number on the clock and the pairs spawned
+ * before the one it showed at; a later showing only marks today's piece as shown (adventClockCaught).
+ */
+export function adventClockShown(clock, { keep, pair, today }) {
+  const h = clock.held;
+  if (h) return today && !h.today ? { ...clock, held: { ...h, today: true } } : clock;
+  return { ...clock, held: { q: adventQualityScore(clock.s * keep), run: clock.runs + 1, pipes: clock.pipes + Math.max(0, pair - 1), today: Boolean(today) } };
+}
+
+/**
+ * A run ended and its piece never showed: s times the chance it stays hidden through `reach` (the last pair the run
+ * spawned, from its first) at `misses` (the day's, at the run's start). Nothing once a score is held. A run whose piece
+ * showed and was not caught calls nothing (plan 54's step 4).
+ */
+export function adventClockHidden(clock, { reach, misses }, t) {
+  if (clock.held) return clock;
+  return { ...clock, s: clock.s * adventHidden(reach, misses, t), runs: clock.runs + 1, pipes: clock.pipes + Math.max(0, reach) };
+}
+
+/**
+ * A piece caught: { quality, clock }. The day's own piece (`today`) takes held's { q, run, pipes } and the clock
+ * restarts. A catch-up piece takes none (it is late) and restarts the clock too, so today's piece gets a fresh roll;
+ * but once today's piece has shown on it the clock is kept, else skipping it and catching a catch-up piece would re-roll it.
+ */
+export function adventClockCaught(clock, { today }) {
+  const h = clock.held;
+  if (today) return { quality: h ? { q: h.q, run: h.run, pipes: h.pipes } : null, clock: adventClock() };
+  return { quality: null, clock: h?.today ? clock : adventClock() };
+}
+
+/**
+ * Does the run's piece `advent` ({ startN, pair, spawned, found }) show at pair `n`? Once a run, from its
+ * pair on, only in a band slot nothing else took (`slotTaken`), and only once its texture has loaded (`ready`).
+ */
+export function adventSpawnHere(advent, n, slotTaken, ready) {
+  return Boolean(advent && !advent.spawned && !advent.found && ready && !slotTaken && n - advent.startN >= advent.pair);
+}
+
+// Snow storms (plan 17, 2.7): December Daily runs and, since T16, every match (runStorms). The pairs are the shared
+// course's (pipesSpawned), so every run of a day, both halves of a match and both devices of a race meet the same
+// storms; Play walks them in spawn order (stormStartsHere) and keeps the starts.
+
+/**
+ * Does a run storm? (plan 17, 2.7; T16, Michael 27 Nov) A Daily on a December day; a match (Versus, a tournament race,
+ * an online race) whose day, fixed when it was made (createMatch), is in December, while advent.storm.matches is on.
+ * Singleplayer (until 2027), education runs, test mode's plain runs and off season stay calm.
+ */
+export function runStorms({ dailyDay = null, matchDay = null } = {}, t) {
+  if (dailyDay != null) return adventSeason(dailyDay, t);
+  return matchDay != null && Boolean(t.advent.storm.matches) && adventSeason(matchDay, t);
+}
+
+/**
+ * Does pair `n` start a storm? Its course draw under advent.storm.chance, firstPair pairs or more into the run (from
+ * `startN`), pairs + gapPairs or more after the last start. In a match (`levels`: its level table, Play.tune; a Daily
+ * never leaves its level and passes none) firstPair counts from level fromLevel's start, so levels 1 and 2 stay calm
+ * (1c.S1 (3)), and the storm, its banner included, stays inside one level: not on a level's first pair (the banner
+ * would show before the line) nor in its last linePairs pairs (it would blow across the line, 1c.S1 (5)).
+ */
+export function stormStartsHere(draw, n, lastStart, startN, t, levels = null) {
+  const s = t.advent.storm;
+  if (typeof draw !== 'number' || draw >= s.chance) return false;
+  if (lastStart !== null && n - lastStart < s.pairs + s.gapPairs) return false;
+  if (!levels) return n - startN >= s.firstPair;
+  if (n - Math.max(startN, levelEnd(s.fromLevel - 1, levels)) < s.firstPair) return false;
+  const { startPipe, endPipe } = levelFor(n - 1, levels); // pair n is flown at n − 1 pairs passed
+  return n >= startPipe + 2 && n <= endPipe - s.linePairs;
+}
+
+/**
+ * The storm at `passed` pairs flown (Play.pipesPassed) for storm `starts`: { phase: 'banner' (one pair before the
+ * storm's first pair: passed = start − 2), 'storm' (while its pairs come: passed in [start − 1, start − 1 + pairs)),
+ * or null, start }.
+ */
+export function stormPhase(passed, starts, t) {
+  const p = t.advent.storm.pairs;
+  for (const n of starts) {
+    if (passed >= n - 1 && passed < n - 1 + p) return { phase: 'storm', start: n };
+    if (passed === n - 2) return { phase: 'banner', start: n };
+  }
+  return { phase: null, start: null };
+}
+
+/**
+ * Is pair `n`'s band slot flown inside a storm? (No Advent piece shows there.) A band item rides half a spacing after
+ * its pair, so pair n's slot is flown at n pairs passed: inside storm s for n in [s − 1, s − 1 + pairs), as stormPhase.
+ */
+export function stormCovers(starts, n, t) {
+  return starts.some((s) => n >= s - 1 && n < s - 1 + t.advent.storm.pairs);
+}
+
+/** The flap's share at storm level 0 (calm) to 1 (full): 1 down to advent.storm.flapMul, linearly. */
+export function stormFlapMul(level, t) {
+  return 1 + (t.advent.storm.flapMul - 1) * level;
+}
+
+/** The scroll's share at storm level 0 to 1: 1 up to advent.storm.scrollMul, linearly. */
+export function stormScrollMul(level, t) {
+  return 1 + (t.advent.storm.scrollMul - 1) * level;
+}
+
+/**
+ * px/s of wind on the snow at storm level 0 to 1, `tSec` into the storm: a headwind, right to left (negative), at the
+ * storm flakes' mean fall over tan(angleDeg) (about 20° below the horizontal, 1c.6), times 1 + gust × a wobble of two
+ * sines in [−1, 1], so the gusts never turn it back.
+ */
+export function stormWind(level, tSec, t) {
+  if (!level) return 0;
+  const s = t.advent.storm;
+  const mean = (((t.advent.snow.minSpeed + t.advent.snow.maxSpeed) / 2) * s.fallMul) / Math.tan((s.angleDeg * Math.PI) / 180);
+  const wobble = s.gustWaves.reduce((sum, w) => sum + w.share * Math.sin((2 * Math.PI * tSec) / w.periodS + w.phase), 0);
+  return -level * mean * (1 + s.gust * wobble);
+}
+
+/**
+ * px/s of wind on the snow `elapsedMs` into a fart of `durationMs` (null: none): right to left at advent.storm.fartWind
+ * (a super fart's superWind, 1c.6), eased in and out over fartRampMs.
+ */
+export function fartWind(elapsedMs, durationMs, t, superFart = false) {
+  if (typeof elapsedMs !== 'number' || !(durationMs > 0) || elapsedMs <= 0 || elapsedMs >= durationMs) return 0;
+  const s = t.advent.storm;
+  return -(superFart ? s.superWind : s.fartWind) * Math.min(1, elapsedMs / s.fartRampMs, (durationMs - elapsedMs) / s.fartRampMs);
+}
+
+/**
+ * advent.storm.swirls whirl centres in `area` from `rng` (decoration: Math.random in the game), each at least
+ * 2 × swirlR from the others (two that overlap, one turning each way, cancel out: Gate A, 26 Nov), turning
+ * counter-clockwise (dir 1) and clockwise (dir −1) in turn, each pulling flakes in by swirlPull: [{ x, y, R, S, pull, dir }].
+ */
+export function swirlCentres(rng, area, t) {
+  const s = t.advent.storm;
+  const m = s.swirlMargin;
+  const box = { x0: area.x + m.x, x1: area.x + area.width - m.x, y0: area.y + m.top, y1: area.y + area.height - m.bottom };
+  const out = [];
+  for (let tries = 0; out.length < s.swirls && tries < 400; tries += 1) {
+    const c = { x: box.x0 + rng() * (box.x1 - box.x0), y: box.y0 + rng() * (box.y1 - box.y0) };
+    if (out.every((o) => Math.hypot(o.x - c.x, o.y - c.y) >= 2 * s.swirlR) || tries >= 399) out.push({ ...c, R: s.swirlR, S: s.swirlS, pull: s.swirlPull, dir: out.length % 2 ? -1 : 1 });
+  }
+  return out;
+}
+
+/**
+ * A season's tree from its pieces (S1, Michael 26 Nov; db/schema.sql advent_award's mirror): 'decorated' (🎄) for
+ * all `count` pieces with the last found by Christmas Eve (late finds count), 'plain' (🌲) with the last after,
+ * else null. Only the season's own days count. The 🎄 / 🌲 badges read it (Play.adventTrees, 2.6b).
+ */
+export function adventAward(found, season, t) {
+  const count = t.advent.piece.count;
+  const days = [];
+  for (let k = 1; k <= count; k += 1) if (isDayKey(found?.[k]) && found[k].startsWith(`${season}-`)) days.push(found[k]);
+  if (days.length < count) return null;
+  const eve = `${season}-${String(t.advent.seasonMonth).padStart(2, '0')}-${String(count).padStart(2, '0')}`;
+  return days.sort().at(-1) <= eve ? 'decorated' : 'plain';
+}
+
+/**
+ * The 🧩 line's state on `day`: { n (pieces found), tree }. tree (S1, Michael 26 Nov: 🎄 for all 24 by the end of
+ * 24 Dec, late finds included, else 🌲 for all 24 by 31 Dec): 'decorated' / 'plain' once all are found, by the
+ * last one's day; before that, through 24 Dec, 'onTrack' with nothing left to catch up, else null; 'plainOpen' after.
+ */
+export function adventStatus(found, day, t) {
+  const count = t.advent.piece.count;
+  const days = [];
+  for (let k = 1; k <= count; k += 1) if (isDayKey(found?.[k])) days.push(found[k]);
+  const n = days.length;
+  const eve = `${String(day).slice(0, 4)}-${String(t.advent.seasonMonth).padStart(2, '0')}-${String(count).padStart(2, '0')}`;
+  if (n === count) return { n, tree: adventAward(found, Number(String(day).slice(0, 4)), t) ?? (days.sort().at(-1) <= eve ? 'decorated' : 'plain') };
+  if (!adventSeason(day, t)) return { n, tree: null };
+  if (day <= eve) return { n, tree: adventBacklog(found, day, t).length === 0 ? 'onTrack' : null };
+  return { n, tree: 'plainOpen' };
+}
+
+/** A season's tree as its glyph (2.16: the 🧩 board's rows, the save panel's Advent button): 🎄 decorated, 🌲 plain, else ''. */
+export function adventTreeGlyph(award) {
+  return award === 'decorated' ? '\u{1F384}' : award === 'plain' ? '\u{1F332}' : '';
+}
+
+/**
+ * The Advent book's layout (plan 17, 2.15; Gate A sheet 5) on a `width` x `height` field: the panel centred, the ✕ in its
+ * top-right corner, "N of 24 found" above the grid, and the 24 slots (top-left corners, reading order) of `slot` px
+ * (a cell at spriteDisplayScale) with no gaps, so the full set reads as one picture; `centre` is the grid's.
+ */
+export function adventBookLayout(width, height, t) {
+  const b = t.advent.book;
+  const p = t.advent.puzzle;
+  const cx = width / 2;
+  const cy = height / 2;
+  const slot = p.cellPx * t.spriteDisplayScale;
+  const left = cx - (p.cols * slot) / 2;
+  const top = cy + b.gridDy;
+  const slots = Array.from({ length: p.cols * p.rows }, (_, c) => ({ x: left + slot * (c % p.cols), y: top + slot * Math.floor(c / p.cols) }));
+  return {
+    panel: { x: cx, y: cy, width: b.width, height: b.height },
+    close: { x: cx + b.width / 2 - 44, y: cy - b.height / 2 + 44 },
+    help: { x: cx - b.width / 2 + 44, y: cy - b.height / 2 + 44 }, // the (?) mirrors the ✕ (1c.7, T8)
+    count: { x: cx, y: cy + b.countDy },
+    slot,
+    slots,
+    centre: { x: cx, y: top + (p.rows * slot) / 2 },
+  };
+}
+
+/**
+ * December's fairy lights (plan 17, 1c.9, T14): the tile sprite's top y, height, one tile's width on screen and its
+ * tile scale, from TUNING.advent.lights (the wire's top at wireTop).
+ */
+export function fairyLightsLayout(fieldW, t) {
+  const L = t.advent.lights;
+  return { y: L.wireTop - L.wireDy * L.scale, height: L.texH * L.scale, tileW: L.texW * L.scale, tileScale: L.scale };
+}
+
+/**
+ * The bulbs on screen with the strip scrolled `scrollPx` (display px, as the ceiling): [{ x, y, color, i }], every
+ * tile's bulbs that reach the field (within glowPx of it). i names a bulb along the whole strip (its tile counted from
+ * the strip's start), so a bulb keeps its twinkle as it scrolls.
+ */
+export function lightsBulbs(scrollPx, fieldW, t) {
+  const L = t.advent.lights;
+  const lay = fairyLightsLayout(fieldW, t);
+  const base = Math.floor(scrollPx / lay.tileW);
+  const off = scrollPx - base * lay.tileW;
+  const out = [];
+  for (let k = -1; k * lay.tileW - off <= fieldW + L.glowPx; k += 1) {
+    L.bulbs.forEach(([bx, by, color], j) => {
+      const x = k * lay.tileW + bx * L.scale - off;
+      if (x >= -L.glowPx && x <= fieldW + L.glowPx) out.push({ x, y: lay.y + by * L.scale, color, i: (base + k) * L.bulbs.length + j });
+    });
+  }
+  return out;
+}
+
+/** Bulb i's glow at `nowMs`, 0 to twinkle.maxAlpha: dark most of the time, brightening on its own clock (period and phase from i). */
+export function twinkleAlpha(i, nowMs, t) {
+  const tw = t.advent.lights.twinkle;
+  const frac = (v) => v - Math.floor(v);
+  const period = tw.minMs + frac(Math.abs(i) * 0.6180339887) * (tw.maxMs - tw.minMs);
+  const phase = frac(Math.abs(i) * 0.7548776662) * Math.PI * 2;
+  const s = Math.max(0, Math.sin((2 * Math.PI * nowMs) / period + phase));
+  return tw.maxAlpha * s * s;
+}
+
+/**
+ * The book's "to go" line after a piece lands (plan 17, 1c.7, T7; Gate A 11e): with `shown` pieces in the book,
+ * { key: 'adventToGo', n (left), total, tree: '' }, or at all of them { key: 'adventAllFound', n: 0, total, tree },
+ * the tree the set earns (adventAward: 🎄 with the last found by 24 Dec, else 🌲).
+ */
+export function adventToGo(shown, found, season, t) {
+  const total = t.advent.piece.count;
+  if (shown < total) return { key: 'adventToGo', n: total - shown, total, tree: '' };
+  return { key: 'adventAllFound', n: 0, total, tree: adventAward(found, season, t) === 'plain' ? '\u{1F332}' : '\u{1F384}' };
+}
+
+/**
+ * The pieces the book draws for `season` from a found-day record ({ piece: day }): [{ piece, cell (order[piece − 1]),
+ * onDay (found on its own release day) }] by piece. Days of other seasons and junk are left out.
+ */
+export function adventBookPieces(found, season, t) {
+  const out = [];
+  const month = String(t.advent.seasonMonth).padStart(2, '0');
+  for (let k = 1; k <= t.advent.piece.count; k += 1) {
+    const day = found?.[k];
+    if (!isDayKey(day) || !day.startsWith(`${season}-`)) continue;
+    out.push({ piece: k, cell: t.advent.puzzle.order[k - 1], onDay: day === `${season}-${month}-${String(k).padStart(2, '0')}` });
+  }
+  return out;
+}
+
+/**
+ * The season the book shows on `day`: December's own; after it (January to November), last December's while
+ * `hasPieces(year)` says this device holds a piece of it (read-only for owners, 2.16); else null (no book).
+ */
+export function adventBookSeason(day, t, hasPieces) {
+  if (adventSeason(day, t)) return Number(day.slice(0, 4));
+  const last = Number(String(day).slice(0, 4)) - 1;
+  return isDayKey(day) && hasPieces(last) ? last : null;
+}
+
+/**
+ * December's home lines (plan 17, 1.12 and 1.14): the Happy Bowelidays! image above the title every December day
+ * (Michael, 26 Nov; English for every player, since the pun has no Chinese), and under the title "N sleeps till
+ * Christmas" on 1–24 Dec and "Merry Christmas!" on the 25th, no line after. { text (or null), image (a texture
+ * key) } in season, null off season.
+ */
+export function countdownLine(day, locale, tune) {
+  if (!adventSeason(day, tune)) return null;
+  const image = 'bowelidays';
+  const date = Number(day.slice(8, 10));
+  if (date > 25) return { text: null, image };
+  const sleeps = 25 - date;
+  if (sleeps === 0) return { text: t(locale, 'countdownChristmas'), image };
+  return { text: sleeps === 1 ? t(locale, 'countdownSleep') : t(locale, 'countdownSleeps').replace('{n}', String(sleeps)), image };
+}
+
+/** The Daily Dump's glyph on `day`: this visit's 🎅 in the season (the first variant if none is picked yet), else the 🌞. */
+export function dailyGlyph(day, santa, t) {
+  if (!adventSeason(day, t)) return SUN;
+  return santa || t.advent.santas[0];
+}
+
+/** dailyGlyph for now: the decorations' day and this visit's pick, both from the game registry ('santa'). */
+export function dailyGlyphNow(reg, t, now = new Date()) {
+  return dailyGlyph(dailyDay(reg, now), reg?.get?.('santa'), t);
+}
+
+/** A 🎅 from `santas`, never `last` (unless it is the only one). `rng` returns [0, 1) (Math.random, never the course RNG). */
+export function pickSanta(rng, last, santas) {
+  const pool = santas.length > 1 ? santas.filter((s) => s !== last) : santas;
+  return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))];
+}
+
+/**
+ * The variants this device draws as one glyph: `measure(s)` is the drawn width; a missing skin tone or ZWJ join
+ * draws as two glyphs, wider than the plain first variant. Keeps the first variant when nothing passes.
+ */
+export function supportedSantas(santas, measure) {
+  const base = measure(santas[0]);
+  if (!(base > 0)) return santas.slice();
+  const ok = santas.filter((s) => measure(s) <= base * 1.25);
+  return ok.length ? ok : [santas[0]];
+}
+
+/**
+ * The changing 🎅's pool (plan 17, 1b.2e; Michael 26 Nov): the variants with no skin-tone modifier (U+1F3FB to U+1F3FF),
+ * the plain 🎅 🤶 🧑‍🎄 where the device draws them, in order; the first variant when none is plain. The picker offers
+ * the whole list (registry 'santas'); this is only what a visit picks from when nothing is saved.
+ */
+export function plainSantas(santas) {
+  const plain = santas.filter((s) => !/[\u{1F3FB}-\u{1F3FF}]/u.test(s));
+  return plain.length ? plain : santas.slice(0, 1);
+}
+
 /** Milliseconds from `date` to the next 00:00 UTC (the next Daily Dump). */
 export function msUntilUtcMidnight(date = new Date()) {
   const next = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
@@ -2544,28 +3081,37 @@ export function settingsLayout(width, height, t, { test = false } = {}) {
     const rows = { title: top + 70, sound: top + 210, haptics: top + 330, hint: top + 386, hand: top + 470, handHint: top + 526, splash: top + 620, splashHint: top + 676, reload: top + 770, about: top + 860, version: bottom - 60 };
     return { panel, close, rows, hand: handRow(rows.hand), test: null };
   }
+  // Plan 17, 1.6 added the Pretend date row under Start at; the rows above it close up so the panel stays 1240 px.
+  // Tappable rows keep 80 px; Start at and Pretend date are 90 apart so their ◀ / ▶ boxes do not touch.
   const rows = {
     title: top + 70,
-    sound: top + 155,
-    haptics: top + 240,
-    hint: top + 292,
-    hand: top + 360,
-    handHint: top + 412,
-    splash: top + 475,
-    splashHint: top + 525,
-    reload: top + 592,
-    about: top + 672,
-    testTitle: top + 762,
-    startLevel: top + 847,
-    invincible: top + 930,
-    powers: top + 1012,
-    exit: top + 1095,
-    version: bottom - 60,
+    sound: top + 150,
+    haptics: top + 230,
+    hint: top + 282,
+    hand: top + 340,
+    handHint: top + 388,
+    splash: top + 440,
+    splashHint: top + 486,
+    reload: top + 540,
+    about: top + 620,
+    testTitle: top + 702,
+    startLevel: top + 782,
+    pretendDate: top + 872,
+    invincible: top + 952,
+    powers: top + 1032,
+    exit: top + 1112,
+    version: bottom - 48,
   };
   const hit = Math.max(88, t.trayHitMin);
-  const arrow = (dx) => ({ x: cx + dx, y: rows.startLevel, width: hit, height: hit });
+  const arrow = (dx, y = rows.startLevel) => ({ x: cx + dx, y, width: hit, height: hit });
   const powers = TEST_POWERS.map((draw, i) => ({ id: draw, x: cx + (i - (TEST_POWERS.length - 1) / 2) * 96, y: rows.powers, width: hit, height: hit, icon: 72 }));
-  return { panel, close, rows, hand: handRow(rows.hand), test: { divider: top + 718, levelDown: arrow(-230), levelUp: arrow(230), powers } };
+  return {
+    panel,
+    close,
+    rows,
+    hand: handRow(rows.hand),
+    test: { divider: top + 662, levelDown: arrow(-230), levelUp: arrow(230), dayDown: arrow(-230, rows.pretendDate), dayUp: arrow(230, rows.pretendDate), powers },
+  };
 }
 
 // --- The debug / automation handle (globalThis.__flappy; src/main.js) ---

@@ -419,7 +419,9 @@ test('merge_players folds medals, events and best, and re-points matchups and re
 // ---------------------------------------------------------------------------
 // Daily Dump (🌞): daily_scores, submit_daily_score, daily_board, and the fold.
 
-const utcToday = (db) => db.query("select to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') as d").then((r) => r.rows[0].d);
+const utcToday = (db) => db.query("select to_char(public.utc_today(), 'YYYY-MM-DD') as d").then((r) => r.rows[0].d); // the server's day (pinServerDay moves it)
+/** Pin the server's day (plan 17's utc_today) to a November day: the off-season Daily rule on any real clock. */
+const pinServerDay = (db, day = '2026-11-20') => db.exec(`create or replace function public.utc_today() returns date language sql stable as $$ select '${day}'::date $$`);
 const shiftDay = (day, n) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 const dsubmit = (db, pid, name, day, score, level, pipes = 10) =>
   asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6) as r', [pid, name, day, score, level, pipes]).then((r) => r.rows[0].r);
@@ -451,6 +453,7 @@ test("the server's FNV-1a and daily_level agree with the client's over a year", 
 
 test('submit_daily_score keeps the first post of a day, takes today and yesterday only, and checks the level', async () => {
   const db = await freshDb();
+  await pinServerDay(db); // the off-season rule, on any real clock (plan 17: December keeps each player's best)
   const { dailyLevel } = await import('../src/logic.js');
   const today = await utcToday(db);
   const lv = (day) => dailyLevel(day, T);
@@ -508,7 +511,7 @@ test("daily_board: a day's top by score (earlier post first), the caller flagged
   assert.deepEqual(old.map((r) => [r.rank, r.score, r.total]), [[1, 9999, 1]], 'p_day picks another day');
   assert.equal((await dboard(db, null, null, 500)).length, 33, 'the limit caps at 100, more than this day has');
   assert.equal((await dboard(db, 'garbage')).length, 25, 'a bad id is no caller');
-  assert.ok(Object.keys(top[0]).every((k) => ['rank', 'name', 'score', 'level', 'pipes', 'me', 'total'].includes(k)), 'no ids leave the server');
+  assert.ok(Object.keys(top[0]).every((k) => ['rank', 'name', 'score', 'level', 'pipes', 'me', 'total', 'gift'].includes(k)), 'no ids leave the server (gift: the 🎁, plan 17)');
 });
 
 test('the daily day is UTC whatever the session time zone says', async () => {
@@ -526,6 +529,7 @@ test('the daily day is UTC whatever the session time zone says', async () => {
 
 test('merging players folds their daily rows: the kept row wins a day both played', async () => {
   const db = await freshDb();
+  await pinServerDay(db); // the off-season rule, on any real clock (plan 17: December keeps each player's best)
   const today = await utcToday(db);
   const keep = id('MK');
   const merge = id('MM');
@@ -743,6 +747,7 @@ test('claim_achievements stores only badges the game has: an unknown id is in ne
   assert.deepEqual((await db.query('select achievement_id from public.player_achievements where player_id = $1', [P])).rows, [{ achievement_id: 'win_game' }]);
   assert.deepEqual(await claim(db, P, ['made_up']), { stored: [], closed: [] }, 'a call of unknown ids alone answers empty lists');
   const catalog = (await db.query('select public.achievement_catalog() as c')).rows[0].c;
+  await pinServerDay(db, '2026-12-10'); // inside the Advent trees' window (plan 17, 2.6b: the first quest rows), so every catalog id is taken on any clock
   assert.deepEqual(await claim(db, P, catalog.slice(0, 50)), { stored: [...catalog].sort().slice(0, 50), closed: [] }, 'every catalog id is taken');
   await assert.rejects(asAnon(db, 'select public.achievement_catalog()'), /permission denied/, 'internal: anon cannot call it');
 });
@@ -824,6 +829,7 @@ test('👑 dethroned on the 🏆 board: counted when a post takes #1 from anothe
 
 test('👑 dethroned on a 🌞 board: the day\'s #1 by score then earlier post; another day is its own board', async () => {
   const db = await freshDb();
+  await pinServerDay(db); // the off-season rule, on any real clock (plan 17: December keeps each player's best)
   const { dailyLevel } = await import('../src/logic.js');
   const today = await utcToday(db);
   const yesterday = shiftDay(today, -1);
@@ -1823,7 +1829,8 @@ async function liveView(db) {
     meta: await rows('select player_id, dev, exact from public.player_meta order by player_id'),
     board: await call('select name, score, toilet, level from public.scores order by name, toilet'),
     medals: await call('select * from public.tournament_board($1, 25)', [id('UpAlice')]),
-    dailyBoard: await call('select * from public.daily_board($1, null, 25)', [id('UpAlice')]),
+    // gift (plan 17, 2.4): new on a 🌞 row, set aside as education is; the upgrade test checks it is false.
+    dailyBoard: (await call('select * from public.daily_board($1, null, 25)', [id('UpAlice')])).map(({ gift, ...r }) => r),
     rank: await call('select public.player_rank($1, false) as r', [id('UpAlice')]),
     aliasName: await call('select public.player_name($1) as r', [id('UpCarolOld')]),
     available: await call('select public.name_available($1, $2) as r', ['upalice', id('UpZed')]),
@@ -1845,6 +1852,7 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   assert.ok(before.scores.length >= 5 && before.aliases.length === 1 && before.daily.length === 4 && before.counters.length >= 2 && before.tournaments.length === 4, 'the seed wrote every kind of row');
   await db.exec(SQL);
   assert.deepEqual(await liveView(db), before, 'after the first apply');
+  assert.deepEqual((await asAnon(db, 'select gift from public.daily_board($1, null, 25)', [id('UpAlice')])).rows.map((r) => r.gift).filter(Boolean), [], 'no 🎁 on an upgraded board (no pieces yet; plan 17)');
   await db.exec(SQL);
   assert.deepEqual(await liveView(db), before, 'after a second apply');
   assert.equal((await asAnon(db, 'select public.schema_version() as v')).rows[0].v, stampOf(SQL), 'the upgraded database answers the new stamp');

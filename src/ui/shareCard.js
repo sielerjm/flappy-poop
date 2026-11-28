@@ -47,12 +47,18 @@ function text(ctx, value, x, y, { px, color, align = 'center', maxWidth }) {
  * Draw the card (positions and sizes from shareCardLayout). `data`: { headline,
  * won (gold headline at the smaller win size), tan, score, counts: { fiber,
  * probiotic, postbiotic, bacteria, bean, mystery }, pipes, footer }. `images`: texture key → drawable (poop, the six icons with
- * mystery-icon, pipe). A missing image is skipped, never thrown on.
+ * mystery-icon, pipe). A missing image is skipped, never thrown on. `scales`: key → a December twin's size factor
+ * (seasonIcon's mul; plan 17, T12), drawn grown about its box's centre.
  */
-export function drawShareCard(ctx, layout, data, images) {
+export function drawShareCard(ctx, layout, data, images, scales = {}) {
   const { width, height, border, innerWidth } = layout;
   const draw = (key, ...args) => {
     if (images?.[key]) ctx.drawImage(images[key], ...args);
+  };
+  // A December twin on a wider canvas (scales[key], seasonIcon's mul) grows about its box's centre (plan 17, T12).
+  const drawIn = (key, x, y, w, h) => {
+    const m = scales?.[key] ?? 1;
+    draw(key, x + (w - w * m) / 2, y + (h - h * m) / 2, w * m, h * m);
   };
   ctx.fillStyle = BG;
   ctx.fillRect(0, 0, width, height);
@@ -71,14 +77,14 @@ export function drawShareCard(ctx, layout, data, images) {
   ctx.strokeStyle = PINK;
   ctx.stroke();
   const p = layout.poop;
-  draw('poop', p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+  drawIn('poop', p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
 
   text(ctx, data.score, layout.score.x, layout.score.y, { px: layout.score.px, color: '#ffffff', maxWidth: innerWidth });
 
   for (const row of layout.rows) {
     for (const cell of row) {
       const key = ICON_KEYS[cell.kind] ?? cell.kind;
-      draw(key, cell.iconX - cell.iconPx / 2, cell.y - cell.iconPx / 2, cell.iconPx, cell.iconPx);
+      drawIn(key, cell.iconX - cell.iconPx / 2, cell.y - cell.iconPx / 2, cell.iconPx, cell.iconPx);
       text(ctx, `×${data.counts?.[cell.kind] ?? 0}`, cell.textX, cell.y, { px: cell.px, color: COUNT, align: 'left', maxWidth: innerWidth / 3 });
     }
   }
@@ -96,14 +102,14 @@ export function drawShareCard(ctx, layout, data, images) {
  * thread in browsers). Resolves the PNG Blob, or null when anything is missing
  * or throws; never rejects.
  */
-export function renderShareCard({ doc = globalThis.document, layout, data, images }) {
+export function renderShareCard({ doc = globalThis.document, layout, data, images, scales }) {
   try {
     const canvas = doc.createElement('canvas');
     canvas.width = layout.width;
     canvas.height = layout.height;
     const ctx = canvas.getContext('2d');
     if (!ctx || typeof canvas.toBlob !== 'function') return Promise.resolve(null);
-    drawShareCard(ctx, layout, data, images);
+    drawShareCard(ctx, layout, data, images, scales);
     return new Promise((resolve) => {
       try {
         canvas.toBlob((blob) => resolve(blob ?? null), 'image/png');

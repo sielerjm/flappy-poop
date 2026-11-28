@@ -8,14 +8,50 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
-    version: '0.31.0',
-    date: '25 Nov 2026',
+    version: '0.37.0',
+    date: '28 Nov 2026',
     notes: {
       en: [
         '👥 In a two-player race, side by side or 🌐 online, the first one over a level’s finish line no longer sees the progress bar jump ahead empty: it stays full on the level you just finished, and the other player’s poop keeps moving along it until they cross too. The bar moves on at the next level’s GO.',
       ],
       'zh-Hans': [
         '👥 双人比赛中（同屏或🌐在线），先越过终点线的一方，顶部的进度条不再一下子跳到下一关并清空：它会停在刚完成的那一关，保持满格，对方的便便会继续在上面前进，直到对方也过线。下一关喊“出发！”时进度条才切换。',
+      ],
+    },
+  },
+  {
+    version: '0.36.0',
+    date: '27 Nov 2026',
+    notes: {
+      en: [
+        '🧩 Advent, all December: every Daily Dump run hides a wrapped gift holding a puzzle piece. It shows from pipe 5 on: each pipe you pass makes it a little more likely, and so does each run that day that ended without it. Catch the day’s piece, or one from a day you missed, and collect all 24: by 24 Dec for the 🎄 Christmas Tree badge, or by 31 Dec for the 🌲 Evergreen.',
+        '🧩 The Advent puzzle: tap the 🧩 button at the top left of the home screen to watch your pieces come together into one picture. After you find a piece the button glows until you open the puzzle; the new piece then flies into its place and tells you how many are still to go. It also opens from the 🧩 line in the Daily Dump window and from YOUR PLAYER, and its (?) explains the rules. A new 🧩 tab on the leaderboard ranks everyone by pieces found, with a 🎄 or 🌲 beside each player who has earned a tree.',
+        '🌞 In December the Daily Dump stays open all day: play it as often as you like, and your best score of the day goes on the board. A 🎁 beside a name means that player found the day’s piece.',
+        '❄️ Snowstorms blow through December Daily Dump runs, and through two-player and online races from level 3 on: the snow swirls against you, the wind slows you down and each tap lifts you a little less. Watch for "Snowstorm ahead!". A fart blasts through it: the snow streaks past and the wind lets go while it lasts.',
+        '🎅 Choose your boweliday character: in December, tap the 🎅 in the title of the Daily Dump window and pick your favorite, in any skin tone; it is saved on this device. Until you choose, it changes each visit between Santa, Mrs. Claus and Mx Claus; a red dot shows where to tap, and the (?) in the window explains December. The December look reaches every corner: the loading screen\'s poop wears its Santa hat, the bean wears holly, fairy lights twinkle along the top of the screen, and the counters in a run, the game-over panel and its share card, How to play and the Shop dress up too.',
+      ],
+      'zh-Hans': [
+        '🧩 整个十二月的降临活动：每局每日一拉都藏着一份包好的礼物，里面是一块拼图。拼图从第 5 根管道起才会出现：每多过一根管道，出现的机会就大一点；当天每有一局没找到，机会也会大一点。找到当天的拼图，或补上错过那天的拼图，集齐全部24块：12月24日前集齐得🎄“2026 圣诞树”徽章，12月31日前集齐得🌲“2026 常青树”。',
+        '🧩 圣诞拼图：点主页左上角的🧩按钮，看你十二月找到的拼图拼成一幅画。找到新拼图后，按钮会一直发光，直到你打开圣诞拼图：新拼图会飞到自己的位置上，并告诉你还差几块。也可以从每日一拉窗口里的🧩那一行或“你的玩家”打开，里面的(?)会说明规则。排行榜新增🧩标签，按找到的拼图数给所有人排名，获得圣诞树的玩家名字旁会显示🎄或🌲。',
+        '🌞 十二月里每日一拉全天开放：想玩几次都行，当天的最好成绩记到排行榜上。名字旁边的🎁表示这位玩家找到了当天的拼图。',
+        '❄️ 十二月的每日一拉会刮暴风雪，双人模式和在线比赛从第 3 关起也会刮：雪花迎面打着旋儿吹来，狂风拖慢你的速度，每次点击也飞得低一点。留意“前方有暴风雪！”。放屁能冲破风雪：放屁期间雪花呼啸而过，狂风也不再拖慢你。',
+        '🎅 选择你的节日角色：十二月里，点每日一拉窗口标题里的🎅，选你最喜欢的一个，任何肤色都行，只保存在这台设备上。选好之前，它每次来访都会在圣诞老人、圣诞老奶奶和中性圣诞人之间轮换；小红点告诉你该点哪里，窗口里的(?)会说明十二月的玩法。节日装扮遍布各处：加载画面上的便便戴上了圣诞帽，豆子戴上了冬青，屏幕顶部挂着一串闪烁的圣诞彩灯，游戏中的计数、游戏结束界面和分享图、玩法说明和商店也都换了装。',
+      ],
+    },
+  },
+  {
+    version: '0.32.0',
+    date: '26 Nov 2026',
+    notes: {
+      en: [
+        '🎅 From 1 December, all month long: a boweliday character stands in for the 🌞, a different one each time the home screen opens (Santa, Mrs. Claus or Mx Claus).',
+        '💩 Your poop wears a Santa hat, and so do the bad bacteria; fiber turns into a candy cane, the probiotic into gingerbread, and snow sits on the pipes. Only the look changes: the game plays the same.',
+        '❄️ Snow falls all month, on the home screen and in every game. The home screen says Happy Bowelidays! over the title, with a countdown under it: "20 sleeps till Christmas", then Merry Christmas! on the 25th.',
+      ],
+      'zh-Hans': [
+        '🎅 从12月1日起，整个十二月由节日角色代替🌞，每次打开主页都会换一位（圣诞老人、圣诞老奶奶或中性圣诞人）。',
+        '💩 你的便便戴上了圣诞帽，有害细菌也戴上了；纤维变成拐杖糖，益生菌变成姜饼，管道上还积了雪。只是外观变了，玩法完全一样。',
+        '❄️ 整个十二月都在下雪，主页和每种游戏模式里都有。主页标题上方是 Happy Bowelidays!，下方是圣诞倒计时：“离圣诞节还有20晚”，25日显示“圣诞快乐！”。',
       ],
     },
   },

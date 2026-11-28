@@ -5,13 +5,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { freshDb, asAnon, id } from './support/postgrest.js';
+import { TUNING } from '../src/config.js';
+import { levelEnd } from '../src/logic.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
+/** A pair a point, kept inside the level the run ended on (run_limits()). */
+const pairsFor = (score, level) => Math.max(levelEnd(level - 1, TUNING), Math.min(score, levelEnd(level, TUNING)));
 let seq = 0;
 async function run(db, pid, over = {}) {
   seq += 1;
   const end = Date.now() - 1000;
   const r = { run_id: id(`V${seq}`), session: 'sessionAB12', mode: 'single', score: 10, level: 1, started_at: end - 60000, ended_at: end, length_ms: 60000, version: '0.20.1', ...over };
+  r.data = over.data ?? { pipes: pairsFor(r.score, r.level) };
   await asAnon(db, 'select public.submit_runs($1, $2::bigint, $3::jsonb)', [pid, Date.now(), JSON.stringify([r])]);
   await db.query("update public.run_log set received_at = received_at - interval '6 seconds' where player_id = $1", [pid]);
   return r.run_id;

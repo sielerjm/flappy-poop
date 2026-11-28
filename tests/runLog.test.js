@@ -163,7 +163,7 @@ test('a race half\'s summary (plan 39, 2.4b: mode race) is stored like a single 
   const db = await freshDb();
   const P = id('RRace');
   assert.equal(await send(db, P, [
-    row('race', { mode: 'race', level: 7, score: 140, won: true }),
+    row('race', { mode: 'race', level: 7, score: 140, won: true, data: { pipes: 225, flaps: 700 } }), // a won race flies all 225 pairs
     row('rday', { mode: 'race', day: '2026-11-16' }),
     row('rstub', { mode: 'race', stub: true }),
     row('rnew', { mode: 'online' }),

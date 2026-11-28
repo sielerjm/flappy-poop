@@ -1,12 +1,12 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout, utcDayKey, dailyLevel } from '../logic.js';
+import { chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout, utcDayKey, dailyLevel, dailyGlyphNow, adventTreeGlyph } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
-import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
+import { isTopOverlay } from '../ui/overlayStack.js';
 import { createTabs, nearestTab } from '../ui/tabs.js';
-import { t, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText, eduYouText } from '../i18n.js';
+import { t, fillDaily, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText, eduYouText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
-import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, withOwnRows, boardPage } from '../leaderboard.js';
+import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, fetchAdventBoard, withOwnRows, boardPage } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
 import { createPager, pageRangeText } from '../ui/pager.js';
 import { boardRecord } from '../education.js';
@@ -15,12 +15,12 @@ const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', a
 const PINK = '#f8a0c8';
 const MUTED = '#c9b8dc';
 const DIM = '#6a5a74';
-/** The registry key for the board last shown this session: 'scores' (🏆), 'daily' (🌞), 'medals' (🏅) or 'education' (📚). */
+/** The registry key for the board last shown this session: 'scores' (🏆), 'daily' (🌞), 'medals' (🏅), 'education' (📚) or 'advent' (🧩). */
 const TAB_KEY = 'leaderboardTab';
-/** The boards in tab order, with their glyphs and titles. The 📚 board is a fourth tab only on a device with education mode unlocked (plan 21). */
+/** The boards in tab order, with their glyphs and titles. The 📚 board is a tab only on a device with education mode unlocked (plan 21); the 🧩 board (plan 17, 2.16) the last, while the Advent book has a season. */
 const BASE_TABS = ['scores', 'daily', 'medals'];
-const TAB_GLYPH = { scores: '\u{1F3C6}', daily: '\u{1F31E}', medals: '\u{1F3C5}', education: '\u{1F4DA}' };
-const TAB_TITLES = { scores: 'leaderboardTitle', daily: 'dailyBoardTitle', medals: 'medalBoardTitle', education: 'eduBoardTitle' };
+const TAB_GLYPH = { scores: '\u{1F3C6}', daily: '\u{1F31E}', medals: '\u{1F3C5}', education: '\u{1F4DA}', advent: '\u{1F9E9}' };
+const TAB_TITLES = { scores: 'leaderboardTitle', daily: 'dailyBoardTitle', medals: 'medalBoardTitle', education: 'eduBoardTitle', advent: 'adventBoardTitle' };
 
 /**
  * Shared board overlay (🏆 in the tray or T), three boards behind the 🏆 · 🌞 · 🏅 tabs
@@ -51,7 +51,8 @@ export class Leaderboard extends Phaser.Scene {
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
-    const TABS = play?.educationAvailable?.() ? [...BASE_TABS, 'education'] : BASE_TABS;
+    this.adventSeason = play?.adventBook?.()?.season ?? null; // the 🧩 board's season (December's, or last December's while a piece is owned)
+    const TABS = [...BASE_TABS, ...(play?.educationAvailable?.() ? ['education'] : []), ...(this.adventSeason ? ['advent'] : [])];
     this.tabList = TABS;
     this.tab = TABS.includes(this.registry.get(TAB_KEY)) ? this.registry.get(TAB_KEY) : 'scores';
     this.switching = false;
@@ -82,7 +83,8 @@ export class Leaderboard extends Phaser.Scene {
     title.setScale(fitScale(title.width, L.titleMaxW, 0));
     this.title = title;
     // 🏆 · 🌞 · 🏅 (· 📚): a tap picks the nearest glyph; the pad's A (no pointer) moves to the next tab.
-    this.tabs = createTabs(this, L.tab, { glyphs: TABS.map((id) => TAB_GLYPH[id]), index: TABS.indexOf(this.tab), depth: 1 });
+    // The 🌞 tab wears December's 🎅 (plan 17).
+    this.tabs = createTabs(this, L.tab, { glyphs: TABS.map((id) => (id === 'daily' ? dailyGlyphNow(this.registry, T) : TAB_GLYPH[id])), index: TABS.indexOf(this.tab), depth: 1 });
     const tabZone = this.add
       .zone(L.tab.track.x, L.tab.y, L.tab.width, L.tab.height)
       .setInteractive({ useHandCursor: true })
@@ -105,11 +107,6 @@ export class Leaderboard extends Phaser.Scene {
       .on('pointerdown', () => {
         if (isTopOverlay(this)) this.footerAction?.();
       });
-    const version = this.add
-      .text(cx, L.versionY, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: PINK, fontStyle: 'normal' })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    version.on('pointerdown', () => openChangelog(this)); // What's new, over this panel
 
     const close = this.add.text(L.close.x, L.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
@@ -118,7 +115,7 @@ export class Leaderboard extends Phaser.Scene {
     this.pager = createPager(this, { x: cx, ...L.pager, onTurn: (dir) => this.turnPage(dir) });
     this.pager.set({ prev: this.page > 0, next: false, label: pageRangeText(this.offset, 0, LEADERBOARD.limit) });
     // Everything outside the rows band stays on the main camera when the band becomes a scroll view.
-    this.fixed = [dimmer, panelRect, title, ...this.tabs.objects(), tabZone, this.status, this.footer, version, close, ...this.pager.objects()];
+    this.fixed = [dimmer, panelRect, title, ...this.tabs.objects(), tabZone, this.status, this.footer, close, ...this.pager.objects()];
     this.scroll = null; // the rows' scroll view, once the board has loaded
     this.input.keyboard?.on('keydown-ESC', () => this.close());
     this.input.keyboard?.on('keydown-LEFT', () => this.turnPage(-1)); // ← → turn pages (plan 28, 5.2), as ‹ ›
@@ -126,7 +123,7 @@ export class Leaderboard extends Phaser.Scene {
     // Controller: the ring sits on ✕ (A on the tabs moves to the next board); up / down scroll the rows once
     // they are in; left from the tabs reaches ‹, right goes on to › (a greyed arrow takes the ring but not A).
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close), pressable('tab', tabZone), pressable('prev', this.pager.prev), pressable('next', this.pager.next), { ...pressable('footer', this.footer), visible: () => Boolean(this.footerAction) }, pressable('changelog', version)],
+      items: [pressable('close', close), pressable('tab', tabZone), pressable('prev', this.pager.prev), pressable('next', this.pager.next), { ...pressable('footer', this.footer), visible: () => Boolean(this.footerAction) }],
       onVertical: (dir) => this.scroll?.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
     });
     this.focus.show(); // only under a controller (registry padMode)
@@ -198,6 +195,12 @@ export class Leaderboard extends Phaser.Scene {
       const rows = await play.fetchEduBoard(state.id ?? null, offset);
       if (gen !== this.gen || !this.scene.isActive()) return;
       this.showEducation(rows, play);
+      return;
+    }
+    if (this.tab === 'advent') {
+      const rows = await fetchAdventBoard(state.id ?? null, this.adventSeason, { offset, peek: true });
+      if (gen !== this.gen || !this.scene.isActive()) return;
+      this.showAdvent(rows);
       return;
     }
     if (this.tab === 'medals') {
@@ -345,7 +348,7 @@ export class Leaderboard extends Phaser.Scene {
    */
   showDaily(raw, day, state, { nameTaken = false, played = false } = {}) {
     const { locale, L, offset } = this;
-    this.fixed.push(this.add.text(this.cx, L.headerY, `${dailyDayText(locale, day)} · \u{1F31E} ${levelLabel(locale, dailyLevel(day, T))}`, { ...STYLE, fontSize: '22px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
+    this.fixed.push(this.add.text(this.cx, L.headerY, `${dailyDayText(locale, day)} · ${dailyGlyphNow(this.registry, T)} ${levelLabel(locale, dailyLevel(day, T))}`, { ...STYLE, fontSize: '22px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
     const { rows, mine, last } = boardPage(raw, { offset, limit: LEADERBOARD.limit });
     this.pageDone(rows?.length ?? 0, last);
     if (rows === null) {
@@ -355,7 +358,7 @@ export class Leaderboard extends Phaser.Scene {
     if (mine) this.setFooter(dailyYouText(locale, mine));
     else if (nameTaken && state.name) this.setFooter(t(locale, 'leaderboardNameTaken'));
     else if (played) this.setFooter(t(locale, 'dailyRankQueued'));
-    else this.setFooter(t(locale, 'dailyBoardJoin'));
+    else this.setFooter(fillDaily(t(locale, 'dailyBoardJoin'), dailyGlyphNow(this.registry, T)));
     if (rows.length === 0 && offset === 0) {
       this.status.setText(t(locale, 'dailyBoardEmpty'));
       return;
@@ -371,7 +374,50 @@ export class Leaderboard extends Phaser.Scene {
       sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : offset + i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
       sv.add(this.add.text(L.cols.right, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
       const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
-      name.setScale(fitScale(name.width, L.cols.level - name.x, 8)); // no 🚽 or LV columns here: the name gets the room up to the score
+      // December (plan 17, 2.6): a 🎁 after the name for a player who found that day's Advent piece on that day.
+      const gift = row?.gift ? sv.add(this.add.text(0, y, '\u{1F381}', { fontFamily: 'sans-serif', fontSize: '28px' }).setOrigin(0, 0.5)) : null;
+      name.setScale(fitScale(name.width, L.cols.level - name.x - (gift ? gift.width + 8 : 0), 8)); // no 🚽 or LV columns here: the name gets the room up to the score
+      gift?.setX(name.x + name.displayWidth + 8);
+      if (row) this.linkName(sv, name, row.name);
+    }
+    sv.finish(y + L.pitch / 2 - 40);
+    this.scroll = sv;
+  }
+
+  /**
+   * The 🧩 board (plan 17, 2.16; Gate A sheet 5): the season's Advent pieces, rank · name (its tree after it, 🎄 / 🌲,
+   * the server's own advent_award) · pieces found, by S13's order; the player's own row in pink (appended below the top
+   * when it is lower). The footer gives their rank and pieces, or how to get on the board.
+   */
+  showAdvent(raw) {
+    const { locale, L, offset } = this;
+    this.fixed.push(this.add.text(this.cx, L.headerY, t(locale, 'adventBoardHeader').replace('{year}', String(this.adventSeason)), { ...STYLE, fontSize: '22px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
+    const { rows, mine, last } = boardPage(raw, { offset, limit: LEADERBOARD.limit });
+    this.pageDone(rows?.length ?? 0, last);
+    if (rows === null) {
+      this.status.setText(t(locale, 'leaderboardOffline'));
+      return;
+    }
+    this.setFooter(mine ? t(locale, 'adventBoardYou').replace('{rank}', String(mine.rank)).replace('{total}', String(mine.total)).replace('{pieces}', String(mine.pieces)) : fillDaily(t(locale, 'adventBoardJoin'), dailyGlyphNow(this.registry, T)));
+    if (rows.length === 0 && offset === 0) {
+      this.status.setText(t(locale, 'adventBoardEmpty'));
+      return;
+    }
+    this.status.setVisible(false);
+    const { sv, visible } = this.rowsBand();
+    const count = offset === 0 ? Math.max(rows.length, visible) : rows.length; // – rows on page 1 only (plan 28, 5.2)
+    let y = L.firstY;
+    for (let i = 0; i < count; i += 1) {
+      y = L.firstY + i * L.pitch;
+      const row = rows[i];
+      const color = row?.me ? PINK : row ? '#ffffff' : DIM;
+      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : offset + i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
+      sv.add(this.add.text(L.cols.right, y, row ? String(row.pieces) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
+      const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
+      const glyph = row ? adventTreeGlyph(row.award) : '';
+      const tree = glyph ? sv.add(this.add.text(0, y, glyph, { fontFamily: 'sans-serif', fontSize: '28px' }).setOrigin(0, 0.5)) : null;
+      name.setScale(fitScale(name.width, L.cols.level - name.x - (tree ? tree.width + 8 : 0), 8)); // as the 🌞 board: the name gets the room up to the count
+      tree?.setX(name.x + name.displayWidth + 8);
       if (row) this.linkName(sv, name, row.name);
     }
     sv.finish(y + L.pitch / 2 - 40);

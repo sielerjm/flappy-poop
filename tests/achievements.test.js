@@ -102,8 +102,8 @@ test('quest windows: open from `from` to `to` inclusive, judged on the UTC day; 
   const daily = { mode: 'daily', score: 150 };
   assert.deepEqual(evaluate({ facts: daily, day: '2026-12-05', catalog }), ['quest_fixture'], 'a seasonal check may take a Daily run');
   assert.deepEqual(evaluate({ facts: daily, day: '2027-01-02', catalog }), []);
-  assert.deepEqual(openQuests('2026-12-05', catalog).map((e) => e.id), ['quest_fixture']);
-  assert.deepEqual(openQuests('2026-11-11'), [], 'none in the shipped catalog');
+  assert.deepEqual(openQuests('2026-12-05', catalog).map((e) => e.id), ['advent_tree_2026', 'advent_pine_2026', 'quest_fixture'], 'the Advent trees are the shipped catalog\'s first quests (plan 17, 2.6b)');
+  assert.deepEqual(openQuests('2026-11-11'), [], 'none in the shipped catalog before December');
 });
 
 test('progressOf and bestFacts', () => {

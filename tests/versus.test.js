@@ -165,6 +165,13 @@ test('createMatch / resetMatch: two empty slots, a 32-bit seed, a rematch keeps 
   const tm = createMatch(5, { levelPipes: [10, 25], names: ['Ann', 'Bo'], tournament: true });
   const tr = resetMatch(tm, 6);
   assert.deepEqual([tr.levelPipes, tr.names, tr.tournament], [[10, 25], ['Ann', 'Bo'], true]);
+  // The day the match was made (plan 17, T16): its December storms follow it, so a match never changes season mid-race; a rematch keeps it.
+  assert.equal(m.day, null, 'no day given: off season');
+  assert.equal(r.day, null);
+  const dm = createMatch(8, { day: '2026-12-05', names: ['Ann', 'Bo'] });
+  assert.equal(dm.day, '2026-12-05');
+  assert.equal(resetMatch(dm, 9).day, '2026-12-05', 'the rematch keeps the day');
+  assert.equal(createMatch(8, { day: 'soon' }).day, null, 'a day key or nothing');
 });
 
 test('keyGroup maps every configured code to its group and role, nothing else', () => {

@@ -185,6 +185,8 @@ export function createInbox({ remember = 256 } = {}) {
 const RACE_SCALARS = ['gravity', 'flapVelocity', 'resumeFlapScale', 'pipeSpeed', 'pipeSpacingPx', 'gapHeight', 'pipeWidth', 'groundHeight', 'ceilingHeight', 'gapMargin', 'poopXFrac', 'poopRadius', 'pipePoints'];
 const RACE_LEVEL_KEYS = ['pipes', 'lastLevel', 'spacingRefLevel', 'speedStep', 'gapScale', 'maxSpeed', 'tutorial'];
 const RACE_BLOCKS = ['postbiotic', 'items', 'pipeMove', 'mystery', 'coin', 'beans', 'prefill', 'versus'];
+/** December's storms in a match (plan 17, T16): the schedule and the pull. The look (flakes, wind, swirls) is not the race. */
+const RACE_STORM_KEYS = ['matches', 'fromLevel', 'linePairs', 'firstPair', 'chance', 'pairs', 'gapPairs', 'rampMs', 'flapMul', 'scrollMul'];
 const COURSE_PROBE_SEED = 0x39391;
 const COURSE_PROBE_PAIRS = 40;
 
@@ -194,6 +196,9 @@ const versions = new WeakMap();
  * The protocol version: 8 hex digits of fnv1a32 over the events and their fields, the race's
  * tuning and the first pairs of a shared course, so any change that could split a race (a
  * message, a knob, a course draw) moves it, and a HUD tweak does not. Derived, never hand-set.
+ * December's storms (plan 17, T16) are in it only while advent.storm.matches is on: their knobs,
+ * the season and the course's storm draws, so a calm client (0.32.0, 82aaad2b) never races a
+ * stormy one; switched off, a race is calm on both sides and the version is the one before T16.
  */
 export function protocolVersion(t = TUNING, field = FIELD) {
   const memo = field === FIELD ? versions.get(t) : null;
@@ -208,6 +213,12 @@ export function protocolVersion(t = TUNING, field = FIELD) {
   tune.levels = Object.fromEntries(RACE_LEVEL_KEYS.map((k) => [k, t.levels?.[k]]));
   for (const k of RACE_BLOCKS) tune[k] = t[k];
   const spec = { envelope: ENVELOPE, events: ONLINE_EVENTS, field: [field.minWidth, field.maxWidth], tune, course: [course.mysteryPair(), pairs] };
+  const storm = t.advent?.storm;
+  if (storm?.matches) {
+    const draws = [];
+    for (let n = 1; n <= COURSE_PROBE_PAIRS; n += 1) draws.push(course.storm(n));
+    spec.storm = { knobs: RACE_STORM_KEYS.map((k) => storm[k]), season: [t.advent.seasonMonth, t.advent.seasonLastDay], draws };
+  }
   const text = JSON.stringify(spec, (_k, v) => (v instanceof RegExp ? v.source : v));
   const version = fnv1a32(text).toString(16).padStart(8, '0');
   if (field === FIELD) versions.set(t, version);

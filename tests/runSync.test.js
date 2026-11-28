@@ -8,7 +8,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { playScene, fakeStorage, registry } from './support/scenes.js';
 import { freshDb, installPostgrest, id } from './support/postgrest.js';
-import { LEADERBOARD } from '../src/config.js';
+import { LEADERBOARD, TUNING } from '../src/config.js';
+import { levelEnd } from '../src/logic.js';
 import { createRunQueue, submitRuns, waitsForRun, createSubmitStore, createDailyQueue, createDailyStore } from '../src/leaderboard.js';
 import { createRunStats } from '../src/runStats.js';
 
@@ -28,11 +29,13 @@ function answer(status, body) {
   return fetch;
 }
 
-/** A finished single-player row from the real accumulator. */
+/** A finished single-player row from the real accumulator: a pair a point, inside the level it ended on (run_limits()). */
 function runRow(tag, { score = 10, level = 1, toilet = false, mode = 'single', day = null } = {}) {
   const s = createRunStats();
   const now = performance.now();
   s.begin({ runId: id(tag), session: 'sessionAB12', mode, day, toilet, level, version: '0.20.1', now: now - 30_000, wall: Date.now() - 30_000 });
+  const pairs = Math.max(levelEnd(level - 1, TUNING), Math.min(score, levelEnd(level, TUNING)));
+  for (let i = 0; i < pairs; i += 1) s.pipe();
   return s.end({ now, wall: Date.now() - 1000, score, level });
 }
 

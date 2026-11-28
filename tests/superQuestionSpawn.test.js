@@ -30,6 +30,7 @@ function spawner({ level = 4, pipesSpawned, superQ = null, mysteryPair = 37, see
     items: { create: (_x, _y, key) => { got.push(key); return absorb(); } },
     finishItem() {}, scrollSpeed: () => 300, anims: { get: () => ({ frames: [1, 2, 3, 4, 5, 6, 7, 8] }) },
     spawnGapItem: (kind) => got.push(kind), markKernel() {},
+    skin: { twins: {}, fartFrames: [], snowCap: null, files: {} }, textures: { exists: () => false }, // off season (plan 17, 1.11)
   });
   return { s, log, got };
 }

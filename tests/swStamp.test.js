@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { ADVENT_ART } from '../src/advent.js';
 import { planStamp, writeStamp, checkStamp, stampSw, readSwStamp, swIsOff } from '../tools/sw_stamp.mjs';
 import { SPLASH_NOTES, splashArtUrl } from '../src/splash.js';
 import { SUPABASE_JS_VERSION } from '../src/supabaseLoader.js';
@@ -221,19 +222,24 @@ test('the real tree: every src/**/*.js is in the import map and in FILES, each w
   assert.match(plan.build, new RegExp(`^${VERSION.replace(/\./g, '\\.')}-[0-9a-f]{10}$`));
 });
 
-test('the real tree: every asset Boot, loadLazyAudio, the splash cards, the trap and supabaseLoader ask for is listed with the query it is asked with', () => {
+test('the real tree: every asset Boot, loadLazyAudio, the Advent book, the splash cards, the trap and supabaseLoader ask for is listed with the query it is asked with', () => {
   const plan = planStamp(REPO);
   const urls = new Set(plan.files.map(([u]) => u));
   const read = (p) => readFileSync(join(REPO, p), 'utf8');
   const want = new Set();
   for (const m of read('src/scenes/Boot.js').matchAll(/this\.load\.(?:image|spritesheet|audio)\('[^']+', '(assets\/[^']+)' \+ V/g)) want.add(`${m[1]}?v=${VERSION}`);
+  // The Advent book loads its picture in its own preload, the first time it opens (plan 17, 2.15).
+  for (const m of read('src/scenes/Advent.js').matchAll(/this\.load\.spritesheet\('[^']+', '(assets\/[^']+)' \+ V/g)) want.add(`${m[1]}?v=${VERSION}`);
   const play = read('src/scenes/Play.js');
   const lazy = play.slice(play.indexOf('  loadLazyAudio() {'), play.indexOf('\n  }\n', play.indexOf('  loadLazyAudio() {')));
   for (const m of lazy.matchAll(/this\.load\.audio\('[^']+', '(assets\/[^']+)' \+ V\)/g)) want.add(`${m[1]}?v=${VERSION}`);
+  // In December the same flight asks for the twins in src/advent.js (plan 17, 1.10), each with the same ?v=.
+  assert.match(lazy, /Object\.entries\(this\.skin\.files\)\) if \(!this\.textures\.exists\(key\)\) this\.load\.image\(key, file \+ V\)/, 'loadLazyAudio loads the season\'s files with ?v=');
+  for (const file of Object.values(ADVENT_ART.files)) want.add(`${file}?v=${VERSION}`);
   for (const n of SPLASH_NOTES) if (n.art?.file) want.add(splashArtUrl(n.art.file));
   const html = read('index.html');
   want.add(/s\.src = '(assets\/vendor\/phaser\.min\.js\?v=[^']+)'/.exec(html)[1]);
-  want.add(/<img class="splash-poop" src="(assets\/[^"]+)"/.exec(html)[1]);
+  for (const m of html.matchAll(/<img class="splash-poop[\w -]*" src="(assets\/[^"]+)"/g)) want.add(m[1]); // stock, and December's (plan 17, 1b.1)
   want.add(`assets/vendor/supabase.js?v=${SUPABASE_JS_VERSION}`);
   assert.ok(want.size >= 40, `found ${want.size} asset URLs in the code`);
   for (const u of want) assert.ok(urls.has(u), `${u} is not in FILES`);
@@ -243,7 +249,9 @@ test('the real tree: every asset Boot, loadLazyAudio, the splash cards, the trap
     assert.ok(existsSync(join(REPO, u.split('?')[0])), `${u}: the file exists`);
   }
   const bytes = plan.files.reduce((n, [u]) => n + statSync(join(REPO, u === 'index.html' ? 'index.html' : u.split('?')[0])).size, 0);
-  assert.ok(bytes < 6e6, `one build in Cache Storage is ${(bytes / 1e6).toFixed(2)} MB (the design's estimate: about 4.7 MB)`);
+  // 6.5 MB since plan 17, 2.15a (was 6): the Advent book's picture (0.40 MB) and its two sounds took the build to 6.01 MB;
+  // D8 accepted precaching December's art. Michael's call at Preview E (the other way: keep the picture out of the precache).
+  assert.ok(bytes < 6.5e6, `one build in Cache Storage is ${(bytes / 1e6).toFixed(2)} MB (the design's estimate: about 4.7 MB, about 6.0 with December's art)`);
 });
 
 test('the committed tree is unstamped or consistently stamped (the push restamps it)', () => {
