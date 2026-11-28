@@ -461,13 +461,19 @@ day through the game registry.
   ("🧩 N of 24 found · M left", today's piece found or not), Over's found line, a 🎁 after the name on 🌞 rows
   (`normalizeDailyRow`'s `gift`). Old builds ignore both new keys and the new `best` field.
   Tests: `tests/adventPieces.test.js`, `tests/adventDaily.test.js`.
-- **The Advent book** (Stage 2c, v0.36.0; `src/scenes/Advent.js`, overlay id `advent`). A 4 x 6 picture that assembles as pieces are found
-  (`TUNING.advent.puzzle`: `cols`, `rows`, `cellPx` 332, `order`, one shuffle shared by every player: piece k fills cell `order[k - 1]`).
-  Locked cells are flat silhouettes (`TUNING.advent.book`: panel size, `lockFill`, a gold star on a piece found on its own day); its
+- **The Advent book** (Stage 2c, v0.36.0; jigsaw pieces since plan 56, v0.38.0; `src/scenes/Advent.js`, overlay id `advent`). A 4 x 6 picture that assembles as pieces are found
+  (`TUNING.advent.puzzle`: `cols`, `rows`, `cellPx` 332, `padPx` 92, `order`, one shuffle shared by every player: piece k fills cell `order[k - 1]`).
+  The 24 pieces are interlocking jigsaw pieces: each sits in a frame of `cellPx + 2 x padPx` = 516 texture px (258 logical px, `adventBookLayout.frame`)
+  drawn centred on its 166 px slot (depth 2; the tabs overlap the neighbors' locks at depth 1). **Locked pieces** are the piece's own frame under a
+  FILL tint (`fillTintMode()`, null without `TintModes.FILL` or without WebGL) in a two-shade checkerboard (`adventLockShade(cell, T)` in `src/logic.js`;
+  `TUNING.advent.book`: panel size, `lockFill`, `lockFillB` 0x371d2a); with no fill tint or no sheet (offline) the lock is a flat square. A gold star sits at
+  the slot's top-right corner on a piece found on its own day. **The flight's glow** is an outline glow made from the frame's alpha (texture
+  `advent-glow-<cell>`, removed after its fade; at most one alive, also cleared on shutdown). An instant landing (beyond the latest 3) gets a white
+  FILL-tinted copy (`bookAnim.tintGrow` 1.06, `tintAlpha` 0.8; no new texture); without a fill tint or the sheet the old rounded-square `advent-glow` is used. Its
   only text is "N of 24 found" (`adventBookCount`) and, after a piece lands, "N of 24 to go!" (`adventToGo`, `bookAnim.toGo`; T7). A (?) at the top left (`adventBookLayout.help`, mirroring the ✕) opens the book's card (`adventBookHelp`, `src/ui/helpCard.js`, shared with the Daily window's). The book shows no version line. The pure parts are in `src/logic.js`: `adventBookLayout` (the panel, the ✕, the 24
   slots), `adventBookPieces(found, season, t)` (which pieces fill which cells) and `adventBookSeason(day, t, hasPieces)` (December's own
   season; after December, last season **read-only** while this device owns a piece, else no book). The sheet
-  `assets/advent/advent-puzzle.png` (4 x 6 cells of 332 px, 256 colours, cut by `tools/advent_puzzle.py`) loads in the Advent scene's
+  `assets/advent/advent-puzzle.png` (2064 x 3096: 4 x 6 frames of 516 px, 256 colours, 473,351 bytes after oxipng; cut by `tools/advent_puzzle.py --shape jigsaw --seed 20261201 --tab 0.26`) loads in the Advent scene's
   own `preload`, never in Boot, so the picture costs nothing until the book opens.
   **Doors:** the home **Advent button** (top left, "N/24" on its corner, `TUNING.advent.button`; `chromeIntent`'s `advent` input, ready
   screen or over the Daily window; it glows while a piece is unseen), the **Daily window's 🧩 line** (closing the book goes back to the
@@ -608,7 +614,7 @@ and Esc: Play's `onlineRepeat(event)`, plan 39 5.2b, AUD-149 / AUD-144), tests/r
 **Service worker** (plan 35, Stage 3, 0.29.0): `sw.js` at the root, scope the game's folder
 (`registration.scope`). It gives an offline launch, and a launch more than 10 minutes after the last
 (GitHub Pages' `max-age=600`) no longer revalidates every module and asset one by one; only index.html
-goes to the network. About 6.2 MB per build in Cache Storage (149 files; December's 0.4 MB picture, the 57 KB fairy lights and sounds are in it, and `tests/swStamp.test.js` caps a build at 6.5 MB, raised from 6 MB in 0.36.0; Michael kept that cap at the push, 27 Nov). Its page side is `src/swClient.js`.
+goes to the network. About 6.3 MB per build in Cache Storage (149 files; December's 0.47 MB jigsaw picture, the 57 KB fairy lights and sounds are in it, and `tests/swStamp.test.js` caps a build at 6.5 MB, raised from 6 MB in 0.36.0; Michael kept that cap at the push, 27 Nov). Its page side is `src/swClient.js`.
 - **Stamp.** `npm run push` writes `BUILD` and `FILES` into `sw.js` (`tools/sw_stamp.mjs`): `FILES` pairs
   every URL exactly as the page asks for it with the SHA-256 of its bytes: index.html, every module
   (`?h=<content hash>`, through the import map `index.html` also gets), art and sounds (`?v=<VERSION>`),
@@ -1402,7 +1408,7 @@ src/
                             readyLayout's countdown and bowelidays boxes; Stage 1c: seasonIcon, adventToGo,
                             VERSION_LINE_OVERLAYS, the odds (adventPairChance, adventSpawnRoll), the Quality clock
                             (adventClock*, adventHidden, adventQualityScore), the lights (fairyLightsLayout,
-                            lightsBulbs, twinkleAlpha). Fully unit-tested.
+                            lightsBulbs, twinkleAlpha); plan 56: adventLockShade. Fully unit-tested.
   changelog.js              What's new data, NO Phaser/DOM: CHANGELOG (one entry per
                             version, newest first: version, date like LAST_UPDATED's
                             day, notes per locale), changelogEntry, changelogNotes
@@ -3058,13 +3064,14 @@ src/
                             (its title 🎅); Save stores LEADERBOARD.santaChoiceKey, B keeps the
                             saved one. chromeIntent rows; in OVERLAY_SCENES and smoke OVERLAYS.
     Advent.js               Overlay (plan 17, Stage 2c; overlay id 'advent'): the Advent
-                            book, a 4 x 6 picture filled as pieces are found. Opens from the
+                            book, a 4 x 6 jigsaw picture filled as pieces are found. Opens from the
                             home Advent button, the Daily window's 🧩 line and the save
                             panel's 🧩 Advent button (onClose returns to the opener). Loads
                             assets/advent/advent-puzzle.png in its own preload (never Boot).
                             Layout adventBookLayout, pieces adventBookPieces, season
-                            adventBookSeason (src/logic.js); TUNING.advent.puzzle / book /
-                            bookAnim / button / sound. Flies the latest 3 unseen pieces in
+                            adventBookSeason, adventLockShade (src/logic.js); TUNING.advent.puzzle / book /
+                            bookAnim / button / sound. Draws each piece's 258 px frame on its
+                            slot, locks as fill-tinted silhouettes, outline glow. Flies the latest 3 unseen pieces in
                             (a tap skips, none under reduced motion), then markSeen().
                             tests/adventBook.test.js.
     (every overlay builds this.focus from pressable() items, ✕ first then its
@@ -3221,7 +3228,7 @@ assets/                     Contract PNGs + README.md (the art contract).
   poop-stink-scared1.png poop-stink-scared2.png poop-fart.png
   poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png coin.png
                             (advent/: the 17 December files (plan 17), listed in src/advent.js, plus
-                            advent-puzzle.png, the Advent book's 4 x 6 sheet, 332 px cells, 256 colours,
+                            advent-puzzle.png, the Advent book's 4 x 6 jigsaw sheet, 2064 x 3096, 516 px frames, 256 colours,
                             loaded by scenes/Advent.js only; each README row
                             names its stock frame and body rule; tests/assets.test.js checks them)
                             (coin.png: the golden corn kernel's spin, 12 frames of
